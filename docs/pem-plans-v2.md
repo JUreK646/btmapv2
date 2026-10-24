@@ -1,0 +1,25 @@
+# Warstwa pomiarów PEM · SI2PEM
+
+MODE: Operate. Rozszerzenie istniejącej mapy bez zmiany jej stylu.
+
+THESIS: Opcjonalna warstwa pokazuje prawdziwy harmonogram SI2PEM, rozpoznawalny po płaskich kwadratach odróżnionych od okrągłych stacji UKE.
+
+OWN-WORLD: Dotychczasowa typografia Manrope, neutralny czarny motyw i zaakceptowany jasny motyw, tokeny powierzchni oraz kolory operatorów.
+
+STORY: W filtrach użytkownik zaznacza Pomiary PEM, wybiera operatora, klika kwadrat w miejscu pomiaru i odczytuje wykonawcę oraz planowany zakres dat. Link prowadzi do źródła lub rzeczywistego raportu.
+
+FIRST VIEWPORT: Nowa sekcja Warstwy mapy nad filtrami operatorów. Na mapie kwadrat 18 px z jasnym obrysem i polem interakcji 24 px; w jasnym motywie Plus ma ciemny obrys dla czytelności. Dymek zawiera rodzaj wpisu, status źródłowy, operatora, adres, ID, laboratorium i termin. Status warstwy podaje liczbę wpisów lub problem pobrania.
+
+FORM: Lokalna, precyzyjna rozbudowa ustalonej powierzchni. Bez losowania koncepcji, compów i nowych grafik.
+
+DATA: Oficjalne publiczne API `https://si2pem.gov.pl/api/planned_measurements/`, wszystkie strony po 100 wpisów. SI2PEM jest źródłem harmonogramów; UKE pozostaje jedynym źródłem stacji i pasm. Nie dopowiadać parametrów anten ani faktycznej daty wykonania z planowanego terminu. Wspólna paleta i filtry przypisują P4 i On Tower Poland do Play, a Polkomtel, Aero2 i Towerlink do Plusa; oryginalna nazwa źródłowego podmiotu pozostaje widoczna. Nieznana nazwa ma neutralny kolor Inne. Jednorazowa migracja kategorii zapisanych pomiarów nie zmienia dat synchronizacji. Źródła i zakres: `docs/operator-colors-v2.md`.
+
+LIFECYCLE: Pełny poprawny zestaw zastępuje poprzedni atomowo w SQLite. Pobieranie co 48 godzin oraz po starcie, jeżeli termin minął; serwer sprawdza termin co minutę. Błąd zachowuje ostatni poprawny zestaw i pozwala na ponowienie po 15 minutach. Akceptowane są tylko statusy PLANNED i COMPLETED. Retencja porównuje źródłowe dateTo z datą kalendarzową Europe/Warsaw minus 7 dni: wpis równy granicy zostaje, starszy jest usuwany. Nie zakłada to faktycznej daty wykonania. Odczyt warstwy też usuwa wygasłe rekordy. Harmonogram działa przy uruchomionym serwerze; po przerwie nadrabia aktualizację. Raporty wcześniej otwartych stacji mają trwały cache 48 godzin i są odświeżane w tle po upływie tego czasu, także po restarcie.
+
+INTERACTION: Checkbox ma stan włączony/wyłączony; czyszczenie filtrów wyłącza warstwę. Filtry operatorów działają też na pomiary; technologie, pasma i województwo dotyczą stacji UKE. Maksymalnie 1000 pomiarów w widocznym obszarze, jawne wskazanie limitu. Puste, ładowane, pierwsza synchronizacja, nieaktualne i błędne dane mają własne komunikaty. Markery są dostępne z klawiatury. Klient odczytuje zapisany zestaw co minutę (przed pierwszą synchronizacją co 10 s; po błędzie odczytu co 30 s); nie jest to ponowny pełny import SI2PEM.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+CORRECTION STATUS · 2026-10-19: Poniższy przegląd dotyczy wcześniejszego wdrożenia warstwy. Aktualna korekta kolorów i licznika ma pięć dowodów w `.impeccable/review/pem-fast/`, 30 zaliczonych testów, sprawdzenia TypeScript klienta i serwera oraz produkcyjny build. API działa z aktualnym kodem. Stan świeżego przeglądu końcowego: `docs/pem-fast-v2.md`. Frontmatter DESIGN.md uaktualniono do wspólnej palety; sidecar zachowuje schemaVersion 2 i dotychczasowe odwołania.
+
+VERIFICATION: Pełna synchronizacja 19.10.2026 pobrała 24 678 wpisów źródłowych i zapisała 410 mieszczących się w okresie retencji. checkedAt: `2026-10-19T12:07:33.830Z`, nextRefreshAt: `2026-10-21T12:07:33.830Z`; po restarcie zachowany zestaw pozostał aktualny (stale: false, error: null). Rzeczywisty przykład: Orange 15809, Warszawa, Pańska 73; laboratorium NetWorks (AB 419), 12.10.2026, status COMPLETED i oficjalny PDF 7083-2026-OS. Filtrowanie Play daje w tym obszarze 0, a Wyczyść wyłącza warstwę. Kliknięcie znacznika i automatyczne przesunięcie mapy nie zamyka dymku. Telefon 390×844 bez poziomego przewijania. Kompilacja i 26 testów przechodzą, w tym paginacja, zachowanie danych po błędzie, 48 godzin po restarcie, retencja i zmiana czasu. Dziewięć dowodów w `.impeccable/review/plans/`: `filters-desktop-dark.jpg`, `filters-desktop-light.jpg`, `filters-mobile-dark.jpg`, `filters-mobile-light.jpg`, `popup-desktop-dark.jpg`, `popup-desktop-light.jpg`, `popup-mobile-dark.jpg`, `popup-mobile-light.jpg` i `user-638-dark.jpg`. Bez nowych grafik produktu. Dokumentacja opisuje lokalne rozszerzenie istniejącego systemu; frontmatter DESIGN.md i sidecar schemaVersion 2 pozostają bez zmian. Sidecar jest poprawnym JSON; odwołania colorMeta, typographyMeta oraz dziewięciu komponentów prowadzą do istniejących tokenów frontmatter. Wcześniejsza próba launchera i detektora w tej sesji była niedostępna; nie ponawiano instalacji. Świeży przegląd końcowy potwierdził wszystkie dziewięć zrzutów i zakończył się oceną ship, bez wymaganych poprawek. Po przeglądzie nie zmieniano kodu ani interfejsu.

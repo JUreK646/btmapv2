@@ -1,0 +1,134 @@
+.pem-layer-toggle {
+  display:flex;
+  align-items:flex-start;
+  gap:11px;
+  cursor:pointer;
+  min-height:44px;
+  padding:4px 0;
+}
+.pem-layer-toggle input {
+  width:18px;
+  height:18px;
+  accent-color:var(--accent);
+  flex-shrink:0;
+  margin-top:2px;
+}
+.pem-layer-toggle>span {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  flex:1 1 0px;
+  min-width:0;
+}
+.pem-layer-toggle strong {
+  font-size:12px;
+  font-weight:700;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+}
+.pem-layer-toggle small,.pem-layer-status {
+  font-size:11px;
+  line-height:1.45;
+  color:var(--muted);
+  overflow-wrap:anywhere;
+}
+.pem-layer-status { margin:6px 0 0 29px; }
+.pem-layer-key,.pem-map-status>i { width:10px; height:10px; background:var(--muted); border-radius:1px; flex-shrink:0; }
+.pem-layer-key { margin-left:auto; margin-top:4px; }
+.pem-plan-marker { display:grid; place-items:center; background:none; border:0; }
+.pem-plan-marker>span { display:block; width:18px; height:18px; border:2px solid #fff; border-radius:2px; }
+:root:not([data-theme='dark']) .pem-plan-marker-plus>span { border-color:#244230; }
+.pem-plan-marker:focus-visible { outline:3px solid var(--text); outline-offset:3px; border-radius:3px; }
+.pem-plan-popup .leaflet-popup-content-wrapper,.pem-plan-popup .leaflet-popup-tip { background:var(--surface); color:var(--text); }
+.pem-plan-popup .leaflet-popup-content-wrapper { border-radius:14px; box-shadow:var(--shadow); }
+.pem-plan-popup .leaflet-popup-content { margin:19px 21px; font-family:Manrope,system-ui,sans-serif; line-height:1.5; }
+.pem-plan-close { position:absolute; right:5px; top:5px; display:grid; place-items:center; width:32px; height:32px; color:var(--muted); border-radius:8px; }
+.pem-plan-heading { display:flex; align-items:center; gap:7px; margin-right:9px; font-size:11px; }
+.pem-plan-heading i { width:8px; height:8px; border-radius:1px; flex-shrink:0; }
+.pem-plan-heading>span { margin-left:auto; font-size:10px; color:var(--muted); }
+.pem-plan-popup h2 { font-size:15px; margin:12px 0 5px; font-weight:750; }
+.pem-plan-popup p.pem-plan-address { margin:0 0 16px; color:var(--muted); font-size:11px; }
+.pem-plan-popup dl { display:flex; flex-direction:column; gap:12px; margin:0; }
+.pem-plan-popup dt { font-size:10px; color:var(--muted); margin-bottom:3px; }
+.pem-plan-popup dd { margin:0; font-size:12px; font-weight:600; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.pem-plan-popup dd small { display:block; font-size:10px; color:var(--muted); font-weight:500; margin-top:3px; }
+.pem-plan-popup p.pem-plan-source { font-size:10px; color:var(--muted); margin:16px 0 7px; }
+.pem-plan-popup a.pem-plan-source-link { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--accent-text); text-underline-offset:3px; }
+
+/* Status stack positioning container for bottom-left map HUD */
+.map-status-stack {
+  position:absolute;
+  z-index:420;
+  left:18px;
+  bottom:112px;
+  display:flex;
+  flex-direction:column-reverse;
+  gap:8px;
+  max-width:min(340px,calc(100% - 90px));
+  pointer-events:none;
+}
+.map-status-stack > * {
+  pointer-events:auto;
+}
+
+/* PEM Map Status pill */
+.pem-map-status {
+  position:relative;
+  left:auto;
+  bottom:auto;
+  max-width:100%;
+  padding:8px 12px;
+  border-radius:10px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.45;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  box-shadow:var(--shadow);
+  overflow-wrap:anywhere;
+}
+/* Standalone fallback if rendered outside stack */
+:not(.map-status-stack) > .pem-map-status {
+  position:absolute;
+  z-index:410;
+  left:18px;
+  bottom:112px;
+  max-width:min(340px,calc(100% - 92px));
+}
+.pem-map-status button {
+  text-decoration:underline;
+  text-underline-offset:3px;
+  flex-shrink:0;
+  color:var(--text);
+  font-weight:600;
+}
+
+@media(max-width:760px) {
+  .map-status-stack {
+    left:12px;
+    bottom:126px;
+    gap:6px;
+    max-width:min(320px,calc(100vw - 80px));
+  }
+  .pem-map-status {
+    padding:7px 10px;
+    font-size:10px;
+    border-radius:9px;
+  }
+  :not(.map-status-stack) > .pem-map-status {
+    left:12px;
+    bottom:126px;
+    font-size:10px;
+  }
+  .pem-layer-toggle { min-height:44px; }
+}
+@media(max-width:480px) {
+  .map-status-stack {
+    left:8px;
+    bottom:120px;
+    max-width:calc(100vw - 70px);
+  }
+}

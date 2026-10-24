@@ -1,0 +1,10 @@
+import { openDatabase } from '../server/database.ts';
+import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+const email=process.argv[2]?.trim().toLowerCase();
+const password=process.env.BTMAP_ADMIN_PASSWORD;
+if(!email || !password || password.length<12) throw new Error('Podaj e-mail jako argument i hasło min. 12 znaków w BTMAP_ADMIN_PASSWORD.');
+const db=openDatabase();
+if(db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE').get(email)) throw new Error('Konto już istnieje. Nie nadpisano danych.');
+db.prepare("INSERT INTO users(id,email,nick,password,role,createdAt) VALUES(?,?,?,?,'ADMIN',?)").run(randomUUID(),email,'Administrator',await bcrypt.hash(password,12),new Date().toISOString());
+db.close();console.log('Utworzono administratora.');

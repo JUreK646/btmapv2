@@ -1,0 +1,22 @@
+services:
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+  backend:
+    build:
+      context: .
+      target: api
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      BTMAP_DB: /app/data/btmap.sqlite
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost:8080}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

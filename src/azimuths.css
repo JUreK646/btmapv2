@@ -1,0 +1,109 @@
+/* ============================================================
+   BTMap v2 — Base Station Azimuth Beams & Sector Labels
+   Precision RF Cartography (matching BTSearch & cellular ground-truth)
+   ============================================================ */
+
+.az-beam-label {
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.az-beam-label span {
+  font-family: var(--font-mono, 'Manrope', -apple-system, sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  border: 0.5px solid rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .az-beam-label span {
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.78);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  border: 0.5px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Azimuth layer toggle in Map Filters drawer */
+.azimuth-layer-toggle {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.azimuth-layer-key {
+  margin-left: auto;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+/* Map Status Indicator pill at bottom-left */
+.azimuth-map-status {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  animation: fadeIn 0.15s ease;
+  overflow-wrap: anywhere;
+}
+
+.azimuth-map-status svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.azimuth-map-status span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Standalone fallback if rendered outside stack */
+:not(.map-status-stack) > .azimuth-map-status {
+  position: absolute;
+  left: 18px;
+  bottom: 156px;
+  z-index: 420;
+  max-width: min(340px, calc(100% - 90px));
+}
+
+@media (max-width: 760px) {
+  .azimuth-map-status {
+    padding: 7px 10px;
+    font-size: 10px;
+    border-radius: 9px;
+  }
+  :not(.map-status-stack) > .azimuth-map-status {
+    left: 12px;
+    bottom: 168px;
+    font-size: 10px;
+    max-width: min(320px, calc(100vw - 80px));
+  }
+}
