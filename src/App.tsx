@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {Map as MapIcon,Database,ChartNoAxesCombined,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass} from 'lucide-react';
+import {Map as MapIcon,Database,ChartNoAxesCombined,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages} from 'lucide-react';
 import type L from 'leaflet';
 import MapView from './components/MapView';
 import BasemapPicker from './components/BasemapPicker';
@@ -21,9 +21,10 @@ import {DEFAULT_FILTERS,OPERATORS,filterCount,readStored,saveStored} from './lib
 import {getStoredBasemap} from './lib/basemaps';
 import type {BasemapId} from './lib/basemaps';
 import type {Bounds,Filters,Health,Theme,Tower,View} from './types';
+import {i18n, type Lang} from './lib/i18n';
 
-const navItems=[{id:'map',label:'Mapa',icon:MapIcon},{id:'database',label:'Baza stacji',icon:Database},{id:'stats',label:'Statystyki',icon:ChartNoAxesCombined}] as const;
-const viewNames:Record<View,string>={map:'Mapa stacji',database:'Baza stacji',stats:'Statystyki',guides:'O danych',admin:'Moderacja',changelog:'Changelog'};
+
+
 const readView=():View=>{
   if(window.location.pathname.replace(/\/+$/,'')==='/btmap/changelog')return 'changelog';
   const saved=window.history.state?.btmapView;
@@ -32,6 +33,22 @@ const readView=():View=>{
 
 export default function App(){
   const [theme,setTheme]=useState<Theme>(()=>{const stored=readStored<unknown>('btmap.theme',null);return stored==='light'?'light':'dark';});
+  const [lang,setLang]=useState<Lang>(()=>{const stored=readStored<unknown>('btmap.lang',null);return stored==='en'?'en':'pl';});
+  const t = i18n[lang];
+  useEffect(()=>{saveStored('btmap.lang',lang);document.documentElement.lang=lang;},[lang]);
+  const navItems=useMemo(()=>[
+    {id:'map' as const,label:t.map,icon:MapIcon},
+    {id:'database' as const,label:t.database,icon:Database},
+    {id:'stats' as const,label:t.stats,icon:ChartNoAxesCombined},
+  ],[t]);
+  const viewNames:Record<View,string>=useMemo(()=>({
+    map:t.mapViewTitle,
+    database:t.databaseViewTitle,
+    stats:t.statsViewTitle,
+    guides:t.guides,
+    admin:t.admin,
+    changelog:t.changelog,
+  }),[t]);
   const [view,setView]=useState<View>(readView);
   const [filters,setFilters]=useState<Filters>(DEFAULT_FILTERS);
   const [showPem,setShowPem]=useState(false);
@@ -215,15 +232,15 @@ export default function App(){
   </aside>;
 
   return <div className={`app-layout ${navCollapsed?'nav-compact':''} ${mobileNav?'nav-open':''}`}>
-    <a className="skip-link" href="#main-content">Przejdź do treści</a>
+    <a className="skip-link" href="#main-content">{t.skipLink}</a>
     {mobileNav&&<button className="nav-scrim" aria-label="Zamknij nawigację" onClick={()=>setMobileNav(false)}/>}
     <aside className="app-sidebar" aria-label="Menu aplikacji">
       <button className="sidebar-brand" onClick={()=>changeView('map')} aria-label="BTMap — przejdź do mapy"><span className="sidebar-brand-symbol"><Radio size={25}/></span><span className="sidebar-wordmark">btmap<span>.</span></span><span className="sidebar-version">v2</span></button>
       <nav className="side-nav" aria-label="Nawigacja główna">{navItems.map(item=><button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
-      <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title="O bazie stacji" onClick={()=>changeView('guides')}><Info size={18}/><span>O bazie stacji</span></button><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?'Twoje konto':'Zaloguj się'}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:'Zaloguj się'}</strong><small>{user?'Twoje konto':'Konto i zgłoszenia'}</small></span><ArrowUpRight size={16}/></button></div></div>
+      <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title={t.guides} onClick={()=>changeView('guides')}><Info size={18}/><span>{t.guides}</span></button><div className="sidebar-lang-wrap"><button type="button" className="sidebar-about sidebar-lang-compact-btn" onClick={()=>setLang(lang==='pl'?'en':'pl')} title={t.switchLanguage} aria-label={t.switchLanguage}><Languages size={18}/><span className="sidebar-lang-compact-badge">{lang.toUpperCase()}</span></button><div className="sidebar-lang-toggle" title={t.switchLanguage}><Languages size={17} className="sidebar-lang-icon"/><span className="sidebar-lang-text">{t.language}</span><div className="lang-toggle-pills" role="group" aria-label={t.language}><button type="button" className={`lang-pill ${lang==='pl'?'is-active':''}`} onClick={()=>setLang('pl')} aria-pressed={lang==='pl'} title="Polski (PL)">PL</button><button type="button" className={`lang-pill ${lang==='en'?'is-active':''}`} onClick={()=>setLang('en')} aria-pressed={lang==='en'} title="English (ENG)">ENG</button></div></div></div><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?t.account:t.signIn}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:t.signIn}</strong><small>{user?t.account:t.accountDesc}</small></span><ArrowUpRight size={16}/></button></div></div>
     </aside>
     <section className="app-main">
-      <header className="workspace-header"><div className="workspace-heading"><button className="icon-button desktop-nav-toggle" aria-label={navCollapsed?'Rozwiń nawigację':'Zwiń nawigację'} onClick={()=>setNavCollapsed(!navCollapsed)}>{navCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button className="icon-button mobile-nav-toggle" aria-label="Otwórz nawigację" onClick={()=>setMobileNav(!mobileNav)}><Menu size={21}/></button><span className="breadcrumb-parent">{view==='changelog'?'BTMap':'Stacje bazowe'}</span><ChevronRight className="breadcrumb-chevron" size={14}/><h1>{viewNames[view]}</h1></div><div className="workspace-actions"><span className="connection-status"><span className={`connection-dot ${healthError?'offline':''}`}/>{healthError?'Brak połączenia':health?view==='database'?`${formatNumber(health.stats.btmapTowers??0)} stacji w bazie BTMap`:`${formatNumber(health.stats.towers)} lokalizacji (BTMap + UKE)`:'Łączenie…'}</span><button className="icon-button theme-toggle" onClick={()=>setTheme(theme==='dark'?'light':'dark')} aria-label={theme==='dark'?'Włącz jasny motyw':'Włącz ciemny motyw'}>{theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button></div></header>
+      <header className="workspace-header"><div className="workspace-heading"><button className="icon-button desktop-nav-toggle" aria-label={navCollapsed?t.expandNav:t.collapseNav} onClick={()=>setNavCollapsed(!navCollapsed)}>{navCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button className="icon-button mobile-nav-toggle" aria-label={t.openNav} onClick={()=>setMobileNav(!mobileNav)}><Menu size={21}/></button><span className="breadcrumb-parent">{view==='changelog'?'BTMap':t.breadcrumbParent}</span><ChevronRight className="breadcrumb-chevron" size={14}/><h1>{viewNames[view]}</h1></div><div className="workspace-actions"><span className="connection-status"><span className={`connection-dot ${healthError?'offline':''}`}/>{healthError?t.noConnection:health?view==='database'?t.btmapStationsCount(formatNumber(health.stats.btmapTowers??0)):t.locationsTotal(formatNumber(health.stats.towers)):t.connecting}</span><button className="icon-button theme-toggle" onClick={()=>setTheme(theme==='dark'?'light':'dark')} aria-label={theme==='dark'?t.themeLight:t.themeDark}>{theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button></div></header>
       <main id="main-content" className="workspace-body" tabIndex={-1}>
         {view==='map'?<div className={`map-workspace ${selected?'has-details':''} ${panel?'has-drawer':''}`} ref={mapFrame}>
           <MapView
@@ -361,7 +378,7 @@ export default function App(){
           {panel==='filters'&&filterPanel}
           {panel==='stations'&&<aside className="floating-panel stations-drawer" aria-label="Stacje w obszarze"><div className="floating-panel-heading"><div><h2>Stacje w obszarze</h2><p>Baza stacji BTMap · {formatNumber(result.total)} lokalizacji</p></div><button className="icon-button" aria-label="Zamknij listę stacji" onClick={()=>setPanel(null)}><X size={19}/></button></div><div className="panel-scroll"><TowerList items={result.items} total={result.total} loading={loading} error={error} selected={selected?.id} onSelect={selectTower} onRetry={()=>setRefresh(r=>r+1)} hasMore={result.hasMore}/></div></aside>}
           {selected&&<DetailsPanel key={selected.id} tower={selected} onClose={closeTower} onNotice={setNotice} onOpenCreateStation={openCreateStation} onOpenTerrainProfile={openTerrainProfile} onOpenAreaEvaluation={openAreaEvaluation}/>}
-        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>Filtry{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>Panel wymaga konta administratora</h2><button className="primary-button" onClick={()=>changeView('map')}>Wróć do mapy</button></div>}</div>}
+        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>Filtry{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
       </main>
     </section>
     {notice&&<div className="toast" role="status"><Info size={19}/><span>{notice}</span><button className="icon-button" aria-label="Zamknij komunikat" onClick={()=>setNotice('')}><X size={17}/></button></div>}

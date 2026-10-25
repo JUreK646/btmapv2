@@ -217,3 +217,103 @@
 @media (prefers-reduced-motion:reduce) {
   .app-sidebar,.floating-panel,.map-workspace .details-panel { animation:none; transition:none; }
 }
+
+
+/* Language Switcher in Sidebar Bottom */
+.sidebar-lang-wrap {
+  margin-bottom: 4px;
+}
+.sidebar-lang-compact-btn {
+  display: none;
+  position: relative;
+}
+.sidebar-lang-compact-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: var(--surface-hover);
+  color: var(--accent-text);
+  border: 1px solid var(--line);
+  padding: 1px 3px;
+  border-radius: 4px;
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+}
+.sidebar-lang-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sidebar-lang-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.sidebar-lang-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.sidebar-lang-text {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+}
+.lang-toggle-pills {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.lang-pill {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+.lang-pill:hover:not(.is-active) {
+  color: var(--text);
+}
+.lang-pill.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+[data-theme='dark'] .lang-pill.is-active {
+  background: #27272a;
+  color: #fafafa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+[data-theme='light'] .lang-pill.is-active {
+  background: #ffffff;
+  color: #18181b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.nav-compact .sidebar-lang-toggle {
+  display: none !important;
+}
+.nav-compact .sidebar-lang-compact-btn {
+  display: flex !important;
+  justify-content: center;
+  padding-inline: 0;
+}
