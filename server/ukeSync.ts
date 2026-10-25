@@ -283,7 +283,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
     try {
       const insertOrUpdate = db.prepare(`
         INSERT INTO towers (id, stationId, address, province, lat, lng, operators, source, addedBy, status, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'UKE', 'AutoSync BIP UKE', 'APPROVED', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'BTMAP', 'AutoSync BIP UKE', 'APPROVED', ?)
         ON CONFLICT(id) DO UPDATE SET
           stationId = excluded.stationId,
           address = CASE WHEN excluded.address != '' THEN excluded.address ELSE towers.address END,
@@ -305,7 +305,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
 
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazDate', ?)").run(date);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('importedAt', ?)").run(now);
-      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('sourceDescription', ?)").run(`Automatyczny wykaz pozwoleń UKE (stan na ${date})`);
+      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('sourceDescription', ?)").run(`Automatyczny wykaz stacji BTMap (stan na ${date})`);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncCheckedAt', ?)").run(now);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncError', '')").run();
 

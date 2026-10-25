@@ -23,7 +23,7 @@ export function SubmitDialog({onClose,tower,onSuccess}:{onClose:()=>void;tower:T
       <form className="form-stack" onSubmit={submit}>
         <label className="field">Czego dotyczy uwaga?<select name="category" required><option value="location">Lokalizacja lub adres</option><option value="bands">Technologie i pasma</option><option value="other">Inna informacja</option></select></label>
         <label className="field">Opis problemu<textarea name="notes" rows={5} minLength={10} maxLength={2000} required placeholder="Opisz zauważoną rozbieżność i podaj informacje, które pomogą ją sprawdzić."/></label>
-        <p className="muted report-hint">Uwagi trafiają do moderacji. Dane stacji pochodzą z UKE.</p>
+        <p className="muted report-hint">Uwagi trafiają do moderacji zespołu BTMap.</p>
         {error&&<p className="form-error" role="alert">{error}</p>}
         <button className="primary-button full-width" disabled={busy}><Send size={16}/>{busy?'Wysyłanie…':'Wyślij uwagę'}</button>
       </form>

@@ -13,7 +13,7 @@ export function openDatabase(
     CREATE TABLE IF NOT EXISTS towers (
       id TEXT PRIMARY KEY, stationId TEXT, address TEXT, province TEXT, lat REAL, lng REAL,
       operators TEXT NOT NULL DEFAULT '[]', mastType TEXT, owner TEXT, height REAL, notes TEXT,
-      source TEXT DEFAULT 'UKE', addedBy TEXT, teryt TEXT, status TEXT DEFAULT 'APPROVED', createdAt TEXT
+      source TEXT DEFAULT 'BTMAP', addedBy TEXT, teryt TEXT, status TEXT DEFAULT 'APPROVED', createdAt TEXT
     );
     CREATE INDEX IF NOT EXISTS towers_location ON towers(lat, lng);
     CREATE INDEX IF NOT EXISTS towers_source ON towers(source, status);
@@ -149,8 +149,8 @@ export function openDatabase(
               row.owner ? String(row.owner) : null,
               typeof row.height === 'number' ? row.height : null,
               row.notes ? String(row.notes) : null,
-              String(row.source || 'UKE'),
-              String(row.addedBy || 'UKE'),
+              String(row.source || 'BTMAP'),
+              String(row.addedBy || 'BTMAP'),
               row.teryt ? String(row.teryt) : null,
               String(row.status || 'APPROVED'),
               String(row.createdAt || new Date().toISOString())
@@ -172,6 +172,14 @@ export function openDatabase(
       db.exec('ROLLBACK');
       throw e;
     }
+  }
+
+  
+  if (!db.prepare("SELECT value FROM metadata WHERE key='btmapSourceV1'").get()) {
+    db.exec(`BEGIN;
+      UPDATE towers SET source='BTMAP' WHERE source='UKE' OR source='User' OR source IS NULL;
+      INSERT OR REPLACE INTO metadata(key,value) VALUES('btmapSourceV1','1');
+    COMMIT;`);
   }
 
   db.function('fold', { deterministic: true }, value =>

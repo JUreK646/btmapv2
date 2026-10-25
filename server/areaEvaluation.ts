@@ -128,7 +128,6 @@ export async function evaluateAreaCoverage(
   const rawRows = db.prepare(`
     SELECT * FROM towers
     WHERE status = 'APPROVED'
-      AND source = 'UKE'
       AND lat BETWEEN ? AND ?
       AND lng BETWEEN ? AND ?
   `).all(minLat, maxLat, minLng, maxLng) as Record<string, unknown>[];

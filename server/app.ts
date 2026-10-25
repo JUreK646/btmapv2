@@ -80,11 +80,11 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
   app.get('/api/health',(_req,res)=>{
     if(cachedStats && Date.now()-cachedStats.at<30000) return res.json(cachedStats.data);
     const count=(sql:string)=>Number(db.prepare(sql).get()!.count);
-    const operators=db.prepare("SELECT json_extract(op.value,'$.name') AS name,COUNT(*) AS count FROM towers t,json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op WHERE t.status='APPROVED' AND t.source='UKE' GROUP BY name ORDER BY count DESC").all();
-    const technologies=db.prepare("SELECT CASE json_extract(b.value,'$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b.value,'$.tech') END AS name,COUNT(DISTINCT t.id) AS count FROM towers t,json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op,json_each(op.value,'$.bands') b WHERE t.status='APPROVED' AND t.source='UKE' GROUP BY name ORDER BY count DESC").all();
-    const provinces=db.prepare("SELECT province AS name,COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='UKE' AND province IS NOT NULL AND province!='' GROUP BY province ORDER BY count DESC").all();
+    const operators=db.prepare("SELECT json_extract(op.value,'$.name') AS name,COUNT(*) AS count FROM towers t,json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op WHERE t.status='APPROVED'  GROUP BY name ORDER BY count DESC").all();
+    const technologies=db.prepare("SELECT CASE json_extract(b.value,'$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b.value,'$.tech') END AS name,COUNT(DISTINCT t.id) AS count FROM towers t,json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op,json_each(op.value,'$.bands') b WHERE t.status='APPROVED'  GROUP BY name ORDER BY count DESC").all();
+    const provinces=db.prepare("SELECT province AS name,COUNT(*) AS count FROM towers WHERE status='APPROVED'  AND province IS NOT NULL AND province!='' GROUP BY province ORDER BY count DESC").all();
     const metadata=Object.fromEntries(db.prepare('SELECT * FROM metadata').all().map(r=>[r.key,r.value]));
-    const data={status:'ok',version:'2.0.0',stats:{towers:count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='UKE'"),operators,technologies,provinces},metadata};
+    const data={status:'ok',version:'2.0.0',stats:{towers:count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' "),operators,technologies,provinces},metadata};
     cachedStats={at:Date.now(),data}; res.json(data);
   });
   app.get('/api/towers',(req,res)=>{try{res.json(getTowers(db,req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
@@ -153,13 +153,13 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     }
   });
   app.use('/api/towers/:id',(req,res,next)=>{
-    if(!db.prepare("SELECT id FROM towers WHERE id=? AND source='UKE' AND status='APPROVED'").get(String(req.params.id))) return res.status(404).json({error:'Nie znaleziono stacji UKE.'});
+    if(!db.prepare("SELECT id FROM towers WHERE id=?  AND status='APPROVED'").get(String(req.params.id))) return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});
     next();
   });
-  app.get('/api/towers/:id',(req,res)=>{const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' AND source='UKE'").get(String(req.params.id)); if(!row)return res.status(404).json({error:'Nie znaleziono stacji.'});res.json(withAzimuths(db,withPemCounts(db,[normalizeTower(row)]))[0]);});
+  app.get('/api/towers/:id',(req,res)=>{const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id)); if(!row)return res.status(404).json({error:'Nie znaleziono stacji.'});res.json(withAzimuths(db,withPemCounts(db,[normalizeTower(row)]))[0]);});
   app.get('/api/towers/:id/pem-reports',async(req,res)=>{
-    const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' AND source='UKE'").get(String(req.params.id));
-    if(!row)return res.status(404).json({error:'Nie znaleziono stacji UKE.'});
+    const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id));
+    if(!row)return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});
     let tower:Tower;try{tower=towerForPemOperator(normalizeTower(row) as unknown as Tower,typeof req.query.operator==='string'?req.query.operator:undefined);}
     catch(e){return res.status(400).json({error:(e as Error).message});}
     try{res.json(await getPemReports(tower,req.query.refresh==='1'));}
@@ -167,16 +167,16 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
   });
   app.get('/api/towers/:id/pem-reports/:reportId/pdf',async(req,res)=>{
     if(!/^[a-f0-9]{24}$/.test(String(req.params.reportId)))return res.status(404).json({error:'Nie znaleziono raportu.'});
-    const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' AND source='UKE'").get(String(req.params.id));
-    if(!row)return res.status(404).json({error:'Nie znaleziono stacji UKE.'});
+    const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id));
+    if(!row)return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});
     let tower:Tower;try{tower=towerForPemOperator(normalizeTower(row) as unknown as Tower,typeof req.query.operator==='string'?req.query.operator:undefined);}
     catch(e){return res.status(400).json({error:(e as Error).message});}
     try{res.json(await getPemPdf(tower,String(req.params.reportId)));}
     catch{res.status(502).json({error:'Nie udało się odczytać tego PDF. Możesz otworzyć dokument źródłowy w przeglądarce.'});}
   });
   app.get('/api/towers/:id/pem',async(req,res)=>{
-    const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' AND source='UKE'").get(String(req.params.id));
-    if(!row)return res.status(404).json({error:'Nie znaleziono stacji UKE.'});
+    const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id));
+    if(!row)return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});
     try{res.json(await getPem(normalizeTower(row) as unknown as Tower));}
     catch{res.status(502).json({error:'Nie udało się pobrać pomiarów SI2PEM. Spróbuj ponownie lub otwórz mapę SI2PEM.'});}
   });
@@ -189,7 +189,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
   app.post('/api/towers/:id/comments',requireUser,(req,res)=>{
     const message=text(req.body.text,2000), id=randomUUID();
     if(!message) return res.status(400).json({error:'Wpisz treść komentarza.'});
-    if(!db.prepare("SELECT id FROM towers WHERE id=? AND source='UKE'").get(String(req.params.id)))return res.status(404).json({error:'Nie znaleziono stacji.'});
+    if(!db.prepare("SELECT id FROM towers WHERE id=? ").get(String(req.params.id)))return res.status(404).json({error:'Nie znaleziono stacji.'});
     const comment={id,towerId:String(req.params.id),userNick:res.locals.user.nick,text:message,createdAt:new Date().toISOString()};
     db.prepare('INSERT INTO comments VALUES (?,?,?,?,?)').run(...Object.values(comment));res.status(201).json(comment);
   });
@@ -239,10 +239,10 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
       log(res.locals.user.nick,'NOWA_STACJA',id);
       return res.status(201).json({id,status:'PENDING'});
     }
-    if(type!=='REPORT') return res.status(400).json({error:'Mapa korzysta wyłącznie z UKE. Możesz zgłosić uwagę do istniejącego rekordu.'});
+    if(type!=='REPORT') return res.status(400).json({error:'Nieobsługiwany typ zgłoszenia.'});
     const towerId=text(data.towerId,200), notes=text(data.notes,2000), category=text(data.category,40);
-    const tower=db.prepare("SELECT * FROM towers WHERE id=? AND source='UKE' AND status='APPROVED'").get(towerId);
-    if(!tower) return res.status(404).json({error:'Nie znaleziono stacji UKE.'});
+    const tower=db.prepare("SELECT * FROM towers WHERE id=?  AND status='APPROVED'").get(towerId);
+    if(!tower) return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});
     if(notes.length<10) return res.status(400).json({error:'Opisz problem w co najmniej 10 znakach.'});
     if(!['location','bands','other'].includes(category)) return res.status(400).json({error:'Wybierz rodzaj uwagi.'});
     const clean={towerId,notes,category,address:tower.address,lat:tower.lat,lng:tower.lng,operators:JSON.parse(String(tower.operators||'[]'))};
@@ -262,7 +262,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     try {
       // Reviewing a report never changes UKE permit data or creates community stations.
       if(req.body.action==='APPROVE'){
-        if(item.type==='TOWER') throw new Error('Starsze zgłoszenie nie może tworzyć stacji. Wersja v2 obsługuje wyłącznie dane UKE.');
+        if(item.type==='TOWER') throw new Error('Starsze zgłoszenie nie jest już obsługiwane.');
         if(item.type==='NEW_STATION'){
           const stData=JSON.parse(String(item.data));
           if(stData.sourceTowerId){

@@ -350,7 +350,7 @@ export default function DetailsPanel({
             </span>
             <span className="station-sheet-source">
               <Database size={12} aria-hidden="true" />
-              Pozwolenia UKE
+              {tower.source === 'UKE' ? 'Pozwolenia UKE' : 'Baza BTMap'}
             </span>
             {tower.operators.some(o => o.name === 'Orange' || o.name === 'T-Mobile') && (
               <span className="station-networks-badge" title="Stacja współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)">
@@ -390,8 +390,8 @@ export default function DetailsPanel({
                 type="button"
                 className="header-create-station-btn"
                 onClick={() => onOpenCreateStation(tower)}
-                title="Utwórz stację w bazie danych na podstawie pozwoleń UKE"
-                aria-label="Utwórz stację w bazie danych na podstawie pozwoleń UKE"
+                title="Zgłoś aktualizację lub edycję stacji w bazie BTMap"
+                aria-label="Zgłoś aktualizację lub edycję stacji w bazie BTMap"
               >
                 <Plus size={14} />
                 <span>Utwórz stację</span>
@@ -538,7 +538,7 @@ export default function DetailsPanel({
           <section className="cell-details-section" aria-label="Szczegóły komórek i pasm">
             <div className="cell-details-heading">
               <Radio size={14} aria-hidden="true" />
-              <span>Szczegóły komórek i pasm UKE</span>
+              <span>Pasma radiowe i komórki stacji</span>
             </div>
             {tower.operators.map(op => (
               <CellDetailsBlock key={op.name} op={op} onNotice={onNotice} />

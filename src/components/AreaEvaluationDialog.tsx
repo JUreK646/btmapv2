@@ -123,7 +123,7 @@ export default function AreaEvaluationDialog({
         lng: 0,
         address: s.address,
         province: '',
-        source: 'UKE',
+        source: 'BTMAP',
         operators: [
           {
             name: s.operator,
@@ -162,7 +162,7 @@ export default function AreaEvaluationDialog({
           <div className="ae-header-titles">
             <h2 className="ae-title">
               Audyt zasięgu 4 operatorów
-              <span className="ae-title-badge">SI2PEM + UKE</span>
+              <span className="ae-title-badge">Baza BTMap + SI2PEM</span>
             </h2>
             <div className="ae-subtitle">
               <span>{targetCoords[0].toFixed(5)}, {targetCoords[1].toFixed(5)}</span>

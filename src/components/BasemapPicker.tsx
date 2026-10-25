@@ -17,7 +17,7 @@ export default function BasemapPicker({value,onChange}:{value:BasemapId;onChange
       const Icon=item.kind==='street'?Map:item.kind==='terrain'?Mountain:Satellite;
       const unavailable=item.id==='google'&&!GOOGLE_MAPS_KEY;
       return <button key={item.id} className={`basemap-option ${value===item.id?'is-active':''}`} aria-pressed={value===item.id} disabled={unavailable} onClick={()=>{onChange(item.id);setOpen(false);}}><Icon size={22}/><span><strong>{item.name}</strong><small>{item.description}</small></span>{value===item.id&&<Check size={17}/>}</button>;
-    })}</div><p>Dane stacji pozostają z UKE.</p></section>}
+    })}</div><p>Dane stacji: Baza BTMap.</p></section>}
     <button className="basemap-trigger" aria-label={`Podkład mapy: ${current.name}`} aria-expanded={open} onClick={()=>setOpen(!open)}><Layers size={21}/><span><small>Podkład mapy</small><strong>{current.name}</strong></span><ChevronUp size={16} className={open?'rotated':''}/></button>
   </div>;
 }
