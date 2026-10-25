@@ -195,12 +195,6 @@ export default function App(){
   };
   const openSubmit=(tower:Tower)=>{setEditTower(tower);setDialog(user?'submit':'auth');};
   const openCreateStation=(tower:Tower|null)=>{
-    if(!user){
-      setEditTower(tower);
-      setNotice('Zaloguj się lub utwórz konto, aby dodać stację do bazy.');
-      setDialog('auth');
-      return;
-    }
     setCreateStationTower(tower||'blank');
   };
   const handleAuth=async(mode:'login'|'register',data:unknown)=>{
@@ -279,14 +273,18 @@ export default function App(){
             />
             <div className="map-searchbar-actions">
               <button
+                type="button"
                 className={`filter-trigger ${evalTarget || isPickingEvalTarget ? 'selected' : ''}`}
                 onClick={() => {
                   if (evalTarget || isPickingEvalTarget) {
                     closeAreaEvaluation();
+                  } else if (selected) {
+                    openAreaEvaluation([selected.lat, selected.lng]);
                   } else {
                     setIsPickingEvalTarget(true);
                     setPanel(null);
                     setSelected(null);
+                    setNotice('Kliknij punkt lub stację na mapie, aby wykonać audyt 4 operatorów.');
                   }
                 }}
                 aria-label="Audyt operatorów"
@@ -296,6 +294,7 @@ export default function App(){
                 <span>Audyt</span>
               </button>
               <button
+                type="button"
                 className={`filter-trigger ${panel==='filters'||filterTotal?'selected':''}`}
                 onClick={()=>togglePanel('filters')}
                 aria-expanded={panel==='filters'}
@@ -306,6 +305,7 @@ export default function App(){
                 {filterTotal>0&&<b>{filterTotal}</b>}
               </button>
               <button
+                type="button"
                 className="filter-trigger"
                 onClick={() => openCreateStation(null)}
                 aria-label="Dodaj nową stację"
@@ -326,16 +326,20 @@ export default function App(){
           <div className="map-tools">
             <div className="map-control-group"><button aria-label="Przybliż mapę" onClick={()=>map?.zoomIn()}><Plus size={20}/></button><button aria-label="Oddal mapę" onClick={()=>map?.zoomOut()}><Minus size={20}/></button></div>
             <button
+              type="button"
               className={`map-tool ${evalTarget || isPickingEvalTarget ? 'active' : ''}`}
               aria-label="Audyt operatorów"
               title="Audyt i ocena 4 operatorów na wybranym terenie (maks. 3 km²)"
               onClick={() => {
                 if (evalTarget || isPickingEvalTarget) {
                   closeAreaEvaluation();
+                } else if (selected) {
+                  openAreaEvaluation([selected.lat, selected.lng]);
                 } else {
                   setIsPickingEvalTarget(true);
                   setPanel(null);
                   setSelected(null);
+                  setNotice('Kliknij punkt lub stację na mapie, aby wykonać audyt 4 operatorów.');
                 }
               }}
             >
@@ -364,7 +368,7 @@ export default function App(){
     {dialog==='auth'&&<AuthDialog onClose={()=>setDialog(null)} authenticate={handleAuth}/>}
     {dialog==='profile'&&user&&<ProfileDialog user={user} onClose={()=>setDialog(null)} onLogout={async()=>{await logout();setDialog(null);if(view==='admin')setView('map');}} onAdmin={()=>{setDialog(null);changeView('admin');}}/>}
     {dialog==='submit'&&user&&editTower&&<SubmitDialog tower={editTower} onClose={()=>setDialog(null)} onSuccess={()=>setRefresh(r=>r+1)}/>}
-    {createStationTower!==null&&user&&<StationSubmissionDialog sourceTower={createStationTower==='blank'?null:createStationTower} onClose={()=>setCreateStationTower(null)} onSuccess={()=>{setCreateStationTower(null);setRefresh(r=>r+1);setNotice('Zgłoszenie nowej stacji zostało pomyślnie wysłane do moderacji.');}}/>}
+    {createStationTower!==null&&<StationSubmissionDialog sourceTower={createStationTower==='blank'?null:createStationTower} onClose={()=>setCreateStationTower(null)} onSuccess={()=>{setCreateStationTower(null);setRefresh(r=>r+1);setNotice('Zgłoszenie nowej stacji zostało pomyślnie wysłane do moderacji.');}}/>}
     {terrainTower!==null&&terrainTarget!==null&&<TerrainProfileDialog tower={terrainTower} targetCoords={terrainTarget} onTargetChange={setTerrainTarget} onSectorAzimuthChange={setTerrainSectorAzimuth} onPickOnMap={()=>setIsPickingTerrainTarget(true)} onClose={closeTerrainProfile}/>}
     {evalTarget!==null&&<AreaEvaluationDialog targetCoords={evalTarget} radiusM={evalRadiusM} onRadiusChange={setEvalRadiusM} onPickOnMap={()=>setIsPickingEvalTarget(true)} onClose={closeAreaEvaluation} onOpenTerrainProfile={openTerrainProfile}/>}
   </div>;
