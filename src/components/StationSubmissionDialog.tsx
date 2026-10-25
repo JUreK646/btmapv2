@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -157,11 +157,21 @@ function MapController({
   onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
 }) {
   const map = useMap();
+  const lastCenterRef = useRef<[number, number]>(center);
+
   useEffect(() => {
-    map.setView(center, map.getZoom(), { animate: true });
+    const dist = Math.hypot(center[0] - lastCenterRef.current[0], center[1] - lastCenterRef.current[1]);
+    if (dist > 0.0001) {
+      lastCenterRef.current = center;
+      map.setView(center, map.getZoom(), { animate: false });
+    }
   }, [center[0], center[1], map]);
+
   useMapEvents({
-    click: e => onPick(e.latlng.lat, e.latlng.lng),
+    click: e => {
+      lastCenterRef.current = [e.latlng.lat, e.latlng.lng];
+      onPick(e.latlng.lat, e.latlng.lng);
+    },
     moveend: () => {
       if (onBoundsChange) {
         const b = map.getBounds();
@@ -176,6 +186,93 @@ function MapController({
   });
   return null;
 }
+
+interface MiniMapProps {
+  center: [number, number];
+  showUkeLocations: boolean;
+  ukeTowers: Tower[];
+  activeTowerId: string | null;
+  ukeMarker: [number, number] | null;
+  onSelectUkeTower: (t: Tower) => void;
+  onPickLocation: (lat: number, lng: number) => void;
+  onBoundsChange: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
+}
+
+const SubmissionMiniMap = React.memo(function SubmissionMiniMap({
+  center,
+  showUkeLocations,
+  ukeTowers,
+  activeTowerId,
+  ukeMarker,
+  onSelectUkeTower,
+  onPickLocation,
+  onBoundsChange,
+}: MiniMapProps) {
+  return (
+    <div className="ss-map">
+      <MapContainer
+        center={center}
+        zoom={16}
+        zoomControl={false}
+        attributionControl={false}
+        className="ss-map-inner"
+        preferCanvas={true}
+      >
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={19}
+        />
+        {showUkeLocations &&
+          ukeTowers.map(t => {
+            const isSelected = activeTowerId === t.id;
+            const opCol = operatorColor(t.operators?.[0]?.name || 'Plus');
+            return (
+              <CircleMarker
+                key={t.id}
+                center={[t.lat, t.lng]}
+                radius={isSelected ? 9 : 7}
+                pathOptions={{
+                  color: isSelected ? '#38bdf8' : '#ffffff',
+                  weight: isSelected ? 3 : 2,
+                  fillColor: opCol,
+                  fillOpacity: 0.95,
+                }}
+                eventHandlers={{
+                  click: e => {
+                    L.DomEvent.stopPropagation(e);
+                    onSelectUkeTower(t);
+                  },
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -9]} opacity={0.96}>
+                  <div className="ss-uke-tooltip">
+                    <div className="ss-uke-tooltip-header">
+                      <span className="ss-uke-tooltip-badge" style={{ background: opCol }}></span>
+                      <strong>
+                        {t.operators?.map(o => o.name).join(' / ') || 'UKE'} {t.stationId || ''}
+                      </strong>
+                    </div>
+                    <div className="ss-uke-tooltip-addr">{t.address || t.province || 'Pozwolenie radiowe UKE'}</div>
+                    <div className="ss-uke-tooltip-action">
+                      {isSelected ? '✓ Wybrane pozwolenie' : 'Kliknij, aby wybrać i wypełnić stację'}
+                    </div>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
+        <CircleMarker
+          center={center}
+          radius={7}
+          pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#0ea5e9', fillOpacity: 1 }}
+        />
+        <MapController center={center} onPick={onPickLocation} onBoundsChange={onBoundsChange} />
+        <MapButtons center={ukeMarker} />
+      </MapContainer>
+      <div className="ss-map-attr">BTMap · zobrazowanie Esri World Imagery</div>
+    </div>
+  );
+});
 
 function SelectBox({
   value,
@@ -407,47 +504,30 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     setCells(buildCellsFromSectors(initialSectors, ukePermitBands, []));
   }, [activeSourceTower, operator, ukePermitBands, ukeUniqueFreqs, ukeAzimuths]);
 
-  // Automatically check SI2PEM reports for exact sector azimuths and per-sector bands
+  // Quick metadata check for SI2PEM reports (fast JSON, no heavy background PDF download)
   useEffect(() => {
-    if (!activeSourceTower || !ukePermitBands.length) {
+    if (!activeSourceTower) {
       setPemStatus('idle');
-      setPemAntennas([]);
+      return;
+    }
+    const cached = cachedPemReports(activeSourceTower, operator);
+    if (cached) {
+      setPemStatus(cached.reports?.some(r => r.kind === 'pdf') ? 'loaded' : 'none');
       return;
     }
     let active = true;
-    setPemStatus('loading');
-
-    const run = async () => {
-      try {
-        const res = cachedPemReports(activeSourceTower, operator) || (await loadPemReports(activeSourceTower, operator));
+    loadPemReports(activeSourceTower, operator)
+      .then(res => {
         if (!active) return;
-        const pdfEntry = res?.reports?.find(r => r.kind === 'pdf');
-        if (!pdfEntry) {
-          setPemStatus('none');
-          return;
-        }
-        const parsed = await loadPemPdf(activeSourceTower, operator, pdfEntry);
-        if (!active) return;
-        const ants = parsed?.antennas || [];
-        setPemAntennas(ants);
-        const pemSectors = sectorsFromPemAntennas(ants, ukeUniqueFreqs);
-        if (pemSectors.length > 0) {
-          setSectors(pemSectors);
-          setCells(prev => buildCellsFromSectors(pemSectors, ukePermitBands, prev));
-          setPemStatus('loaded');
-        } else {
-          setPemStatus('none');
-        }
-      } catch {
+        setPemStatus(res?.reports?.some(r => r.kind === 'pdf') ? 'loaded' : 'none');
+      })
+      .catch(() => {
         if (active) setPemStatus('none');
-      }
-    };
-
-    void run();
+      });
     return () => {
       active = false;
     };
-  }, [activeSourceTower, operator, ukePermitBands, ukeUniqueFreqs]);
+  }, [activeSourceTower, operator]);
 
   // Close dropdown menus on outside click
   useEffect(() => {
@@ -457,10 +537,20 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     return () => window.removeEventListener('click', close);
   }, [openMenu]);
 
-  const mapCenter = useMemo<[number, number]>(() => {
+  const [mapCenter, setMapCenter] = useState<[number, number]>(() => {
     const a = Number(String(lat).replace(',', '.'));
     const b = Number(String(lng).replace(',', '.'));
     return Number.isFinite(a) && Number.isFinite(b) ? [a, b] : [52.23, 21.01];
+  });
+
+  useEffect(() => {
+    const a = Number(String(lat).replace(',', '.'));
+    const b = Number(String(lng).replace(',', '.'));
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 48 || a > 56 || b < 13 || b > 26) return;
+    const timer = setTimeout(() => {
+      setMapCenter([a, b]);
+    }, 400);
+    return () => clearTimeout(timer);
   }, [lat, lng]);
 
   useEffect(() => {
@@ -468,15 +558,16 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
       setUkeTowers([]);
       return;
     }
-    const minLat = mapBounds ? mapBounds.minLat : mapCenter[0] - 0.04;
-    const maxLat = mapBounds ? mapBounds.maxLat : mapCenter[0] + 0.04;
-    const minLng = mapBounds ? mapBounds.minLng : mapCenter[1] - 0.07;
-    const maxLng = mapBounds ? mapBounds.maxLng : mapCenter[1] + 0.07;
+    const center = mapCenter;
+    const minLat = mapBounds ? mapBounds.minLat : center[0] - 0.04;
+    const maxLat = mapBounds ? mapBounds.maxLat : center[0] + 0.04;
+    const minLng = mapBounds ? mapBounds.minLng : center[1] - 0.07;
+    const maxLng = mapBounds ? mapBounds.maxLng : center[1] + 0.07;
 
     const abort = new AbortController();
     setLoadingUke(true);
     const timer = setTimeout(() => {
-      api<TowerResult>(`/towers?minLat=${minLat}&maxLat=${maxLat}&minLng=${minLng}&maxLng=${maxLng}&limit=60`, {
+      api<TowerResult>(`/towers?source=UKE&minimal=1&minLat=${minLat}&maxLat=${maxLat}&minLng=${minLng}&maxLng=${maxLng}&limit=40`, {
         signal: abort.signal,
       })
         .then(res => {
@@ -488,7 +579,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
             setLoadingUke(false);
           }
         });
-    }, 200);
+    }, 350);
 
     return () => {
       clearTimeout(timer);
@@ -496,12 +587,13 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     };
   }, [mapCenter[0], mapCenter[1], mapBounds, showUkeLocations]);
 
-  const handleSelectUkeTower = (tower: Tower) => {
+  const handleSelectUkeTower = useCallback((tower: Tower) => {
     setActiveSourceTower(tower);
     const newLat = tower.lat.toFixed(6);
     const newLng = tower.lng.toFixed(6);
     setLat(newLat);
     setLng(newLng);
+    setMapCenter([tower.lat, tower.lng]);
     if (tower.stationId) setStationId(tower.stationId);
     if (tower.province) setProvince(tower.province);
     if (tower.address) {
@@ -512,12 +604,12 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     if (tower.mastType) setMastType(tower.mastType);
     if (tower.notes) setNotes(tower.notes);
     if (tower.operators && tower.operators.length > 0) {
-      const matching = tower.operators.find(o => operatorName(o.name) === operator);
-      if (!matching && tower.operators[0]) {
-        setOperator(operatorName(tower.operators[0].name));
-      }
+      setOperator(prevOp => {
+        const matching = tower.operators.find(o => operatorName(o.name) === prevOp);
+        return matching ? prevOp : (tower.operators[0] ? operatorName(tower.operators[0].name) : prevOp);
+      });
     }
-  };
+  }, []);
 
   const handleClearUkeTower = () => {
     setActiveSourceTower(null);
@@ -698,12 +790,12 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
       return sortCellsByBand([...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)]);
     });
 
-  const removeCell = (id: string) => setCells(prev => prev.filter(c => c.id !== id));
-  const updateCell = (id: string, patch: Partial<CellInput>) =>
-    setCells(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
+  const removeCell = useCallback((id: string) => setCells(prev => prev.filter(c => c.id !== id)), []);
+  const updateCell = useCallback((id: string, patch: Partial<CellInput>) =>
+    setCells(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c))), []);
 
-  const changeBand = (cell: CellInput, label: string) =>
-    setCells(prev => sortCellsByBand(prev.map(c => (c.id === cell.id ? { ...c, band: label } : c))));
+  const changeBand = useCallback((cell: CellInput, label: string) =>
+    setCells(prev => sortCellsByBand(prev.map(c => (c.id === cell.id ? { ...c, band: label } : c)))), []);
 
   // Validation
   const cellValidation = useMemo(() => {
@@ -1184,51 +1276,16 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                     Punkty z wykazu UKE {loadingUke ? '(szukam…)' : ukeTowers.length > 0 ? `(${ukeTowers.length})` : ''}
                   </label>
                 </div>
-                <div className="ss-map">
-                  <MapContainer center={mapCenter} zoom={16} zoomControl={false} attributionControl={false} className="ss-map-inner">
-                    <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
-                    {showUkeLocations && ukeTowers.map(t => {
-                      const isSelected = activeSourceTower?.id === t.id;
-                      const opCol = operatorColor(t.operators?.[0]?.name || 'Plus');
-                      return (
-                        <CircleMarker
-                          key={t.id}
-                          center={[t.lat, t.lng]}
-                          radius={isSelected ? 9 : 7}
-                          pathOptions={{
-                            color: isSelected ? '#38bdf8' : '#ffffff',
-                            weight: isSelected ? 3 : 2,
-                            fillColor: opCol,
-                            fillOpacity: 0.95,
-                          }}
-                          eventHandlers={{
-                            click: (e) => {
-                              L.DomEvent.stopPropagation(e);
-                              handleSelectUkeTower(t);
-                            },
-                          }}
-                        >
-                          <Tooltip direction="top" offset={[0, -9]} opacity={0.96}>
-                            <div className="ss-uke-tooltip">
-                              <div className="ss-uke-tooltip-header">
-                                <span className="ss-uke-tooltip-badge" style={{ background: opCol }}></span>
-                                <strong>{t.operators?.map(o => o.name).join(' / ') || 'UKE'} {t.stationId || ''}</strong>
-                              </div>
-                              <div className="ss-uke-tooltip-addr">{t.address || t.province || 'Pozwolenie radiowe UKE'}</div>
-                              <div className="ss-uke-tooltip-action">
-                                {isSelected ? '✓ Wybrane pozwolenie' : 'Kliknij, aby wybrać i wypełnić stację'}
-                              </div>
-                            </div>
-                          </Tooltip>
-                        </CircleMarker>
-                      );
-                    })}
-                    <CircleMarker center={mapCenter} radius={7} pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#0ea5e9', fillOpacity: 1 }} />
-                    <MapController center={mapCenter} onPick={pickLocation} onBoundsChange={setMapBounds} />
-                    <MapButtons center={ukeMarker} />
-                  </MapContainer>
-                  <div className="ss-map-attr">BTMap · zobrazowanie Esri World Imagery</div>
-                </div>
+                <SubmissionMiniMap
+                  center={mapCenter}
+                  showUkeLocations={showUkeLocations}
+                  ukeTowers={ukeTowers}
+                  activeTowerId={activeSourceTower?.id || null}
+                  ukeMarker={ukeMarker}
+                  onSelectUkeTower={handleSelectUkeTower}
+                  onPickLocation={pickLocation}
+                  onBoundsChange={setMapBounds}
+                />
 
                 {activeSourceTower && (
                   <div className="ss-uke-selected-banner">

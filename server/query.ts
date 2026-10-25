@@ -83,12 +83,16 @@ export function withPemCounts<T extends Record<string,unknown>>(db:DatabaseSync,
 
 export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
   const { sql, params } = towerWhere(query);
-  const total = Number(db.prepare(`SELECT COUNT(*) AS count FROM towers t WHERE ${sql}`).get(...params)!.count);
+  const isMinimal = query.minimal === '1';
+  const total = isMinimal ? 0 : Number(db.prepare(`SELECT COUNT(*) AS count FROM towers t WHERE ${sql}`).get(...params)!.count);
   const zoom = Number(query.zoom ?? 14);
   if (!Number.isFinite(zoom)) throw new Error('Nieprawidłowe przybliżenie.');
   const isMap = query.view === 'map';
   const limit = Math.min(isMap ? MAP_STATION_LIMIT : 1500, Math.max(1, Number(query.limit) || (isMap ? MAP_STATION_LIMIT : 100)));
   const offset = Math.max(0, Number(query.offset) || 0);
   const items = db.prepare(`SELECT t.* FROM towers t WHERE ${sql} ORDER BY t.address, t.id LIMIT ? OFFSET ?`).all(...params,Math.floor(limit),Math.floor(offset)).map(normalizeTower);
+  if (isMinimal) {
+    return { items, total: items.length, limit, hasMore: false };
+  }
   return { items: withAzimuths(db, withPemCounts(db, items)), total, limit, hasMore: offset + items.length < total };
 }
