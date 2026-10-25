@@ -10,6 +10,6 @@ export interface Bounds { minLat:number; maxLat:number; minLng:number; maxLng:nu
 export interface User { id:string; email:string; nick:string; role:string; points:number; level:number; }
 export interface Comment { id:string; userNick:string; text:string; createdAt:string; }
 export interface Count { name:string; count:number; }
-export interface Health { status:string; version:string; stats:{ towers:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
+export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
 export interface Submission { id:string; type:string; status:string; createdAt:string; userNick?:string; data?:any; }
 export interface Radioline { id:string; latA:number; lngA:number; latB:number; lngB:number; frequency:number; operator:string; }

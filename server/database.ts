@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { operatorName } from '../shared/operators.ts';
 
 export function openDatabase(
-  filename = process.env.BTMAP_DB || (existsSync('server/BTMap.db') ? 'server/BTMap.db' : 'data/btmap.sqlite')
+  filename = process.env.BTMAP_DB || (existsSync('data/btmap.sqlite') ? 'data/btmap.sqlite' : 'server/BTMap.db')
 ) {
   if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true });
   const db = new DatabaseSync(filename);
@@ -179,6 +179,14 @@ export function openDatabase(
     db.exec(`BEGIN;
       UPDATE towers SET source='BTMAP' WHERE source='UKE' OR source='User' OR source IS NULL;
       INSERT OR REPLACE INTO metadata(key,value) VALUES('btmapSourceV1','1');
+    COMMIT;`);
+  }
+
+  
+  if (!db.prepare("SELECT value FROM metadata WHERE key='revertUkeSourceV2'").get()) {
+    db.exec(`BEGIN;
+      UPDATE towers SET source='UKE' WHERE addedBy IN ('Import KML', 'AutoSync BIP UKE') OR id LIKE 'UKE_%';
+      INSERT OR REPLACE INTO metadata(key,value) VALUES('revertUkeSourceV2','1');
     COMMIT;`);
   }
 

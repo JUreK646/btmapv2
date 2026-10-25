@@ -9,7 +9,7 @@ export function useTowers(filters:Filters,bounds:Bounds|null,search:string,mode:
   useEffect(()=>{
     if(mode==='map'&&!bounds)return;
     const abort=new AbortController();setLoading(true);setError('');
-    const params=filterParams(filters,mode==='map'?{...bounds!,view:'map',limit:MAP_STATION_LIMIT}:{q:search,limit:50,offset:page*50});
+    const params=filterParams(filters,mode==='map'?{...bounds!,view:'map',limit:MAP_STATION_LIMIT}:{q:search,limit:50,offset:page*50,source:'BTMAP'});
     const timer=setTimeout(()=>api<TowerResult>(`/towers?${params}`,{signal:abort.signal}).then(data=>{setResult(data);setLoading(false);}).catch(e=>{if(e.name!=='AbortError'){setError(e.message);setLoading(false);}}),180);
     return()=>{clearTimeout(timer);abort.abort();};
   },[filters,bounds,search,mode,page,refresh]);

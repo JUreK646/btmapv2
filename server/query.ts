@@ -7,7 +7,7 @@ export function towerWhere(query: Record<string, unknown>) {
   const clauses = ["t.status = 'APPROVED'", 't.lat BETWEEN -90 AND 90', 't.lng BETWEEN -180 AND 180'];
   const params: SQLInputValue[] = [];
   const list = (value: unknown) => typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 20) : [];
-  if (query.source) { clauses.push('t.source = ?'); params.push(String(query.source)); }
+  if (query.source && query.source !== 'ALL') { clauses.push('t.source = ?'); params.push(String(query.source)); }
   if (query.province) { clauses.push('fold(t.province) = fold(?)'); params.push(String(query.province)); }
   if (query.q) {
     clauses.push("(fold(t.address) LIKE fold(?) ESCAPE '!' OR fold(t.stationId) LIKE fold(?) ESCAPE '!' OR fold(t.id) LIKE fold(?) ESCAPE '!' OR fold(t.operators) LIKE fold(?) ESCAPE '!')");
@@ -63,7 +63,7 @@ export function normalizeTower(t: Record<string, unknown>): Record<string, unkno
       }
     }
   }
-  return { ...t, source: (t.source === 'UKE' || !t.source || t.source === 'User') ? 'BTMAP' : t.source, operators };
+  return { ...t, source: (t.source === 'User' || t.source === 'BTMAP') ? 'BTMAP' : (t.source || 'UKE'), operators };
 }
 
 export function withPemCounts<T extends Record<string,unknown>>(db:DatabaseSync,towers:T[]):Array<T&{pemReportsByOperator?:Record<string,{count:number;partial:boolean;checkedAt:string}>}>{

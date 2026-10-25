@@ -85,16 +85,18 @@ function Stations({
         <Fragment key={t.id}>
           <CircleMarker
             center={[t.lat, t.lng]}
-            radius={selected === t.id ? 11 : t.operators.length > 1 ? 7 : 6}
+            radius={selected === t.id ? 11 : t.source === 'BTMAP' ? 8 : (t.operators.length > 1 ? 7 : 6)}
             renderer={renderer}
             pathOptions={{
               color:
                 selected === t.id && theme === 'light'
                   ? '#086c60'
+                  : t.source === 'BTMAP'
+                  ? '#00e5ff'
                   : theme === 'light' && operatorName(t.operators[0]?.name || '') === 'Plus'
                   ? '#244230'
                   : '#fff',
-              weight: selected === t.id ? 4 : 2,
+              weight: selected === t.id ? 4 : t.source === 'BTMAP' ? 3 : 2,
               fillColor: operatorColor(t.operators[0]?.name),
               fillOpacity: 1,
             }}
@@ -112,7 +114,7 @@ function Stations({
             }}
           >
             <Tooltip direction="top" offset={[0, -8]}>
-              <strong>{t.address}</strong>
+              <strong>{t.address}</strong> <small style={{opacity:0.8,marginLeft:'4px'}}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
               <br />
               {t.operators
                 .map(op => {

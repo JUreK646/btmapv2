@@ -350,7 +350,7 @@ export default function DetailsPanel({
             </span>
             <span className="station-sheet-source">
               <Database size={12} aria-hidden="true" />
-              {tower.source === 'UKE' ? 'Pozwolenia UKE' : 'Baza BTMap'}
+              {tower.source === 'BTMAP' ? 'Baza BTMap' : 'Pozwolenie UKE'}
             </span>
             {tower.operators.some(o => o.name === 'Orange' || o.name === 'T-Mobile') && (
               <span className="station-networks-badge" title="Stacja współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)">
@@ -394,7 +394,7 @@ export default function DetailsPanel({
                 aria-label="Zgłoś aktualizację lub edycję stacji w bazie BTMap"
               >
                 <Plus size={14} />
-                <span>Utwórz stację</span>
+                <span>{tower.source === 'BTMAP' ? 'Edytuj stację' : 'Utwórz stację w BTMap'}</span>
               </button>
             )}
             <button

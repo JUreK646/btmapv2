@@ -84,7 +84,10 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     const technologies=db.prepare("SELECT CASE json_extract(b.value,'$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b.value,'$.tech') END AS name,COUNT(DISTINCT t.id) AS count FROM towers t,json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op,json_each(op.value,'$.bands') b WHERE t.status='APPROVED'  GROUP BY name ORDER BY count DESC").all();
     const provinces=db.prepare("SELECT province AS name,COUNT(*) AS count FROM towers WHERE status='APPROVED'  AND province IS NOT NULL AND province!='' GROUP BY province ORDER BY count DESC").all();
     const metadata=Object.fromEntries(db.prepare('SELECT * FROM metadata').all().map(r=>[r.key,r.value]));
-    const data={status:'ok',version:'2.0.0',stats:{towers:count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' "),operators,technologies,provinces},metadata};
+    const btmapTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='BTMAP'");
+    const ukeTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='UKE'");
+    const totalTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED'");
+    const data={status:'ok',version:'2.0.0',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces},metadata};
     cachedStats={at:Date.now(),data}; res.json(data);
   });
   app.get('/api/towers',(req,res)=>{try{res.json(getTowers(db,req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
@@ -235,6 +238,56 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
         sourceTowerId:text(data.sourceTowerId,200)||null,
       };
       const id=randomUUID();
+      if (res.locals.user.role === 'ADMIN') {
+        const newId = clean.sourceTowerId ? ('BTMAP_' + clean.sourceTowerId.replace(/^UKE_/, '')) : ('BTMAP_' + randomUUID().slice(0, 12));
+        const ops = [{
+          name: clean.operator,
+          stationIds: clean.stationId ? [clean.stationId] : [],
+          bands: Array.isArray(clean.cells) ? clean.cells.map((c: any) => ({
+            tech: c.tech,
+            band: c.band,
+            pci: c.pci,
+            earfcn: c.earfcn,
+            azimuth: c.azimuth
+          })) : []
+        }];
+        db.prepare(`
+          INSERT INTO towers (
+            id, stationId, address, province, lat, lng, operators,
+            mastType, owner, height, notes, source, addedBy, status, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'BTMAP', ?, 'APPROVED', ?)
+          ON CONFLICT(id) DO UPDATE SET
+            stationId = excluded.stationId,
+            address = excluded.address,
+            province = excluded.province,
+            lat = excluded.lat,
+            lng = excluded.lng,
+            operators = excluded.operators,
+            mastType = excluded.mastType,
+            owner = excluded.owner,
+            height = excluded.height,
+            notes = excluded.notes,
+            source = 'BTMAP'
+        `).run(
+          newId,
+          clean.stationId || null,
+          clean.address || '',
+          clean.province || '',
+          clean.lat,
+          clean.lng,
+          JSON.stringify(ops),
+          clean.mastType || null,
+          clean.owner || null,
+          clean.height || null,
+          clean.notes || null,
+          res.locals.user.nick || 'BTMAP',
+          new Date().toISOString()
+        );
+        db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId,status) VALUES(?,?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id,'APPROVED');
+        log(res.locals.user.nick,'NOWA_STACJA_AUTO_APPROVE',id);
+        cachedStats=null;
+        return res.status(201).json({id,status:'APPROVED',towerId:newId});
+      }
       db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId) VALUES(?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id);
       log(res.locals.user.nick,'NOWA_STACJA',id);
       return res.status(201).json({id,status:'PENDING'});
