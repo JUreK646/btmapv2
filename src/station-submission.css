@@ -1645,3 +1645,104 @@
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
 }
+
+
+/* ---- Sector Import Bar (UKE / SI2PEM) ---- */
+.ss-sector-import-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ss-btn-import {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  font-family: inherit;
+}
+
+.ss-btn-import:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ss-btn-import-uke {
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  color: #38bdf8;
+}
+
+.ss-btn-import-uke:hover:not(:disabled) {
+  background: rgba(14, 165, 233, 0.22);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.ss-btn-import-si2pem {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.ss-btn-import-si2pem:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #34d399;
+  color: #ffffff;
+}
+
+.ss-btn-import small {
+  font-size: 10.5px;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.ss-sector-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 7px;
+  font-size: 11.5px;
+  color: #e2e8f0;
+  animation: fadeIn 0.2s ease;
+}
+
+.ss-sector-notice-icon {
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.ss-sector-notice span {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.ss-sector-notice button {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.ss-sector-notice button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}

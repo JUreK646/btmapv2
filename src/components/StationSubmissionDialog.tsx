@@ -612,6 +612,61 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     applySectorsAndSyncCells(next);
   };
 
+  const [loadingSi2pemManual, setLoadingSi2pemManual] = useState(false);
+  const [sectorNotice, setSectorNotice] = useState<string | null>(null);
+
+  const handleLoadUkeSectors = () => {
+    if (!activeSourceTower) {
+      setSectorNotice('Najpierw wybierz stację z mapy lub wykazu UKE.');
+      return;
+    }
+    const angles = ukeAzimuths.length > 0 ? ukeAzimuths : (activeSourceTower.azimuths || []);
+    if (!angles.length) {
+      setSectorNotice('To pozwolenie UKE nie zawiera zdefiniowanych kątów azymutów w wykazie.');
+      return;
+    }
+    const ukeSectors: SectorConfig[] = angles.slice(0, MAX_AZIMUTHS).map((az, i) => ({
+      id: sectors[i]?.id || newId(),
+      azimuth: String(az),
+      freqs: sectors[i]?.freqs?.length ? sectors[i].freqs : [...ukeUniqueFreqs],
+    }));
+    applySectorsAndSyncCells(ukeSectors);
+    setSectorNotice(`Wczytano ${ukeSectors.length} ${plural(ukeSectors.length, 'sektor', 'sektory', 'sektorów')} z wykazu UKE (${angles.join('°, ')}°).`);
+  };
+
+  const handleLoadSi2pemSectors = async () => {
+    if (!activeSourceTower) {
+      setSectorNotice('Najpierw wybierz stację z mapy lub wykazu UKE, aby pobrać dane SI2PEM.');
+      return;
+    }
+    setLoadingSi2pemManual(true);
+    setSectorNotice('Pobieranie sprawozdania pomiarowego z bazy SI2PEM…');
+    try {
+      const res = await loadPemReports(activeSourceTower, operator);
+      const pdfEntry = res?.reports?.find(r => r.kind === 'pdf');
+      if (!pdfEntry) {
+        setLoadingSi2pemManual(false);
+        setSectorNotice('Brak sprawozdania pomiarowego PDF w rejestrze SI2PEM dla tej stacji.');
+        return;
+      }
+      const parsed = await loadPemPdf(activeSourceTower, operator, pdfEntry);
+      const ants = parsed?.antennas || [];
+      setPemAntennas(ants);
+      const pemSec = sectorsFromPemAntennas(ants, ukeUniqueFreqs);
+      if (pemSec.length > 0) {
+        applySectorsAndSyncCells(pemSec);
+        setPemStatus('loaded');
+        setSectorNotice(`Wczytano ${pemSec.length} ${plural(pemSec.length, 'sektor', 'sektory', 'sektorów')} z oficjalnego raportu SI2PEM (${pemSec.map(s => s.azimuth).join('°, ')}°).`);
+      } else {
+        setSectorNotice('W sprawozdaniu SI2PEM nie odnaleziono azymutów anten.');
+      }
+    } catch (e) {
+      setSectorNotice(`Błąd pobierania SI2PEM: ${(e as Error).message}`);
+    } finally {
+      setLoadingSi2pemManual(false);
+    }
+  };
+
   // Photos
   const handlePhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/') && f.size <= 20 * 1024 * 1024);
@@ -1395,18 +1450,26 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                       </button>
                       {openMenu === 'az' && (
                         <div className="ss-menu" onClick={e => e.stopPropagation()}>
-                          {pemAntennas.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const pemSec = sectorsFromPemAntennas(pemAntennas, ukeUniqueFreqs);
-                                if (pemSec.length) applySectorsAndSyncCells(pemSec);
-                                setOpenMenu(null);
-                              }}
-                            >
-                              Wczytaj sektory i pasma z raportu SI2PEM
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            disabled={!activeSourceTower}
+                            onClick={() => {
+                              handleLoadUkeSectors();
+                              setOpenMenu(null);
+                            }}
+                          >
+                            Pobierz azymuty z wykazu UKE {ukeAzimuths.length > 0 ? `(${ukeAzimuths.length})` : ''}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!activeSourceTower || loadingSi2pemManual}
+                            onClick={() => {
+                              void handleLoadSi2pemSectors();
+                              setOpenMenu(null);
+                            }}
+                          >
+                            Pobierz azymuty z raportu SI2PEM
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
@@ -1445,6 +1508,42 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                 </div>
                 {azimuthsOpen && (
                   <div className="ss-card-body">
+                    <div className="ss-sector-import-bar">
+                      <button
+                        type="button"
+                        className="ss-btn-import ss-btn-import-uke"
+                        onClick={handleLoadUkeSectors}
+                        disabled={!activeSourceTower}
+                        title="Wczytaj azymuty i sektory z pozwolenia radiowego UKE"
+                      >
+                        <RadioTower size={14} />
+                        <span>Pobierz z UKE</span>
+                        {ukeAzimuths.length > 0 && <small>({ukeAzimuths.length})</small>}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="ss-btn-import ss-btn-import-si2pem"
+                        onClick={handleLoadSi2pemSectors}
+                        disabled={!activeSourceTower || loadingSi2pemManual}
+                        title="Pobierz oficjalny raport pomiarowy SI2PEM i odczytaj azymuty anten"
+                      >
+                        {loadingSi2pemManual ? <RefreshCw size={14} className="ss-spin" /> : <FilePen size={14} />}
+                        <span>{loadingSi2pemManual ? 'Pobieranie SI2PEM…' : 'Pobierz z SI2PEM'}</span>
+                        {pemAntennas.length > 0 && <small>({pemAntennas.length} anten)</small>}
+                      </button>
+                    </div>
+
+                    {sectorNotice && (
+                      <div className="ss-sector-notice" role="status">
+                        <Info size={14} className="ss-sector-notice-icon" />
+                        <span>{sectorNotice}</span>
+                        <button type="button" onClick={() => setSectorNotice(null)} aria-label="Zamknij powiadomienie">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    )}
+
                     <div className="ss-note-box">
                       {pemStatus === 'loading' ? (
                         <span className="ss-inline">
