@@ -88,7 +88,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     const btmapTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='BTMAP'");
     const ukeTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='UKE'");
     const totalTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED'");
-    const data={status:'ok',version:'2.0.0',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces},metadata};
+    const data={status:'ok',version:'2.0.1',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces},metadata};
     cachedStats={at:Date.now(),data}; res.json(data);
   });
   app.get('/api/stats', (req, res) => {
