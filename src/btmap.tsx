@@ -29,3 +29,4 @@ import './station-submission.css';
 import './terrain-profile.css';
 import './area-evaluation.css';
 import './azimuths.css';
+import './stats.css';

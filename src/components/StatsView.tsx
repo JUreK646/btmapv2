@@ -1,0 +1,768 @@
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import {
+  Radio,
+  Layers,
+  Activity,
+  Server,
+  ArrowDownToLine,
+  RefreshCw,
+  Signal,
+  Cpu,
+  BarChart3,
+  PieChart as PieChartIcon,
+  MapPin,
+  Info
+} from 'lucide-react';
+import type { TelecomStats, StatsBandItem, StatsProvinceItem, StatsOperatorItem } from '../types';
+import { api, formatNumber } from '../lib/api';
+
+export const STATS_OPERATOR_COLORS: Record<string, string> = {
+  'Plus': '#10b981',      // Emerald / Green
+  'Play': '#8b5cf6',      // Violet / Purple
+  'Orange': '#f97316',    // Vibrant Orange
+  'T-Mobile': '#ec4899',  // Magenta / Pink
+  'PKP PLK': '#0284c7',   // Sky Blue
+  'PGE Systemy': '#3b82f6', // Royal Blue
+  'Nordisk': '#06b6d4',   // Cyan
+  'TOPR': '#ef4444',      // Red
+  'Inne': '#64748b',      // Slate Gray
+};
+
+export const TECH_COLORS: Record<string, string> = {
+  '5G': '#06b6d4',   // Cyan / Sky
+  'LTE': '#f59e0b',  // Amber / Warm Orange
+  'UMTS': '#10b981', // Emerald Green
+  'GSM': '#ec4899',  // Vibrant Rose
+  'IOT': '#8b5cf6',  // Purple
+  'GSM-R': '#3b82f6',// Deep Blue
+  'CDMA': '#64748b', // Slate Gray
+};
+
+export function getStatsOperatorColor(name: string): string {
+  if (STATS_OPERATOR_COLORS[name]) return STATS_OPERATOR_COLORS[name];
+  const lower = name.toLowerCase();
+  if (lower.includes('play') || lower.includes('p4')) return STATS_OPERATOR_COLORS['Play'];
+  if (lower.includes('plus') || lower.includes('polkomtel') || lower.includes('aero')) return STATS_OPERATOR_COLORS['Plus'];
+  if (lower.includes('orange')) return STATS_OPERATOR_COLORS['Orange'];
+  if (lower.includes('t-mobile') || lower.includes('tmobile')) return STATS_OPERATOR_COLORS['T-Mobile'];
+  if (lower.includes('pkp')) return STATS_OPERATOR_COLORS['PKP PLK'];
+  if (lower.includes('pge')) return STATS_OPERATOR_COLORS['PGE Systemy'];
+  if (lower.includes('nordisk')) return STATS_OPERATOR_COLORS['Nordisk'];
+  return STATS_OPERATOR_COLORS['Inne'];
+}
+
+export function getTechColor(tech: string): string {
+  return TECH_COLORS[tech] || '#94a3b8';
+}
+
+// Tooltip state type
+interface TooltipState {
+  visible: boolean;
+  x: number;
+  y: number;
+  title: string;
+  subtitle?: string;
+  total?: number;
+  items?: { name: string; count: number; percent?: number; color: string }[];
+}
+
+export function StatsView({ onRetry }: { health?: unknown; error?: string; onRetry?: () => void }) {
+  const [source, setSource] = useState<'ALL' | 'UKE' | 'BTMAP'>('UKE');
+  const [stats, setStats] = useState<TelecomStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Hover states for Donut charts
+  const [hoveredTech, setHoveredTech] = useState<string | null>(null);
+  const [hoveredOperator, setHoveredOperator] = useState<string | null>(null);
+
+  // Floating tooltip for stacked bars
+  const [tooltip, setTooltip] = useState<TooltipState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    title: '',
+  });
+
+  const loadStats = (src: 'ALL' | 'UKE' | 'BTMAP') => {
+    setLoading(true);
+    setError(null);
+    api<TelecomStats>(`/stats?source=${src}`)
+      .then(data => {
+        setStats(data);
+      })
+      .catch(err => {
+        setError(err.message || 'Nie udało się wczytać statystyk.');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    loadStats(source);
+  }, [source]);
+
+  // Donut data calculations
+  const techDonutSlices = useMemo(() => {
+    if (!stats || !stats.technologies.length) return [];
+    const total = stats.technologies.reduce((acc, t) => acc + t.towers, 0);
+    if (total === 0) return [];
+    let cumulative = 0;
+    return stats.technologies.map(t => {
+      const percent = (t.towers / total) * 100;
+      const start = cumulative;
+      cumulative += percent;
+      return {
+        tech: t.tech,
+        towers: t.towers,
+        permits: t.permits,
+        percent,
+        startPercent: start,
+        color: getTechColor(t.tech),
+      };
+    });
+  }, [stats]);
+
+  const operatorDonutSlices = useMemo(() => {
+    if (!stats || !stats.operators.length) return [];
+    const total = stats.operators.reduce((acc, o) => acc + o.towers, 0);
+    if (total === 0) return [];
+    let cumulative = 0;
+    return stats.operators.map(o => {
+      const percent = (o.towers / total) * 100;
+      const start = cumulative;
+      cumulative += percent;
+      return {
+        name: o.name,
+        towers: o.towers,
+        permits: o.permits,
+        percent,
+        startPercent: start,
+        color: getStatsOperatorColor(o.name),
+      };
+    });
+  }, [stats]);
+
+  // Export full stats to JSON
+  const handleExportJson = () => {
+    if (!stats) return;
+    const blob = new Blob([JSON.stringify(stats, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `btmap-statystyki-${source.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Stacked bar max values
+  const maxBandTotal = useMemo(() => {
+    if (!stats || !stats.bands.length) return 1;
+    return Math.max(...stats.bands.map(b => b.total), 1);
+  }, [stats]);
+
+  const maxProvTotal = useMemo(() => {
+    if (!stats || !stats.provinces.length) return 1;
+    return Math.max(...stats.provinces.map(p => p.total), 1);
+  }, [stats]);
+
+  // All distinct operators present across dataset for legends
+  const allActiveOperators = useMemo(() => {
+    if (!stats) return [];
+    const set = new Set<string>();
+    stats.operators.forEach(o => set.add(o.name));
+    return Array.from(set).map(name => ({
+      name,
+      color: getStatsOperatorColor(name),
+    }));
+  }, [stats]);
+
+  if (error) {
+    return (
+      <section className="content-view empty-state stats-error-state">
+        <Activity size={48} className="muted-icon" />
+        <h2>Statystyki są chwilowo niedostępne</h2>
+        <p>{error}</p>
+        <button className="primary-button" onClick={() => loadStats(source)}>
+          <RefreshCw size={16} /> Spróbuj ponownie
+        </button>
+      </section>
+    );
+  }
+
+  const summary = stats?.summary;
+
+  return (
+    <section className="content-view stats-dashboard-view">
+      {/* Header and Source Switcher */}
+      <div className="stats-header-container">
+        <div>
+          <div className="stats-header-title-row">
+            <h1>Statystyki telekomunikacyjne</h1>
+            <span className="stats-live-pill">
+              <span className="pulse-dot" />
+              Na żywo
+            </span>
+          </div>
+          <p className="stats-header-desc">
+            Statystyki pozwoleń UKE, kompletności bazy BTMap, wkładu społeczności i nasycenia pasmami w podziale na operatorów oraz województwa.
+          </p>
+        </div>
+
+        <div className="stats-header-actions">
+          {/* Segmented Source Switcher */}
+          <div className="segmented-source-tabs" role="tablist" aria-label="Wybór źródła danych statystyk">
+            <button
+              role="tab"
+              aria-selected={source === 'UKE'}
+              className={`segmented-tab ${source === 'UKE' ? 'active' : ''}`}
+              onClick={() => setSource('UKE')}
+            >
+              <Radio size={14} />
+              <span>Wykaz pozwoleń UKE</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={source === 'BTMAP'}
+              className={`segmented-tab ${source === 'BTMAP' ? 'active' : ''}`}
+              onClick={() => setSource('BTMAP')}
+            >
+              <Server size={14} />
+              <span>Baza danych BTMap</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={source === 'ALL'}
+              className={`segmented-tab ${source === 'ALL' ? 'active' : ''}`}
+              onClick={() => setSource('ALL')}
+            >
+              <Layers size={14} />
+              <span>Wszystkie</span>
+            </button>
+          </div>
+
+          <div className="stats-action-buttons">
+            <button
+              className="secondary-button"
+              onClick={handleExportJson}
+              disabled={loading || !stats}
+              title="Eksportuj pełne zestawienie w formacie JSON"
+            >
+              <ArrowDownToLine size={15} />
+              <span>Eksport JSON</span>
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => loadStats(source)}
+              disabled={loading}
+              title="Odśwież dane"
+              aria-label="Odśwież dane"
+            >
+              <RefreshCw size={15} className={loading ? 'spin' : ''} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {loading && !stats ? (
+        <div className="stats-loading-grid">
+          <div className="stats-card-skeleton" style={{ height: '110px' }} />
+          <div className="stats-card-skeleton" style={{ height: '320px' }} />
+          <div className="stats-card-skeleton" style={{ height: '340px' }} />
+        </div>
+      ) : stats ? (
+        <>
+          {source === 'BTMAP' && summary?.totalTowers === 0 && (
+            <div className="info-note" style={{ marginBottom: '16px', background: 'var(--surface-alt)', border: '1px solid var(--line)' }}>
+              <Info size={20} style={{ color: 'var(--accent-text)', flexShrink: 0 }} />
+              <div>
+                <strong>Baza danych BTMap jest obecnie pusta</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Wewnętrzna baza BTMap gromadzi zweryfikowane przez moderatorów stacje społeczności. Obecnie wszystkie maszty i pozwolenia radiowe znajdują się w urzędowym wykazie pozwoleń UKE.
+                </p>
+                <button
+                  className="secondary-button"
+                  style={{ marginTop: '10px', padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => setSource('UKE')}
+                >
+                  <Radio size={14} /> Przełącz na Wykaz pozwoleń UKE
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Top KPI Cards Grid */}
+          <div className="stats-kpi-grid">
+            <div className="kpi-card highlight-card">
+              <span className="kpi-label">
+                {source === 'BTMAP' ? 'Komórki / Sektory' : 'Pozwolenia ogółem'}
+              </span>
+              <strong className="kpi-value">
+                {formatNumber(source === 'BTMAP' ? (summary?.totalCells || 0) : (summary?.totalPermits || 0))}
+              </strong>
+              <span className="kpi-subtext">
+                {source === 'BTMAP' ? 'Zarejestrowane sektory w bazie' : 'Wszystkie zarejestrowane pasma i pozwolenia'}
+              </span>
+            </div>
+
+            <div className="kpi-card">
+              <span className="kpi-label">Unikalne stacje</span>
+              <strong className="kpi-value">{formatNumber(summary?.totalTowers || 0)}</strong>
+              <span className="kpi-subtext">Fizyczne lokalizacje masztów i obiektów</span>
+            </div>
+
+            {stats.technologies.slice(0, 6).map(tech => (
+              <div className="kpi-card tech-card" key={tech.tech}>
+                <div className="kpi-tech-header">
+                  <span className="kpi-label" style={{ color: getTechColor(tech.tech) }}>
+                    {tech.tech}
+                  </span>
+                  <span className="kpi-badge">{tech.percent}% stacji</span>
+                </div>
+                <strong className="kpi-value">{formatNumber(tech.towers)}</strong>
+                <span className="kpi-subtext">
+                  {formatNumber(tech.permits)} {source === 'BTMAP' ? 'komórek' : 'pozwoleń'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Donut Charts Row */}
+          <div className="stats-charts-row">
+            {/* Donut 1: Rozkład wg technologii */}
+            <div className="stats-panel-card">
+              <div className="panel-card-header">
+                <div>
+                  <h2>Rozkład wg technologii</h2>
+                  <p className="muted">Udział poszczególnych technologii w unikalnych lokalizacjach</p>
+                </div>
+                <PieChartIcon size={18} className="muted-icon" />
+              </div>
+
+              {techDonutSlices.length > 0 ? (
+                <div className="donut-container">
+                  <div className="donut-chart-wrapper">
+                    <svg viewBox="0 0 200 200" className="donut-svg">
+                      <circle cx="100" cy="100" r="70" fill="transparent" stroke="var(--border)" strokeWidth="22" opacity="0.2" />
+                      {techDonutSlices.map(slice => {
+                        const radius = 70;
+                        const circumference = 2 * Math.PI * radius;
+                        const strokeDasharray = `${(slice.percent / 100) * circumference} ${circumference}`;
+                        const strokeDashoffset = -((slice.startPercent / 100) * circumference);
+                        const isHovered = hoveredTech === slice.tech;
+
+                        return (
+                          <circle
+                            key={slice.tech}
+                            cx="100"
+                            cy="100"
+                            r={radius}
+                            fill="transparent"
+                            stroke={slice.color}
+                            strokeWidth={isHovered ? 28 : 22}
+                            strokeDasharray={strokeDasharray}
+                            strokeDashoffset={strokeDashoffset}
+                            transform="rotate(-90 100 100)"
+                            className="donut-slice"
+                            style={{
+                              transition: 'stroke-width 0.2s ease, opacity 0.2s ease',
+                              opacity: hoveredTech && !isHovered ? 0.35 : 1,
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={() => setHoveredTech(slice.tech)}
+                            onMouseLeave={() => setHoveredTech(null)}
+                          />
+                        );
+                      })}
+                    </svg>
+                    {/* Center of Donut */}
+                    <div className="donut-center-info">
+                      {hoveredTech ? (
+                        (() => {
+                          const item = stats.technologies.find(t => t.tech === hoveredTech);
+                          return (
+                            <>
+                              <span className="donut-center-label" style={{ color: getTechColor(hoveredTech) }}>
+                                {hoveredTech}
+                              </span>
+                              <strong className="donut-center-val">{formatNumber(item?.towers || 0)}</strong>
+                              <span className="donut-center-sub">{item?.percent}% stacji</span>
+                            </>
+                          );
+                        })()
+                      ) : (
+                        <>
+                          <span className="donut-center-label">Stacje</span>
+                          <strong className="donut-center-val">{formatNumber(summary?.totalTowers || 0)}</strong>
+                          <span className="donut-center-sub">ogółem</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Donut Legend */}
+                  <div className="donut-legend-grid">
+                    {stats.technologies.map(t => (
+                      <button
+                        type="button"
+                        key={t.tech}
+                        className={`legend-item ${hoveredTech === t.tech ? 'hovered' : ''}`}
+                        onMouseEnter={() => setHoveredTech(t.tech)}
+                        onMouseLeave={() => setHoveredTech(null)}
+                      >
+                        <span className="legend-chip" style={{ background: getTechColor(t.tech) }} />
+                        <span className="legend-name">{t.tech}</span>
+                        <strong className="legend-count">{formatNumber(t.towers)}</strong>
+                        <span className="legend-pct">{t.percent}%</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="stats-empty-panel">
+                  <Radio size={32} className="muted-icon" />
+                  <p>Brak danych o technologiach w wybranym źródle.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Donut 2: Rozkład wg operatora */}
+            <div className="stats-panel-card">
+              <div className="panel-card-header">
+                <div>
+                  <h2>Rozkład wg operatora</h2>
+                  <p className="muted">Nasycenie stacjami bazowymi czołowych operatorów</p>
+                </div>
+                <Radio size={18} className="muted-icon" />
+              </div>
+
+              {operatorDonutSlices.length > 0 ? (
+                <div className="donut-container">
+                  <div className="donut-chart-wrapper">
+                    <svg viewBox="0 0 200 200" className="donut-svg">
+                      <circle cx="100" cy="100" r="70" fill="transparent" stroke="var(--border)" strokeWidth="22" opacity="0.2" />
+                      {operatorDonutSlices.map(slice => {
+                        const radius = 70;
+                        const circumference = 2 * Math.PI * radius;
+                        const strokeDasharray = `${(slice.percent / 100) * circumference} ${circumference}`;
+                        const strokeDashoffset = -((slice.startPercent / 100) * circumference);
+                        const isHovered = hoveredOperator === slice.name;
+
+                        return (
+                          <circle
+                            key={slice.name}
+                            cx="100"
+                            cy="100"
+                            r={radius}
+                            fill="transparent"
+                            stroke={slice.color}
+                            strokeWidth={isHovered ? 28 : 22}
+                            strokeDasharray={strokeDasharray}
+                            strokeDashoffset={strokeDashoffset}
+                            transform="rotate(-90 100 100)"
+                            className="donut-slice"
+                            style={{
+                              transition: 'stroke-width 0.2s ease, opacity 0.2s ease',
+                              opacity: hoveredOperator && !isHovered ? 0.35 : 1,
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={() => setHoveredOperator(slice.name)}
+                            onMouseLeave={() => setHoveredOperator(null)}
+                          />
+                        );
+                      })}
+                    </svg>
+                    {/* Center of Donut */}
+                    <div className="donut-center-info">
+                      {hoveredOperator ? (
+                        (() => {
+                          const item = stats.operators.find(o => o.name === hoveredOperator);
+                          return (
+                            <>
+                              <span className="donut-center-label" style={{ color: getStatsOperatorColor(hoveredOperator) }}>
+                                {hoveredOperator}
+                              </span>
+                              <strong className="donut-center-val">{formatNumber(item?.towers || 0)}</strong>
+                              <span className="donut-center-sub">{item?.percent}% stacji</span>
+                            </>
+                          );
+                        })()
+                      ) : (
+                        <>
+                          <span className="donut-center-label">Operatorzy</span>
+                          <strong className="donut-center-val">{stats.operators.length}</strong>
+                          <span className="donut-center-sub">aktywnych sieci</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Donut Legend */}
+                  <div className="donut-legend-grid">
+                    {stats.operators.slice(0, 8).map(op => (
+                      <button
+                        type="button"
+                        key={op.name}
+                        className={`legend-item ${hoveredOperator === op.name ? 'hovered' : ''}`}
+                        onMouseEnter={() => setHoveredOperator(op.name)}
+                        onMouseLeave={() => setHoveredOperator(null)}
+                      >
+                        <span className="legend-chip" style={{ background: getStatsOperatorColor(op.name) }} />
+                        <span className="legend-name">{op.name}</span>
+                        <strong className="legend-count">{formatNumber(op.towers)}</strong>
+                        <span className="legend-pct">{op.percent}%</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="stats-empty-panel">
+                  <Radio size={32} className="muted-icon" />
+                  <p>Brak danych o operatorach w wybranym źródle.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Chart Row 2: Stacje wg pasma (Stacked Bar Chart) */}
+          <div className="stats-panel-card stacked-chart-panel">
+            <div className="panel-card-header bar-chart-header">
+              <div>
+                <h2>Unikalne stacje wg pasma</h2>
+                <p className="muted">Częstotliwości radiowe oraz nasycenie pasmami w podziale na operatorów</p>
+              </div>
+
+              {/* Operators Color Chips Legend */}
+              <div className="chart-top-legend">
+                {allActiveOperators.slice(0, 7).map(op => (
+                  <span className="chart-legend-badge" key={op.name}>
+                    <i className="legend-badge-dot" style={{ background: op.color }} />
+                    {op.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {stats.bands.length > 0 ? (
+              <div className="bar-chart-scroll-box">
+                <div className="bar-chart-inner" style={{ minWidth: `${Math.max(stats.bands.length * 48, 680)}px` }}>
+                  {/* Y Axis Guide Lines */}
+                  <div className="y-axis-guides">
+                    {[1, 0.75, 0.5, 0.25, 0].map((fraction, i) => (
+                      <div className="y-guide-line" key={i} style={{ bottom: `${fraction * 200}px` }}>
+                        <span className="y-guide-label">{formatNumber(Math.round(maxBandTotal * fraction))}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Bars Container */}
+                  <div className="bars-container">
+                    {stats.bands.map(item => {
+                      const totalHeight = 200; // max chart height in px
+                      return (
+                        <div
+                          key={item.key}
+                          className="bar-column"
+                          onMouseEnter={e => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setTooltip({
+                              visible: true,
+                              x: rect.left + rect.width / 2,
+                              y: rect.top,
+                              title: `${item.tech} ${item.band} MHz`,
+                              subtitle: 'Unikalne stacje z tym pasmem',
+                              total: item.total,
+                              items: item.operators.map(o => ({
+                                name: o.operator,
+                                count: o.count,
+                                percent: item.total > 0 ? Number(((o.count / item.total) * 100).toFixed(1)) : 0,
+                                color: getStatsOperatorColor(o.operator),
+                              })),
+                            });
+                          }}
+                          onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
+                        >
+                          {/* The Stacked Bar Pillar */}
+                          <div className="bar-pillar" style={{ height: `${totalHeight}px` }}>
+                            <div className="bar-segments-stack">
+                              {item.operators.map(op => {
+                                const segmentHeight = maxBandTotal > 0 ? (op.count / maxBandTotal) * totalHeight : 0;
+                                return (
+                                  <div
+                                    key={op.operator}
+                                    className="bar-segment"
+                                    style={{
+                                      height: `${segmentHeight}px`,
+                                      background: getStatsOperatorColor(op.operator),
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Bar Label */}
+                          <div className="bar-axis-label">
+                            <span className="band-name-label">{item.tech} {item.band}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="stats-empty-panel">
+                <BarChart3 size={32} className="muted-icon" />
+                <p>Brak zarejestrowanych pasm w wybranym źródle.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Chart Row 3: Stacje wg województwa (Stacked Bar Chart) */}
+          <div className="stats-panel-card stacked-chart-panel">
+            <div className="panel-card-header bar-chart-header">
+              <div>
+                <h2>Unikalne stacje wg województwa</h2>
+                <p className="muted">Rozkład geograficzny infrastruktury radiowej w 16 województwach (posortowany malejąco)</p>
+              </div>
+
+              {/* Operators Color Chips Legend */}
+              <div className="chart-top-legend">
+                {allActiveOperators.slice(0, 7).map(op => (
+                  <span className="chart-legend-badge" key={op.name}>
+                    <i className="legend-badge-dot" style={{ background: op.color }} />
+                    {op.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {stats.provinces.length > 0 ? (
+              <div className="bar-chart-scroll-box">
+                <div className="bar-chart-inner" style={{ minWidth: '720px' }}>
+                  {/* Y Axis Guide Lines */}
+                  <div className="y-axis-guides">
+                    {[1, 0.75, 0.5, 0.25, 0].map((fraction, i) => (
+                      <div className="y-guide-line" key={i} style={{ bottom: `${fraction * 200}px` }}>
+                        <span className="y-guide-label">{formatNumber(Math.round(maxProvTotal * fraction))}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Bars Container */}
+                  <div className="bars-container">
+                    {stats.provinces.map(prov => {
+                      const totalHeight = 200;
+                      return (
+                        <div
+                          key={prov.province}
+                          className="bar-column province-bar-column"
+                          onMouseEnter={e => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setTooltip({
+                              visible: true,
+                              x: rect.left + rect.width / 2,
+                              y: rect.top,
+                              title: `Woj. ${prov.province}`,
+                              subtitle: 'Unikalne stacje bazowe',
+                              total: prov.total,
+                              items: prov.operators.map(o => ({
+                                name: o.operator,
+                                count: o.count,
+                                percent: prov.total > 0 ? Number(((o.count / prov.total) * 100).toFixed(1)) : 0,
+                                color: getStatsOperatorColor(o.operator),
+                              })),
+                            });
+                          }}
+                          onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
+                        >
+                          {/* The Stacked Bar Pillar */}
+                          <div className="bar-pillar" style={{ height: `${totalHeight}px` }}>
+                            <div className="bar-segments-stack">
+                              {prov.operators.map(op => {
+                                const segmentHeight = maxProvTotal > 0 ? (op.count / maxProvTotal) * totalHeight : 0;
+                                return (
+                                  <div
+                                    key={op.operator}
+                                    className="bar-segment"
+                                    style={{
+                                      height: `${segmentHeight}px`,
+                                      background: getStatsOperatorColor(op.operator),
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Bar Label */}
+                          <div className="bar-axis-label province-axis-label">
+                            <span className="prov-name-label">{prov.province}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="stats-empty-panel">
+                <MapPin size={32} className="muted-icon" />
+                <p>Brak danych o województwach w wybranym źródle.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Floating Tooltip Component */}
+          {tooltip.visible && (
+            <div
+              className="stats-floating-tooltip"
+              style={{
+                left: `${tooltip.x}px`,
+                top: `${tooltip.y - 12}px`,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <div className="tooltip-header">
+                <strong>{tooltip.title}</strong>
+                {tooltip.subtitle && <span className="tooltip-sub">{tooltip.subtitle}</span>}
+              </div>
+              {tooltip.total !== undefined && (
+                <div className="tooltip-total-row">
+                  <span>Razem:</span>
+                  <strong>{formatNumber(tooltip.total)} stacji</strong>
+                </div>
+              )}
+              {tooltip.items && tooltip.items.length > 0 && (
+                <div className="tooltip-items-list">
+                  {tooltip.items.map(it => (
+                    <div className="tooltip-item-row" key={it.name}>
+                      <span className="tooltip-item-name">
+                        <i className="tooltip-dot" style={{ background: it.color }} />
+                        {it.name}
+                      </span>
+                      <span className="tooltip-item-numbers">
+                        <strong>{formatNumber(it.count)}</strong>
+                        {it.percent !== undefined && <small>({it.percent}%)</small>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bottom Info Note */}
+          <div className="info-note" style={{ marginTop: '24px' }}>
+            <Info size={18} />
+            <p>
+              Dane statystyczne generowane są na bieżąco z bazy radiowej BTMap oraz urzędowego wykazu pozwoleń radiowych UKE. Wybór źródła na górze pozwala precyzyjnie porównywać rejestr pozwoleń z rzeczywistą bazą stacji.
+            </p>
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}

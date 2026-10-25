@@ -13,3 +13,45 @@ export interface Count { name:string; count:number; }
 export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
 export interface Submission { id:string; type:string; status:string; createdAt:string; userNick?:string; data?:any; }
 export interface Radioline { id:string; latA:number; lngA:number; latB:number; lngB:number; frequency:number; operator:string; }
+
+export interface StatsOperatorItem {
+  name: string;
+  towers: number;
+  permits: number;
+  percent: number;
+}
+
+export interface StatsTechItem {
+  tech: string;
+  towers: number;
+  permits: number;
+  percent: number;
+}
+
+export interface StatsBandItem {
+  key: string;
+  tech: string;
+  band: string;
+  total: number;
+  operators: { operator: string; count: number }[];
+}
+
+export interface StatsProvinceItem {
+  province: string;
+  total: number;
+  operators: { operator: string; count: number }[];
+}
+
+export interface TelecomStats {
+  source: 'ALL' | 'BTMAP' | 'UKE';
+  summary: {
+    totalTowers: number;
+    totalPermits: number;
+    totalCells: number;
+  };
+  technologies: StatsTechItem[];
+  operators: StatsOperatorItem[];
+  bands: StatsBandItem[];
+  provinces: StatsProvinceItem[];
+  updatedAt: string;
+}

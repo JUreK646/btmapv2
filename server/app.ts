@@ -14,6 +14,7 @@ import type {Tower} from '../src/types.ts';
 import {validateStationSubmission} from '../shared/cellValidation.ts';
 import {calculateTerrainProfile} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
+import {getTelecomStats, invalidateStatsCache} from './stats.ts';
 
 type User = { id: string; email: string; nick: string; role: string; points: number; level: number };
 const publicUser = (user: Record<string, unknown>) => ({ id:user.id, email:user.email, nick:user.nick, role:user.role, points:user.points, level:user.level });
@@ -89,6 +90,15 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     const totalTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED'");
     const data={status:'ok',version:'2.0.0',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces},metadata};
     cachedStats={at:Date.now(),data}; res.json(data);
+  });
+  app.get('/api/stats', (req, res) => {
+    try {
+      const source = typeof req.query.source === 'string' ? req.query.source : 'ALL';
+      const stats = getTelecomStats(db, source);
+      res.json(stats);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message || 'Błąd pobierania statystyk.' });
+    }
   });
   app.get('/api/towers',(req,res)=>{try{res.json(getTowers(db,req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
   app.get('/api/pem-plans',(req,res)=>{try{res.json(pemPlans.query(req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
@@ -285,7 +295,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
         );
         db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId,status) VALUES(?,?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id,'APPROVED');
         log(res.locals.user.nick,'NOWA_STACJA_AUTO_APPROVE',id);
-        cachedStats=null;
+        cachedStats=null; invalidateStatsCache();
         return res.status(201).json({id,status:'APPROVED',towerId:newId});
       }
       db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId) VALUES(?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id);
@@ -327,7 +337,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
         }
       }
       db.prepare('UPDATE queue SET status=? WHERE id=?').run(req.body.action==='APPROVE'?'APPROVED':'REJECTED',item.id);
-      log(res.locals.user.nick,req.body.action,String(item.id));db.exec('COMMIT');cachedStats=null;res.json({ok:true});
+      log(res.locals.user.nick,req.body.action,String(item.id));db.exec('COMMIT');cachedStats=null;invalidateStatsCache();res.json({ok:true});
     } catch(e){db.exec('ROLLBACK');res.status(400).json({error:(e as Error).message});}
   });
   app.use('/api',(_req,res)=>res.status(404).json({error:'Nie znaleziono tej funkcji API.'}));
