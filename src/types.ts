@@ -7,7 +7,7 @@ export interface Tower { id:string; stationId?:string; address:string; province:
 export interface Filters { operators:string[]; techs:string[]; bands:string[]; province:string; source?:'ALL'|'BTMAP'|'UKE'; }
 export interface TowerResult { items:Tower[]; total:number; limit:number; hasMore:boolean; }
 export interface Bounds { minLat:number; maxLat:number; minLng:number; maxLng:number; zoom:number; }
-export interface User { id:string; email:string; nick:string; role:string; points:number; level:number; }
+export interface User { id:string; email:string; nick:string; role:string; points:number; level:number; avatar?:string|null; googleId?:string|null; }
 export interface Comment { id:string; userNick:string; text:string; createdAt:string; }
 export interface Count { name:string; count:number; }
 export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
