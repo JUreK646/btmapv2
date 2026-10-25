@@ -106,7 +106,7 @@ export default function App(){
       Math.sin(terrainTower.lat * (Math.PI / 180)) * Math.cos(terrainTarget[0] * (Math.PI / 180)) * Math.cos(dLng);
     return Math.round((Math.atan2(y, x) * (180 / Math.PI) + 360) % 360);
   }, [terrainTower, terrainTarget]);
-  const {user,authenticate,loginWithGoogle,logout}=useAuth();
+  const {user,authenticate,logout}=useAuth();
   const {result,loading,error}=useTowers(filters,bounds,query,view==='database'?'database':'map',page,refresh);
   const pem=usePemPlans(showPem&&view==='map',bounds,filters.operators,refresh);
   const pemCount=pem.data?.items.length??0;
@@ -205,14 +205,6 @@ export default function App(){
     }
     return u;
   };
-  const handleGoogleAuth=async(payload:{credential?:string;devUser?:{email:string;name?:string;picture?:string}})=>{
-    const u=await loginWithGoogle(payload);
-    if(editTower){
-      setCreateStationTower(editTower);
-      setEditTower(null);
-    }
-    return u;
-  };
   const fullscreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await mapFrame.current?.requestFullscreen();}catch{setNotice('Pełny ekran nie jest dostępny w tej przeglądarce.');}};
   const basemapError=useCallback((message:string)=>{setBasemap('osm');setNotice(message);},[]);
   const filterTotal=filterCount(filters)+(showPem&&view==='map'?1:0)+(showAzimuths&&view==='map'?1:0);
@@ -228,7 +220,7 @@ export default function App(){
     <aside className="app-sidebar" aria-label="Menu aplikacji">
       <button className="sidebar-brand" onClick={()=>changeView('map')} aria-label="BTMap — przejdź do mapy"><span className="sidebar-brand-symbol"><Radio size={25}/></span><span className="sidebar-wordmark">btmap<span>.</span></span><span className="sidebar-version">v2</span></button>
       <nav className="side-nav" aria-label="Nawigacja główna">{navItems.map(item=><button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
-      <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title="O bazie stacji" onClick={()=>changeView('guides')}><Info size={18}/><span>O bazie stacji</span></button><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?'Twoje konto':'Zaloguj się'}><span className="sidebar-avatar">{user?(user.avatar?<img src={user.avatar} alt={user.nick} className="avatar-img"/>:user.nick.slice(0,1).toUpperCase()):<UserRound size={19}/>}</span><span><strong>{user?user.nick:'Zaloguj się'}</strong><small>{user?'Twoje konto':'Konto i zgłoszenia'}</small></span><ArrowUpRight size={16}/></button></div></div>
+      <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title="O bazie stacji" onClick={()=>changeView('guides')}><Info size={18}/><span>O bazie stacji</span></button><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?'Twoje konto':'Zaloguj się'}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:'Zaloguj się'}</strong><small>{user?'Twoje konto':'Konto i zgłoszenia'}</small></span><ArrowUpRight size={16}/></button></div></div>
     </aside>
     <section className="app-main">
       <header className="workspace-header"><div className="workspace-heading"><button className="icon-button desktop-nav-toggle" aria-label={navCollapsed?'Rozwiń nawigację':'Zwiń nawigację'} onClick={()=>setNavCollapsed(!navCollapsed)}>{navCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button className="icon-button mobile-nav-toggle" aria-label="Otwórz nawigację" onClick={()=>setMobileNav(!mobileNav)}><Menu size={21}/></button><span className="breadcrumb-parent">{view==='changelog'?'BTMap':'Stacje bazowe'}</span><ChevronRight className="breadcrumb-chevron" size={14}/><h1>{viewNames[view]}</h1></div><div className="workspace-actions"><span className="connection-status"><span className={`connection-dot ${healthError?'offline':''}`}/>{healthError?'Brak połączenia':health?view==='database'?`${formatNumber(health.stats.btmapTowers??0)} stacji w bazie BTMap`:`${formatNumber(health.stats.towers)} lokalizacji (BTMap + UKE)`:'Łączenie…'}</span><button className="icon-button theme-toggle" onClick={()=>setTheme(theme==='dark'?'light':'dark')} aria-label={theme==='dark'?'Włącz jasny motyw':'Włącz ciemny motyw'}>{theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button></div></header>
@@ -373,7 +365,7 @@ export default function App(){
       </main>
     </section>
     {notice&&<div className="toast" role="status"><Info size={19}/><span>{notice}</span><button className="icon-button" aria-label="Zamknij komunikat" onClick={()=>setNotice('')}><X size={17}/></button></div>}
-    {dialog==='auth'&&<AuthDialog onClose={()=>setDialog(null)} authenticate={handleAuth} onGoogleAuth={handleGoogleAuth}/>}
+    {dialog==='auth'&&<AuthDialog onClose={()=>setDialog(null)} authenticate={handleAuth}/>}
     {dialog==='profile'&&user&&<ProfileDialog user={user} onClose={()=>setDialog(null)} onLogout={async()=>{await logout();setDialog(null);if(view==='admin')setView('map');}} onAdmin={()=>{setDialog(null);changeView('admin');}}/>}
     {dialog==='submit'&&user&&editTower&&<SubmitDialog tower={editTower} onClose={()=>setDialog(null)} onSuccess={()=>setRefresh(r=>r+1)}/>}
     {createStationTower!==null&&<StationSubmissionDialog sourceTower={createStationTower==='blank'?null:createStationTower} onClose={()=>setCreateStationTower(null)} onSuccess={()=>{setCreateStationTower(null);setRefresh(r=>r+1);setNotice('Zgłoszenie nowej stacji zostało pomyślnie wysłane do moderacji.');}}/>}
