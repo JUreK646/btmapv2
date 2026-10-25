@@ -51,6 +51,20 @@
   letter-spacing: 0.05em;
 }
 
+.stats-verified-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  letter-spacing: 0.02em;
+}
+
 .pulse-dot {
   width: 6px;
   height: 6px;
@@ -419,15 +433,20 @@
 .bar-chart-scroll-box {
   width: 100%;
   overflow-x: auto;
-  padding: 24px 0 16px;
+  padding: 24px 0 12px;
   position: relative;
 }
 
-.bar-chart-inner {
+.chart-frame {
   position: relative;
-  height: 270px;
   display: flex;
   flex-direction: column;
+}
+
+.chart-plot-area {
+  position: relative;
+  width: 100%;
+  border-bottom: 2px solid var(--line);
 }
 
 .y-axis-guides {
@@ -435,13 +454,13 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 200px;
+  bottom: 0;
   pointer-events: none;
 }
 
 .y-guide-line {
   position: absolute;
-  left: 45px;
+  left: 54px;
   right: 0;
   height: 1px;
   border-bottom: 1px dashed var(--line);
@@ -449,73 +468,83 @@
 
 .y-guide-label {
   position: absolute;
-  left: -45px;
+  left: -54px;
   top: -8px;
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--faint);
   font-weight: 600;
-  width: 40px;
+  width: 46px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.bars-container {
+.bars-track {
   display: flex;
   align-items: flex-end;
-  height: 200px;
-  margin-left: 48px;
+  height: 100%;
+  margin-left: 54px;
   gap: 12px;
   position: relative;
   z-index: 1;
 }
 
-.bar-column {
+.bar-slot {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
+  height: 100%;
   cursor: pointer;
+  min-width: 34px;
   position: relative;
-  min-width: 32px;
-  transition: transform 0.15s ease;
-}
-
-.bar-column:hover {
-  transform: translateY(-3px);
 }
 
 .bar-pillar {
   width: 100%;
   max-width: 38px;
   display: flex;
-  align-items: flex-end;
-  position: relative;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
+
+.bar-slot:hover .bar-pillar {
+  transform: scaleY(1.02);
+  transform-origin: bottom;
+  filter: brightness(1.15);
 }
 
 .bar-segments-stack {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column-reverse;
-  border-radius: 6px 6px 0 0;
+  border-radius: 5px 5px 0 0;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  background: rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .bar-segment {
   width: 100%;
-  min-height: 1px;
   transition: opacity 0.15s ease;
 }
 
-.bar-column:hover .bar-segment {
-  filter: brightness(1.15);
+/* X-Axis labels completely detached and placed below the plot area */
+.chart-x-axis {
+  display: flex;
+  margin-left: 54px;
+  gap: 12px;
+  height: 38px;
+  padding-top: 10px;
 }
 
-.bar-axis-label {
-  margin-top: 10px;
+.x-axis-slot {
+  flex: 1;
+  min-width: 34px;
+  display: flex;
+  justify-content: center;
   text-align: center;
-  width: 100%;
 }
 
 .band-name-label {
@@ -523,37 +552,48 @@
   font-weight: 700;
   color: var(--muted);
   white-space: nowrap;
-  display: block;
 }
 
-.bar-column:hover .band-name-label {
+.bar-slot:hover ~ .chart-x-axis .band-name-label {
   color: var(--text);
-  font-weight: 800;
 }
 
-.province-bar-column {
+/* Province specific angled labels */
+.province-x-axis {
+  height: 80px;
+  padding-top: 12px;
+}
+
+.province-x-slot {
   min-width: 44px;
-}
-
-.province-axis-label {
-  margin-top: 12px;
-  transform: rotate(-35deg);
-  transform-origin: top left;
-  white-space: nowrap;
-  text-align: left;
-  padding-left: 6px;
+  justify-content: flex-start;
+  padding-left: 4px;
 }
 
 .prov-name-label {
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
+  transform: rotate(-40deg);
+  transform-origin: top left;
+  white-space: nowrap;
   display: inline-block;
 }
 
-.bar-column:hover .prov-name-label {
-  color: var(--text);
-  font-weight: 800;
+/* Verification box */
+.stats-data-verification-box {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.stats-verify-icon {
+  color: #10b981;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 /* Floating Tooltip */

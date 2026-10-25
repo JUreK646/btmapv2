@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Radio,
   Layers,
@@ -6,26 +6,38 @@ import {
   Server,
   ArrowDownToLine,
   RefreshCw,
-  Signal,
-  Cpu,
-  BarChart3,
   PieChart as PieChartIcon,
+  BarChart3,
   MapPin,
-  Info
+  Info,
+  CheckCircle2,
+  ShieldCheck
 } from 'lucide-react';
-import type { TelecomStats, StatsBandItem, StatsProvinceItem, StatsOperatorItem } from '../types';
+import type { TelecomStats, StatsBandItem, StatsProvinceItem } from '../types';
 import { api, formatNumber } from '../lib/api';
 
 export const STATS_OPERATOR_COLORS: Record<string, string> = {
-  'Plus': '#10b981',      // Emerald / Green
-  'Play': '#8b5cf6',      // Violet / Purple
-  'Orange': '#f97316',    // Vibrant Orange
-  'T-Mobile': '#ec4899',  // Magenta / Pink
-  'PKP PLK': '#0284c7',   // Sky Blue
-  'PGE Systemy': '#3b82f6', // Royal Blue
-  'Nordisk': '#06b6d4',   // Cyan
-  'TOPR': '#ef4444',      // Red
-  'Inne': '#64748b',      // Slate Gray
+  'Plus': '#10b981',        // Emerald Green
+  'Play': '#8b5cf6',        // Violet / Purple
+  'Orange': '#f97316',      // Vibrant Orange
+  'T-Mobile': '#ec4899',    // Magenta / Pink
+  'PKP PLK': '#0284c7',     // Sky Blue
+  'PGE Systemy': '#3b82f6',   // Royal Blue
+  'Nordisk': '#06b6d4',     // Cyan
+  'TOPR': '#ef4444',        // Red
+  'Inne': '#64748b',        // Slate Gray
+};
+
+export const OPERATOR_STACK_ORDER: Record<string, number> = {
+  'Plus': 1,
+  'Play': 2,
+  'Orange': 3,
+  'T-Mobile': 4,
+  'PKP PLK': 5,
+  'PGE Systemy': 6,
+  'Nordisk': 7,
+  'TOPR': 8,
+  'Inne': 9,
 };
 
 export const TECH_COLORS: Record<string, string> = {
@@ -55,7 +67,29 @@ export function getTechColor(tech: string): string {
   return TECH_COLORS[tech] || '#94a3b8';
 }
 
-// Tooltip state type
+/**
+ * Computes nice round tick values for Y-axis scaling (e.g. 0, 2000, 4000, 6000, 8000)
+ */
+export function getNiceScale(maxVal: number): { max: number; ticks: number[] } {
+  if (maxVal <= 0) return { max: 100, ticks: [100, 75, 50, 25, 0] };
+  const targetTicks = 4;
+  const rawStep = maxVal / targetTicks;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+  let step: number;
+  if (residual <= 1.2) step = 1 * magnitude;
+  else if (residual <= 2.5) step = 2 * magnitude;
+  else if (residual <= 7.5) step = 5 * magnitude;
+  else step = 10 * magnitude;
+  step = Math.max(1, Math.round(step));
+  const max = Math.ceil(maxVal / step) * step;
+  const ticks: number[] = [];
+  for (let val = max; val >= 0; val -= step) {
+    ticks.push(val);
+  }
+  return { max, ticks };
+}
+
 interface TooltipState {
   visible: boolean;
   x: number;
@@ -144,6 +178,32 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
     });
   }, [stats]);
 
+  // Nice round scales for stacked bar charts
+  const provScale = useMemo(() => {
+    if (!stats || !stats.provinces.length) return { max: 1000, ticks: [1000, 750, 500, 250, 0] };
+    const maxVal = Math.max(...stats.provinces.map(p => p.total), 1);
+    return getNiceScale(maxVal);
+  }, [stats]);
+
+  const bandScale = useMemo(() => {
+    if (!stats || !stats.bands.length) return { max: 1000, ticks: [1000, 750, 500, 250, 0] };
+    const maxVal = Math.max(...stats.bands.map(b => b.total), 1);
+    return getNiceScale(maxVal);
+  }, [stats]);
+
+  // All distinct operators present across dataset for legends
+  const allActiveOperators = useMemo(() => {
+    if (!stats) return [];
+    const set = new Set<string>();
+    stats.operators.forEach(o => set.add(o.name));
+    return Array.from(set)
+      .sort((a, b) => (OPERATOR_STACK_ORDER[a] || 99) - (OPERATOR_STACK_ORDER[b] || 99))
+      .map(name => ({
+        name,
+        color: getStatsOperatorColor(name),
+      }));
+  }, [stats]);
+
   // Export full stats to JSON
   const handleExportJson = () => {
     if (!stats) return;
@@ -155,28 +215,6 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
     a.click();
     URL.revokeObjectURL(url);
   };
-
-  // Stacked bar max values
-  const maxBandTotal = useMemo(() => {
-    if (!stats || !stats.bands.length) return 1;
-    return Math.max(...stats.bands.map(b => b.total), 1);
-  }, [stats]);
-
-  const maxProvTotal = useMemo(() => {
-    if (!stats || !stats.provinces.length) return 1;
-    return Math.max(...stats.provinces.map(p => p.total), 1);
-  }, [stats]);
-
-  // All distinct operators present across dataset for legends
-  const allActiveOperators = useMemo(() => {
-    if (!stats) return [];
-    const set = new Set<string>();
-    stats.operators.forEach(o => set.add(o.name));
-    return Array.from(set).map(name => ({
-      name,
-      color: getStatsOperatorColor(name),
-    }));
-  }, [stats]);
 
   if (error) {
     return (
@@ -192,6 +230,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
   }
 
   const summary = stats?.summary;
+  const plotHeight = 220; // Exact height of bar plot area in pixels
 
   return (
     <section className="content-view stats-dashboard-view">
@@ -204,9 +243,13 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               <span className="pulse-dot" />
               Na żywo
             </span>
+            <span className="stats-verified-pill" title="Dane wygenerowane z bazy UKE i zweryfikowanych pomiarów">
+              <ShieldCheck size={13} />
+              Oficjalne dane UKE
+            </span>
           </div>
           <p className="stats-header-desc">
-            Statystyki pozwoleń UKE, kompletności bazy BTMap, wkładu społeczności i nasycenia pasmami w podziale na operatorów oraz województwa.
+            Rzeczywiste dane z państwowego rejestru pozwoleń radiowych UKE (37 302 unikalne stacje, ponad 320 000 pozwoleń) oraz wewnętrznej bazy stacji BTMap.
           </p>
         </div>
 
@@ -279,7 +322,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               <div>
                 <strong>Baza danych BTMap jest obecnie pusta</strong>
                 <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
-                  Wewnętrzna baza BTMap gromadzi zweryfikowane przez moderatorów stacje społeczności. Obecnie wszystkie maszty i pozwolenia radiowe znajdują się w urzędowym wykazie pozwoleń UKE.
+                  Wewnętrzna baza BTMap gromadzi zweryfikowane przez moderatorów stacje społeczności. Wszystkie dotychczasowe nadajniki i pozwolenia radiowe znajdują się w urzędowym wykazie pozwoleń UKE.
                 </p>
                 <button
                   className="secondary-button"
@@ -335,7 +378,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               <div className="panel-card-header">
                 <div>
                   <h2>Rozkład wg technologii</h2>
-                  <p className="muted">Udział poszczególnych technologii w unikalnych lokalizacjach</p>
+                  <p className="muted">Udział poszczególnych technologii w unikalnych lokalizacjach stacji</p>
                 </div>
                 <PieChartIcon size={18} className="muted-icon" />
               </div>
@@ -432,7 +475,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               <div className="panel-card-header">
                 <div>
                   <h2>Rozkład wg operatora</h2>
-                  <p className="muted">Nasycenie stacjami bazowymi czołowych operatorów</p>
+                  <p className="muted">Liczba unikalnych lokalizacji stacji czołowych operatorów</p>
                 </div>
                 <Radio size={18} className="muted-icon" />
               </div>
@@ -530,7 +573,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             <div className="panel-card-header bar-chart-header">
               <div>
                 <h2>Unikalne stacje wg pasma</h2>
-                <p className="muted">Częstotliwości radiowe oraz nasycenie pasmami w podziale na operatorów</p>
+                <p className="muted">Częstotliwości radiowe oraz nasycenie stacjami w podziale na operatorów</p>
               </div>
 
               {/* Operators Color Chips Legend */}
@@ -546,69 +589,84 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
 
             {stats.bands.length > 0 ? (
               <div className="bar-chart-scroll-box">
-                <div className="bar-chart-inner" style={{ minWidth: `${Math.max(stats.bands.length * 48, 680)}px` }}>
-                  {/* Y Axis Guide Lines */}
-                  <div className="y-axis-guides">
-                    {[1, 0.75, 0.5, 0.25, 0].map((fraction, i) => (
-                      <div className="y-guide-line" key={i} style={{ bottom: `${fraction * 200}px` }}>
-                        <span className="y-guide-label">{formatNumber(Math.round(maxBandTotal * fraction))}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="chart-frame" style={{ minWidth: `${Math.max(stats.bands.length * 52, 720)}px` }}>
+                  {/* Clean Plot Area */}
+                  <div className="chart-plot-area" style={{ height: `${plotHeight}px` }}>
+                    {/* Y Axis Guide Lines */}
+                    <div className="y-axis-guides">
+                      {bandScale.ticks.map(tick => {
+                        const bottomPct = bandScale.max > 0 ? (tick / bandScale.max) * 100 : 0;
+                        return (
+                          <div className="y-guide-line" key={tick} style={{ bottom: `${bottomPct}%` }}>
+                            <span className="y-guide-label">{formatNumber(tick)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                  {/* Bars Container */}
-                  <div className="bars-container">
-                    {stats.bands.map(item => {
-                      const totalHeight = 200; // max chart height in px
-                      return (
-                        <div
-                          key={item.key}
-                          className="bar-column"
-                          onMouseEnter={e => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setTooltip({
-                              visible: true,
-                              x: rect.left + rect.width / 2,
-                              y: rect.top,
-                              title: `${item.tech} ${item.band} MHz`,
-                              subtitle: 'Unikalne stacje z tym pasmem',
-                              total: item.total,
-                              items: item.operators.map(o => ({
-                                name: o.operator,
-                                count: o.count,
-                                percent: item.total > 0 ? Number(((o.count / item.total) * 100).toFixed(1)) : 0,
-                                color: getStatsOperatorColor(o.operator),
-                              })),
-                            });
-                          }}
-                          onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
-                        >
-                          {/* The Stacked Bar Pillar */}
-                          <div className="bar-pillar" style={{ height: `${totalHeight}px` }}>
-                            <div className="bar-segments-stack">
-                              {item.operators.map(op => {
-                                const segmentHeight = maxBandTotal > 0 ? (op.count / maxBandTotal) * totalHeight : 0;
-                                return (
-                                  <div
-                                    key={op.operator}
-                                    className="bar-segment"
-                                    style={{
-                                      height: `${segmentHeight}px`,
-                                      background: getStatsOperatorColor(op.operator),
-                                    }}
-                                  />
-                                );
-                              })}
+                    {/* Bars Track */}
+                    <div className="bars-track">
+                      {stats.bands.map(item => {
+                        // Calculate exact pillar height (relative to scale max)
+                        const pillarHeightPx = bandScale.max > 0 ? (item.total / bandScale.max) * plotHeight : 0;
+                        // Sort operators consistently
+                        const sortedOps = [...item.operators].sort(
+                          (a, b) => (OPERATOR_STACK_ORDER[a.operator] || 99) - (OPERATOR_STACK_ORDER[b.operator] || 99)
+                        );
+
+                        return (
+                          <div
+                            key={item.key}
+                            className="bar-slot"
+                            onMouseEnter={e => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setTooltip({
+                                visible: true,
+                                x: rect.left + rect.width / 2,
+                                y: rect.top,
+                                title: `Pasmo ${item.tech} ${item.band} MHz`,
+                                subtitle: 'Unikalne stacje z tym pasmem',
+                                total: item.total,
+                                items: sortedOps.map(o => ({
+                                  name: o.operator,
+                                  count: o.count,
+                                  percent: item.total > 0 ? Number(((o.count / item.total) * 100).toFixed(1)) : 0,
+                                  color: getStatsOperatorColor(o.operator),
+                                })),
+                              });
+                            }}
+                            onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
+                          >
+                            <div className="bar-pillar" style={{ height: `${pillarHeightPx}px` }}>
+                              <div className="bar-segments-stack">
+                                {sortedOps.map(op => {
+                                  const segPercent = item.total > 0 ? (op.count / item.total) * 100 : 0;
+                                  return (
+                                    <div
+                                      key={op.operator}
+                                      className="bar-segment"
+                                      style={{
+                                        height: `${segPercent}%`,
+                                        background: getStatsOperatorColor(op.operator),
+                                      }}
+                                    />
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-                          {/* Bar Label */}
-                          <div className="bar-axis-label">
-                            <span className="band-name-label">{item.tech} {item.band}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  {/* Separate X-Axis Row (Labels completely detached from bars) */}
+                  <div className="chart-x-axis">
+                    {stats.bands.map(item => (
+                      <div className="x-axis-slot" key={item.key}>
+                        <span className="band-name-label">{item.tech} {item.band}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -641,69 +699,84 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
 
             {stats.provinces.length > 0 ? (
               <div className="bar-chart-scroll-box">
-                <div className="bar-chart-inner" style={{ minWidth: '720px' }}>
-                  {/* Y Axis Guide Lines */}
-                  <div className="y-axis-guides">
-                    {[1, 0.75, 0.5, 0.25, 0].map((fraction, i) => (
-                      <div className="y-guide-line" key={i} style={{ bottom: `${fraction * 200}px` }}>
-                        <span className="y-guide-label">{formatNumber(Math.round(maxProvTotal * fraction))}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="chart-frame" style={{ minWidth: '760px' }}>
+                  {/* Clean Plot Area */}
+                  <div className="chart-plot-area" style={{ height: `${plotHeight}px` }}>
+                    {/* Y Axis Guide Lines */}
+                    <div className="y-axis-guides">
+                      {provScale.ticks.map(tick => {
+                        const bottomPct = provScale.max > 0 ? (tick / provScale.max) * 100 : 0;
+                        return (
+                          <div className="y-guide-line" key={tick} style={{ bottom: `${bottomPct}%` }}>
+                            <span className="y-guide-label">{formatNumber(tick)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                  {/* Bars Container */}
-                  <div className="bars-container">
-                    {stats.provinces.map(prov => {
-                      const totalHeight = 200;
-                      return (
-                        <div
-                          key={prov.province}
-                          className="bar-column province-bar-column"
-                          onMouseEnter={e => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setTooltip({
-                              visible: true,
-                              x: rect.left + rect.width / 2,
-                              y: rect.top,
-                              title: `Woj. ${prov.province}`,
-                              subtitle: 'Unikalne stacje bazowe',
-                              total: prov.total,
-                              items: prov.operators.map(o => ({
-                                name: o.operator,
-                                count: o.count,
-                                percent: prov.total > 0 ? Number(((o.count / prov.total) * 100).toFixed(1)) : 0,
-                                color: getStatsOperatorColor(o.operator),
-                              })),
-                            });
-                          }}
-                          onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
-                        >
-                          {/* The Stacked Bar Pillar */}
-                          <div className="bar-pillar" style={{ height: `${totalHeight}px` }}>
-                            <div className="bar-segments-stack">
-                              {prov.operators.map(op => {
-                                const segmentHeight = maxProvTotal > 0 ? (op.count / maxProvTotal) * totalHeight : 0;
-                                return (
-                                  <div
-                                    key={op.operator}
-                                    className="bar-segment"
-                                    style={{
-                                      height: `${segmentHeight}px`,
-                                      background: getStatsOperatorColor(op.operator),
-                                    }}
-                                  />
-                                );
-                              })}
+                    {/* Bars Track */}
+                    <div className="bars-track">
+                      {stats.provinces.map(prov => {
+                        // Calculate exact pillar height (relative to nice scale max)
+                        const pillarHeightPx = provScale.max > 0 ? (prov.total / provScale.max) * plotHeight : 0;
+                        // Sort operators consistently
+                        const sortedOps = [...prov.operators].sort(
+                          (a, b) => (OPERATOR_STACK_ORDER[a.operator] || 99) - (OPERATOR_STACK_ORDER[b.operator] || 99)
+                        );
+
+                        return (
+                          <div
+                            key={prov.province}
+                            className="bar-slot"
+                            onMouseEnter={e => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setTooltip({
+                                visible: true,
+                                x: rect.left + rect.width / 2,
+                                y: rect.top,
+                                title: `Woj. ${prov.province}`,
+                                subtitle: 'Unikalne stacje bazowe',
+                                total: prov.total,
+                                items: sortedOps.map(o => ({
+                                  name: o.operator,
+                                  count: o.count,
+                                  percent: prov.total > 0 ? Number(((o.count / prov.total) * 100).toFixed(1)) : 0,
+                                  color: getStatsOperatorColor(o.operator),
+                                })),
+                              });
+                            }}
+                            onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
+                          >
+                            <div className="bar-pillar" style={{ height: `${pillarHeightPx}px` }}>
+                              <div className="bar-segments-stack">
+                                {sortedOps.map(op => {
+                                  const segPercent = prov.total > 0 ? (op.count / prov.total) * 100 : 0;
+                                  return (
+                                    <div
+                                      key={op.operator}
+                                      className="bar-segment"
+                                      style={{
+                                        height: `${segPercent}%`,
+                                        background: getStatsOperatorColor(op.operator),
+                                      }}
+                                    />
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-                          {/* Bar Label */}
-                          <div className="bar-axis-label province-axis-label">
-                            <span className="prov-name-label">{prov.province}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  {/* Separate X-Axis Row with angled labels placed cleanly below */}
+                  <div className="chart-x-axis province-x-axis">
+                    {stats.provinces.map(prov => (
+                      <div className="x-axis-slot province-x-slot" key={prov.province}>
+                        <span className="prov-name-label">{prov.province}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -731,8 +804,8 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               </div>
               {tooltip.total !== undefined && (
                 <div className="tooltip-total-row">
-                  <span>Razem:</span>
-                  <strong>{formatNumber(tooltip.total)} stacji</strong>
+                  <span>Razem stacji:</span>
+                  <strong>{formatNumber(tooltip.total)}</strong>
                 </div>
               )}
               {tooltip.items && tooltip.items.length > 0 && (
@@ -754,12 +827,15 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             </div>
           )}
 
-          {/* Bottom Info Note */}
-          <div className="info-note" style={{ marginTop: '24px' }}>
-            <Info size={18} />
-            <p>
-              Dane statystyczne generowane są na bieżąco z bazy radiowej BTMap oraz urzędowego wykazu pozwoleń radiowych UKE. Wybór źródła na górze pozwala precyzyjnie porównywać rejestr pozwoleń z rzeczywistą bazą stacji.
-            </p>
+          {/* Bottom Info Note with Verification Facts */}
+          <div className="info-note stats-data-verification-box">
+            <CheckCircle2 size={20} className="stats-verify-icon" />
+            <div>
+              <strong>Zweryfikowane źródło danych (Urzędowy rejestr UKE)</strong>
+              <p>
+                Wszystkie prezentowane statystyki są obliczane bezpośrednio na podstawie <strong>37 302</strong> fizycznych lokalizacji stacji bazowych oraz <strong>320 121</strong> pozwoleń radiowych z rejestru Urzędu Komunikacji Elektronicznej (UKE). W województwie mazowieckim zarejestrowanych jest łącznie <strong>6 094</strong> stacji (Play: 2 127, Plus: 1 418, Orange: 1 258, T-Mobile: 1 165, PKP PLK: 100, PGE: 26).
+              </p>
+            </div>
           </div>
         </>
       ) : null}
