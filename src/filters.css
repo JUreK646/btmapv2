@@ -72,6 +72,17 @@
 .operator-filter { padding-inline:7px; gap:5px; }
 .filter-operator-symbol { display:grid; place-items:center; width:12px; height:12px; flex-shrink:0; }
 .filter-operator-symbol>i { width:8px; height:8px; border-radius:50%; }
+.source-filters {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+  width:100%;
+}
+.source-filters .filter-option {
+  padding-inline:6px;
+  gap:5px;
+  font-size:11px;
+}
 .technology-filters {
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));

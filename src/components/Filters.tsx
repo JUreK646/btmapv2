@@ -1,4 +1,4 @@
-import {Check,ChevronDown,Compass} from 'lucide-react';
+import {Check,ChevronDown,Compass,Database,FileText,Layers} from 'lucide-react';
 import type {Filters as FilterState} from '../types';
 import {BANDS,OPERATORS,PROVINCES} from '../lib/constants';
 
@@ -40,6 +40,42 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
         )}
       </fieldset>
     )}
+        <fieldset className="filter-group">
+      <legend>Źródło danych <span>{filters.source === 'BTMAP' ? 'Baza BTMap' : filters.source === 'UKE' ? 'Pozwolenia UKE' : 'Wszystkie'}</span></legend>
+      <div className="filter-options source-filters">
+        <button
+          type="button"
+          className={`filter-option ${(!filters.source || filters.source === 'ALL') ? 'is-selected' : ''}`}
+          onClick={() => onChange({ ...filters, source: 'ALL' })}
+          aria-pressed={!filters.source || filters.source === 'ALL'}
+          title="Wyświetlaj stacje z obu źródeł"
+        >
+          <Layers size={13} />
+          <span>Wszystkie</span>
+        </button>
+        <button
+          type="button"
+          className={`filter-option ${filters.source === 'BTMAP' ? 'is-selected' : ''}`}
+          onClick={() => onChange({ ...filters, source: 'BTMAP' })}
+          aria-pressed={filters.source === 'BTMAP'}
+          title="Tylko zweryfikowane stacje w bazie BTMap"
+        >
+          <Database size={13} />
+          <span>Baza danych</span>
+        </button>
+        <button
+          type="button"
+          className={`filter-option ${filters.source === 'UKE' ? 'is-selected' : ''}`}
+          onClick={() => onChange({ ...filters, source: 'UKE' })}
+          aria-pressed={filters.source === 'UKE'}
+          title="Tylko urzędowe pozwolenia radiowe UKE"
+        >
+          <FileText size={13} />
+          <span>UKE</span>
+        </button>
+      </div>
+    </fieldset>
+
     <fieldset className="filter-group">
       <legend>Operatorzy <span>{filters.operators.length?`Wybrano ${filters.operators.length}`:'Wszyscy'}</span></legend>
       <div className="filter-options operator-filters">
