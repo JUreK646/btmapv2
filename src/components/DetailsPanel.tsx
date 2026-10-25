@@ -26,6 +26,7 @@ import PemReportsDialog from './PemReportsDialog';
 import PemReportList from './PemReportList';
 import type { PemReportsResult } from '../../shared/pem';
 import { operatorColor, towerTechs } from '../lib/constants';
+import { useI18n } from '../lib/i18n';
 
 const technologyNames: Record<string, string> = {
   '5G': '5G NR',
@@ -95,6 +96,8 @@ function techGen(tech: string) {
 }
 
 function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: string) => void }) {
+  const { t, lang } = useI18n();
+  const isPl = lang === 'pl';
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -161,7 +164,7 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                   <strong>{gen.label}</strong>
                 </span>
                 <span className="cell-tech-count">
-                  ({techBands.length} {techBands.length === 1 ? 'pasmo' : techBands.length < 5 ? 'pasma' : 'pasm'})
+                  ({techBands.length} {techBands.length === 1 ? (isPl ? 'pasmo' : 'band') : techBands.length < 5 ? (isPl ? 'pasma' : 'bands') : (isPl ? 'pasm' : 'bands')})
                 </span>
                 {op.stationIds?.[0] && (
                   <span
@@ -170,7 +173,7 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       e.stopPropagation();
                       void copyId(op.stationIds![0]);
                     }}
-                    title="Kopiuj ID stacji"
+                    title={isPl ? "Kopiuj ID stacji" : "Copy station ID"}
                   >
                     <span>ID</span>
                     <strong>{op.stationIds[0]}</strong>
@@ -186,9 +189,9 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                 <table className="cell-table">
                   <thead>
                     <tr>
-                      <th className="cell-col-pasmo">Pasmo</th>
-                      <th className="cell-col-zastosowanie">Zastosowanie</th>
-                      <th className="cell-col-details">Szczegóły pozwolenia / ECI / PCI</th>
+                      <th className="cell-col-pasmo">{t.detailsColBand}</th>
+                      <th className="cell-col-zastosowanie">{isPl ? 'Zastosowanie' : 'Application'}</th>
+                      <th className="cell-col-details">{isPl ? 'Szczegóły pozwolenia / ECI / PCI' : 'Permit details / ECI / PCI'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -199,7 +202,7 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       const expMatch = b.permit?.match(/expires\s+(\d{4}-\d{2}-\d{2})/);
                       const expiryDate = expMatch
                         ? expMatch[1].startsWith('2099')
-                          ? 'Bezterminowo'
+                          ? (isPl ? 'Bezterminowo' : 'Indefinite')
                           : expMatch[1]
                         : null;
 
@@ -230,7 +233,7 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                                 )}
                               </div>
                               {expiryDate && (
-                                <span className="cell-expiry">Ważność: {expiryDate}</span>
+                                <span className="cell-expiry">{isPl ? 'Ważność:' : 'Expires:'} {expiryDate}</span>
                               )}
                             </div>
                           </td>
@@ -256,6 +259,8 @@ export default function DetailsPanel({
   onOpenTerrainProfile,
   onOpenAreaEvaluation,
 }: Props) {
+  const { t, lang } = useI18n();
+  const isPl = lang === 'pl';
   const [operator, setOperator] = useState(0);
   const [reportOpen, setReportOpen] = useState<string | null>(null);
   const [copied, setCopied] = useState<'link' | 'gps' | null>(null);
@@ -350,7 +355,7 @@ export default function DetailsPanel({
             </span>
             <span className="station-sheet-source">
               <Database size={12} aria-hidden="true" />
-              {tower.source === 'BTMAP' ? 'Baza BTMap' : 'Pozwolenie UKE'}
+              {tower.source === 'BTMAP' ? t.detailsSourceBtmap : t.detailsSourceUke}
             </span>
             {tower.operators.some(o => o.name === 'Orange' || o.name === 'T-Mobile') && (
               <span className="station-networks-badge" title="Stacja współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)">
@@ -370,7 +375,7 @@ export default function DetailsPanel({
                 aria-label="Audyt i ocena 4 operatorów w tej lokalizacji"
               >
                 <Radar size={14} />
-                <span>Audyt</span>
+                <span>{t.detailsAudit}</span>
               </button>
             )}
             {onOpenTerrainProfile && (
@@ -382,7 +387,7 @@ export default function DetailsPanel({
                 aria-label="Profil terenu i widoczność optyczna"
               >
                 <Mountain size={14} />
-                <span>Profil terenu</span>
+                <span>{t.detailsTerrainProfile}</span>
               </button>
             )}
             {onOpenCreateStation && (
@@ -394,21 +399,21 @@ export default function DetailsPanel({
                 aria-label="Zgłoś aktualizację lub edycję stacji w bazie BTMap"
               >
                 <Plus size={14} />
-                <span>{tower.source === 'BTMAP' ? 'Edytuj stację' : 'Utwórz stację w BTMap'}</span>
+                <span>{tower.source === 'BTMAP' ? t.detailsEditStation : t.detailsCreateStation}</span>
               </button>
             )}
             <button
               className="icon-button"
               onClick={() => void copy('link')}
-              aria-label={copied === 'link' ? 'Link skopiowany' : 'Kopiuj link do stacji'}
-              title="Kopiuj link do stacji"
+              aria-label={copied === 'link' ? t.detailsLinkCopied : t.detailsCopyLink}
+              title={t.detailsCopyLink}
             >
               {copied === 'link' ? <Check size={17} /> : <Copy size={17} />}
             </button>
             <button
               className="icon-button"
               onClick={onClose}
-              aria-label="Zamknij szczegóły stacji"
+              aria-label={t.detailsCloseAria}
               title="Zamknij"
             >
               <X size={19} />
@@ -441,7 +446,7 @@ export default function DetailsPanel({
           )}
         </div>
         <span className="sr-only" role="status">
-          {copied === 'link' ? 'Link do stacji skopiowany' : copied === 'gps' ? 'Współrzędne skopiowane' : ''}
+          {copied === 'link' ? t.detailsLinkCopied : copied === 'gps' ? t.detailsGpsCopied : ''}
         </span>
       </header>
 
@@ -451,14 +456,14 @@ export default function DetailsPanel({
           <div>
             <dt>
               <MapPin size={16} />
-              Współrzędne GPS
+              {t.detailsCoordinates}
             </dt>
             <dd className="station-gps">
               <span>{coordinates}</span>
               <button
                 className="icon-button"
                 onClick={() => void copy('gps')}
-                aria-label={copied === 'gps' ? 'Współrzędne skopiowane' : 'Kopiuj współrzędne'}
+                aria-label={copied === 'gps' ? t.detailsGpsCopied : t.detailsCopyGps}
               >
                 {copied === 'gps' ? <Check size={14} /> : <Copy size={14} />}
               </button>
@@ -467,14 +472,14 @@ export default function DetailsPanel({
           <div>
             <dt>
               <Globe size={16} />
-              Województwo
+              {t.detailsProvince}
             </dt>
-            <dd>{tower.province || 'Brak danych'}</dd>
+            <dd>{tower.province || (isPl ? 'Brak danych' : 'No data')}</dd>
           </div>
           <div>
             <dt>
               <Hash size={16} />
-              ID stacji
+              {t.detailsStationId}
             </dt>
             <dd>
               {tower.operators.length > 1 && tower.operators.some(o => o.stationIds?.length)
@@ -487,7 +492,7 @@ export default function DetailsPanel({
           <div className="station-report-fact">
             <dt>
               <Activity size={16} />
-              Raporty PEM
+              {isPl ? 'Raporty PEM' : 'PEM Reports'}
             </dt>
             <dd>
               {tower.operators.length > 1 && (
@@ -526,7 +531,7 @@ export default function DetailsPanel({
             <div>
               <dt>
                 <Ruler size={16} />
-                Wysokość
+                {t.detailsColHeight}
               </dt>
               <dd>{tower.height} m</dd>
             </div>
@@ -538,7 +543,7 @@ export default function DetailsPanel({
           <section className="cell-details-section" aria-label="Szczegóły komórek i pasm">
             <div className="cell-details-heading">
               <Radio size={14} aria-hidden="true" />
-              <span>Pasma radiowe i komórki stacji</span>
+              <span>{t.detailsBandsAndCells}</span>
             </div>
             {tower.operators.map(op => (
               <CellDetailsBlock key={op.name} op={op} onNotice={onNotice} />
@@ -550,7 +555,7 @@ export default function DetailsPanel({
           <section className="station-sheet-notes">
             <NotebookPen size={17} />
             <div>
-              <h3>Notatki o stacji</h3>
+              <h3>{t.detailsStationNotes}</h3>
               <p>{tower.notes}</p>
             </div>
           </section>
@@ -558,7 +563,7 @@ export default function DetailsPanel({
 
         <p className="station-data-note">
           <Info size={15} />
-          <span>Pozwolenie radiowe nie potwierdza uruchomienia stacji ani rzeczywistego zasięgu.</span>
+          <span>{t.detailsPermitNotice}</span>
         </p>
       </div>
 

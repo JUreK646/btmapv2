@@ -21,7 +21,7 @@ import {DEFAULT_FILTERS,OPERATORS,filterCount,readStored,saveStored} from './lib
 import {getStoredBasemap} from './lib/basemaps';
 import type {BasemapId} from './lib/basemaps';
 import type {Bounds,Filters,Health,Theme,Tower,View} from './types';
-import {i18n, type Lang} from './lib/i18n';
+import {i18n, I18nProvider, type Lang} from './lib/i18n';
 
 
 
@@ -222,21 +222,22 @@ export default function App(){
     }
     return u;
   };
-  const fullscreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await mapFrame.current?.requestFullscreen();}catch{setNotice('Pełny ekran nie jest dostępny w tej przeglądarce.');}};
+  const fullscreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await mapFrame.current?.requestFullscreen();}catch{setNotice(t.fullscreenUnavailable);}};
   const basemapError=useCallback((message:string)=>{setBasemap('osm');setNotice(message);},[]);
   const filterTotal=filterCount(filters)+(showPem&&view==='map'?1:0)+(showAzimuths&&view==='map'?1:0);
   const filterPanel=<aside className="floating-panel filter-drawer" aria-labelledby="station-filters-title">
-    <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?'Filtry mapy':'Filtry stacji'}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?'Pozwolenia UKE':filters.source==='BTMAP'?'Baza BTMap':'BTMap + UKE'}{showPem&&view==='map'?' · SI2PEM':''}</span><button className="icon-button" aria-label="Zamknij filtry" onClick={()=>setPanel(null)}><X size={18}/></button></div>
+    <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?t.filterMapTitle:t.filterStationTitle}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?t.filterSourceUke:filters.source==='BTMAP'?t.filterSourceDb:t.filterSourceAll}{showPem&&view==='map'?' · SI2PEM':''}</span><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={18}/></button></div>
     <div className="panel-scroll"><FiltersPanel filters={filters} onChange={changeFilters} pemEnabled={showPem} onPemChange={view==='map'?setShowPem:undefined} pemStatus={pemStatus} azimuthsEnabled={showAzimuths} onAzimuthsChange={view==='map'?setShowAzimuths:undefined}/></div>
-    <div className="filter-drawer-footer"><p className="filter-results" role="status">{loading?'Wczytywanie stacji…':error?'Nie udało się wczytać wyników':<><strong>{formatNumber(result.total)}</strong> {view==='database'?'lokalizacji w bazie':'lokalizacji w tym obszarze'}</>}</p><div className="filter-drawer-actions"><button className="filter-reset" disabled={!filterTotal} onClick={()=>{changeFilters(DEFAULT_FILTERS);if(view==='map'){setShowPem(false);setShowAzimuths(false);}}}><RotateCcw size={14}/>Wyczyść{filterTotal>0&&<span>{filterTotal}</span>}</button><button className="primary-button" onClick={()=>setPanel(null)}>Gotowe</button></div></div>
+    <div className="filter-drawer-footer"><p className="filter-results" role="status">{loading?t.filterLoading:error?t.filterLoadError:<><strong>{formatNumber(result.total)}</strong> {view==='database'?t.filterResultsInDb(formatNumber(result.total)):t.filterResultsInArea(formatNumber(result.total))}</>}</p><div className="filter-drawer-actions"><button className="filter-reset" disabled={!filterTotal} onClick={()=>{changeFilters(DEFAULT_FILTERS);if(view==='map'){setShowPem(false);setShowAzimuths(false);}}}><RotateCcw size={14}/>{t.clear}{filterTotal>0&&<span>{filterTotal}</span>}</button><button className="primary-button" onClick={()=>setPanel(null)}>{t.ready}</button></div></div>
   </aside>;
 
-  return <div className={`app-layout ${navCollapsed?'nav-compact':''} ${mobileNav?'nav-open':''}`}>
+  return <I18nProvider lang={lang} setLang={setLang}>
+    <div className={`app-layout ${navCollapsed?'nav-compact':''} ${mobileNav?'nav-open':''}`}>
     <a className="skip-link" href="#main-content">{t.skipLink}</a>
-    {mobileNav&&<button className="nav-scrim" aria-label="Zamknij nawigację" onClick={()=>setMobileNav(false)}/>}
-    <aside className="app-sidebar" aria-label="Menu aplikacji">
-      <button className="sidebar-brand" onClick={()=>changeView('map')} aria-label="BTMap — przejdź do mapy"><span className="sidebar-brand-symbol"><Radio size={25}/></span><span className="sidebar-wordmark">btmap<span>.</span></span><span className="sidebar-version">v2</span></button>
-      <nav className="side-nav" aria-label="Nawigacja główna">{navItems.map(item=><button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
+    {mobileNav&&<button className="nav-scrim" aria-label={t.closeNav} onClick={()=>setMobileNav(false)}/>}
+    <aside className="app-sidebar" aria-label={t.appMenu}>
+      <button className="sidebar-brand" onClick={()=>changeView('map')} aria-label={t.brandAria}><span className="sidebar-brand-symbol"><Radio size={25}/></span><span className="sidebar-wordmark">btmap<span>.</span></span><span className="sidebar-version">v2</span></button>
+      <nav className="side-nav" aria-label={t.mainNav}>{navItems.map(item=><button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
       <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title={t.guides} onClick={()=>changeView('guides')}><Info size={18}/><span>{t.guides}</span></button><div className="sidebar-lang-wrap"><button type="button" className="sidebar-about sidebar-lang-compact-btn" onClick={()=>setLang(lang==='pl'?'en':'pl')} title={t.switchLanguage} aria-label={t.switchLanguage}><Languages size={18}/><span className="sidebar-lang-compact-badge">{lang.toUpperCase()}</span></button><div className="sidebar-lang-toggle" title={t.switchLanguage}><Languages size={17} className="sidebar-lang-icon"/><span className="sidebar-lang-text">{t.language}</span><div className="lang-toggle-pills" role="group" aria-label={t.language}><button type="button" className={`lang-pill ${lang==='pl'?'is-active':''}`} onClick={()=>setLang('pl')} aria-pressed={lang==='pl'} title="Polski (PL)">PL</button><button type="button" className={`lang-pill ${lang==='en'?'is-active':''}`} onClick={()=>setLang('en')} aria-pressed={lang==='en'} title="English (ENG)">ENG</button></div></div></div><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?t.account:t.signIn}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:t.signIn}</strong><small>{user?t.account:t.accountDesc}</small></span><ArrowUpRight size={16}/></button></div></div>
     </aside>
     <section className="app-main">
@@ -269,18 +270,18 @@ export default function App(){
           {isPickingTerrainTarget && (
             <div className="tp-pick-banner" role="status">
               <Crosshair size={18} className="tp-pulse-icon" />
-              <span>Kliknij w wybranym miejscu na mapie, aby wyznaczyć profil terenu od stacji <strong>{terrainTower?.stationId || terrainTower?.id}</strong></span>
-              <button type="button" className="tp-pick-cancel" onClick={handleCancelPick}>Anuluj</button>
+              <span>{t.terrainPickBanner(terrainTower?.stationId || terrainTower?.id || '')}</span>
+              <button type="button" className="tp-pick-cancel" onClick={handleCancelPick}>{t.cancel}</button>
             </div>
           )}
           {isPickingEvalTarget && (
             <div className="ae-pick-banner" role="status">
               <Radar size={18} className="ae-pulse-radar" />
-              <span>Kliknij budynek, działkę lub obszar na mapie, aby ocenić 4 operatorów (maks. 3 km²)</span>
-              <button type="button" className="ae-pick-cancel" onClick={handleCancelEvalPick}>Anuluj</button>
+              <span>{t.evalPickBanner}</span>
+              <button type="button" className="ae-pick-cancel" onClick={handleCancelEvalPick}>{t.cancel}</button>
             </div>
           )}
-          <div className="map-hud"><button className="map-summary" aria-label="Pokaż stacje w obszarze" aria-expanded={panel==='stations'} onClick={()=>togglePanel('stations')}><Radio size={17}/><strong>{loading?'…':formatNumber(result.total)}</strong><span>lokalizacji</span><span className="hud-divider"/><span className="hud-source">{filters.source==='UKE'?'UKE':filters.source==='BTMAP'?'BTMap':'BTMap + UKE'}</span><List size={16}/></button><div className="map-coordinates">{bounds?<><span>Środek mapy</span>{((bounds.minLat+bounds.maxLat)/2).toFixed(4)}, {((bounds.minLng+bounds.maxLng)/2).toFixed(4)}<span className="coordinate-zoom">Z{bounds.zoom}</span></>:'Wczytywanie mapy…'}</div></div>
+          <div className="map-hud"><button className="map-summary" aria-label={t.stationsInArea} aria-expanded={panel==='stations'} onClick={()=>togglePanel('stations')}><Radio size={17}/><strong>{loading?'…':formatNumber(result.total)}</strong><span>{t.locationsCount}</span><span className="hud-divider"/><span className="hud-source">{filters.source==='UKE'?'UKE':filters.source==='BTMAP'?'BTMap':'BTMap + UKE'}</span><List size={16}/></button><div className="map-coordinates">{bounds?<><span>{t.mapCenter}</span>{((bounds.minLat+bounds.maxLat)/2).toFixed(4)}, {((bounds.minLng+bounds.maxLng)/2).toFixed(4)}<span className="coordinate-zoom">Z{bounds.zoom}</span></>:t.mapLoading}</div></div>
           <div className={`map-searchbar ${isSearchActive ? 'search-active' : ''}`}>
             <Search
               onSelect={selectTower}
@@ -301,52 +302,52 @@ export default function App(){
                     setIsPickingEvalTarget(true);
                     setPanel(null);
                     setSelected(null);
-                    setNotice('Kliknij punkt lub stację na mapie, aby wykonać audyt 4 operatorów.');
+                    setNotice(t.evalNoticePick);
                   }
                 }}
-                aria-label="Audyt operatorów"
-                title="Audyt i ocena operatorów w wybranej lokalizacji (maks. 3.0 km²)"
+                aria-label={t.audit}
+                title={t.auditTooltip}
               >
                 <Radar size={17} />
-                <span>Audyt</span>
+                <span>{t.audit}</span>
               </button>
               <button
                 type="button"
                 className={`filter-trigger ${panel==='filters'||filterTotal?'selected':''}`}
                 onClick={()=>togglePanel('filters')}
                 aria-expanded={panel==='filters'}
-                aria-label="Filtry"
+                aria-label={t.filters}
               >
                 <SlidersHorizontal size={17}/>
-                <span>Filtry</span>
+                <span>{t.filters}</span>
                 {filterTotal>0&&<b>{filterTotal}</b>}
               </button>
               <button
                 type="button"
                 className="filter-trigger"
                 onClick={() => openCreateStation(null)}
-                aria-label="Dodaj nową stację"
-                title="Dodaj nową stację bazową dla wybranego operatora"
+                aria-label={t.addStation}
+                title={t.addStationTooltip}
               >
                 <RadioTower size={17} />
-                <span>Dodaj stację</span>
+                <span>{t.addStation}</span>
               </button>
             </div>
           </div>
-          {error&&<div className="map-error" role="alert">{error}<button onClick={()=>setRefresh(r=>r+1)}>Ponów</button></div>}
+          {error&&<div className="map-error" role="alert">{error}<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button></div>}
           {((showPem || showAzimuths) && !panel && !selected) && (
             <div className="map-status-stack">
-              {showAzimuths && <div className="azimuth-map-status" role="status"><Compass size={13} aria-hidden="true"/><span>{bounds&&bounds.zoom<14?'Azymuty: przybliż mapę (zoom 14+), aby zobaczyć sektory':'Azymuty anten włączone'}</span></div>}
-              {showPem && <div className="pem-map-status" role="status"><i aria-hidden="true"/>{pemStatus}{(pem.error||pem.data?.error)&&<button onClick={()=>setRefresh(r=>r+1)}>Ponów</button>}</div>}
+              {showAzimuths && <div className="azimuth-map-status" role="status"><Compass size={13} aria-hidden="true"/><span>{bounds&&bounds.zoom<14?t.azimuthsZoomHint:t.azimuthsActive}</span></div>}
+              {showPem && <div className="pem-map-status" role="status"><i aria-hidden="true"/>{pemStatus}{(pem.error||pem.data?.error)&&<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button>}</div>}
             </div>
           )}
           <div className="map-tools">
-            <div className="map-control-group"><button aria-label="Przybliż mapę" onClick={()=>map?.zoomIn()}><Plus size={20}/></button><button aria-label="Oddal mapę" onClick={()=>map?.zoomOut()}><Minus size={20}/></button></div>
+            <div className="map-control-group"><button aria-label={t.zoomIn} title={t.zoomIn} onClick={()=>map?.zoomIn()}><Plus size={20}/></button><button aria-label={t.zoomOut} title={t.zoomOut} onClick={()=>map?.zoomOut()}><Minus size={20}/></button></div>
             <button
               type="button"
               className={`map-tool ${evalTarget || isPickingEvalTarget ? 'active' : ''}`}
-              aria-label="Audyt operatorów"
-              title="Audyt i ocena 4 operatorów na wybranym terenie (maks. 3 km²)"
+              aria-label={t.audit}
+              title={t.auditTooltip}
               onClick={() => {
                 if (evalTarget || isPickingEvalTarget) {
                   closeAreaEvaluation();
@@ -356,37 +357,38 @@ export default function App(){
                   setIsPickingEvalTarget(true);
                   setPanel(null);
                   setSelected(null);
-                  setNotice('Kliknij punkt lub stację na mapie, aby wykonać audyt 4 operatorów.');
+                  setNotice(t.evalNoticePick);
                 }
               }}
             >
               <Radar size={19} />
             </button>
-            <button className="map-tool" aria-label="Moja lokalizacja" title="Moja lokalizacja" disabled={locating} onClick={locate}><LocateFixed size={20}/></button>
+            <button className="map-tool" aria-label={t.myLocation} title={t.myLocation} disabled={locating} onClick={locate}><LocateFixed size={20}/></button>
             <button
               className="map-tool"
-              aria-label="Dodaj nową stację"
-              title="Dodaj nową stację bazową dla wybranego operatora"
+              aria-label={t.addStation}
+              title={t.addStationTooltip}
               onClick={() => openCreateStation(null)}
             >
               <RadioTower size={19} />
             </button>
-            <button className="map-tool fullscreen-tool" aria-label="Pełny ekran mapy" title="Pełny ekran" onClick={()=>void fullscreen()}><Maximize size={19}/></button>
+            <button className="map-tool fullscreen-tool" aria-label={t.fullscreen} title={t.fullscreen} onClick={()=>void fullscreen()}><Maximize size={19}/></button>
           </div>
           <BasemapPicker value={basemap} onChange={setBasemap}/>
-          <div className="map-legend" aria-label="Operatorzy">{OPERATORS.slice(0,4).map(op=><button key={op.name} aria-label={`Filtruj operatora ${op.name}`} aria-pressed={filters.operators.includes(op.name)} onClick={()=>changeFilters({...filters,operators:filters.operators.length===1&&filters.operators[0]===op.name?[]:[op.name]})}><i style={{background:op.color}}/>{op.name}</button>)}</div>
+          <div className="map-legend" aria-label={t.legendOperators}>{OPERATORS.slice(0,4).map(op=><button key={op.name} aria-label={`${t.filterOperatorPrefix} ${op.name}`} aria-pressed={filters.operators.includes(op.name)} onClick={()=>changeFilters({...filters,operators:filters.operators.length===1&&filters.operators[0]===op.name?[]:[op.name]})}><i style={{background:op.color}}/>{op.name}</button>)}</div>
           {panel==='filters'&&filterPanel}
-          {panel==='stations'&&<aside className="floating-panel stations-drawer" aria-label="Stacje w obszarze"><div className="floating-panel-heading"><div><h2>Stacje w obszarze</h2><p>Baza stacji BTMap · {formatNumber(result.total)} lokalizacji</p></div><button className="icon-button" aria-label="Zamknij listę stacji" onClick={()=>setPanel(null)}><X size={19}/></button></div><div className="panel-scroll"><TowerList items={result.items} total={result.total} loading={loading} error={error} selected={selected?.id} onSelect={selectTower} onRetry={()=>setRefresh(r=>r+1)} hasMore={result.hasMore}/></div></aside>}
+          {panel==='stations'&&<aside className="floating-panel stations-drawer" aria-label={t.stationsInArea}><div className="floating-panel-heading"><div><h2>{t.stationsInArea}</h2><p>{t.databaseViewTitle} · {formatNumber(result.total)} {t.locationsCount}</p></div><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={19}/></button></div><div className="panel-scroll"><TowerList items={result.items} total={result.total} loading={loading} error={error} selected={selected?.id} onSelect={selectTower} onRetry={()=>setRefresh(r=>r+1)} hasMore={result.hasMore}/></div></aside>}
           {selected&&<DetailsPanel key={selected.id} tower={selected} onClose={closeTower} onNotice={setNotice} onOpenCreateStation={openCreateStation} onOpenTerrainProfile={openTerrainProfile} onOpenAreaEvaluation={openAreaEvaluation}/>}
-        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>Filtry{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
+        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>{t.filters}{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
       </main>
     </section>
-    {notice&&<div className="toast" role="status"><Info size={19}/><span>{notice}</span><button className="icon-button" aria-label="Zamknij komunikat" onClick={()=>setNotice('')}><X size={17}/></button></div>}
+    {notice&&<div className="toast" role="status"><Info size={19}/><span>{notice}</span><button className="icon-button" aria-label={t.close} onClick={()=>setNotice('')}><X size={17}/></button></div>}
     {dialog==='auth'&&<AuthDialog onClose={()=>setDialog(null)} authenticate={handleAuth}/>}
     {dialog==='profile'&&user&&<ProfileDialog user={user} onClose={()=>setDialog(null)} onLogout={async()=>{await logout();setDialog(null);if(view==='admin')setView('map');}} onAdmin={()=>{setDialog(null);changeView('admin');}}/>}
     {dialog==='submit'&&user&&editTower&&<SubmitDialog tower={editTower} onClose={()=>setDialog(null)} onSuccess={()=>setRefresh(r=>r+1)}/>}
-    {createStationTower!==null&&<StationSubmissionDialog sourceTower={createStationTower==='blank'?null:createStationTower} onClose={()=>setCreateStationTower(null)} onSuccess={()=>{setCreateStationTower(null);setRefresh(r=>r+1);setNotice('Zgłoszenie nowej stacji zostało pomyślnie wysłane do moderacji.');}}/>}
+    {createStationTower!==null&&<StationSubmissionDialog sourceTower={createStationTower==='blank'?null:createStationTower} onClose={()=>setCreateStationTower(null)} onSuccess={()=>{setCreateStationTower(null);setRefresh(r=>r+1);setNotice(t.stationSubmissionSuccess);}}/>}
     {terrainTower!==null&&terrainTarget!==null&&<TerrainProfileDialog tower={terrainTower} targetCoords={terrainTarget} onTargetChange={setTerrainTarget} onSectorAzimuthChange={setTerrainSectorAzimuth} onPickOnMap={()=>setIsPickingTerrainTarget(true)} onClose={closeTerrainProfile}/>}
     {evalTarget!==null&&<AreaEvaluationDialog targetCoords={evalTarget} radiusM={evalRadiusM} onRadiusChange={setEvalRadiusM} onPickOnMap={()=>setIsPickingEvalTarget(true)} onClose={closeAreaEvaluation} onOpenTerrainProfile={openTerrainProfile}/>}
-  </div>;
+  </div>
+  </I18nProvider>;
 }

@@ -26,6 +26,7 @@ import { cachedPemReports, loadPemReports, loadPemPdf } from '../lib/pemCache';
 import type { PemReport } from '../../shared/pem';
 import { operatorColor } from '../../shared/operators';
 import type { TerrainProfileResult, TerrainProfilePoint } from '../../server/terrainProfile';
+import { useI18n } from '../lib/i18n';
 
 interface Props {
   tower: Tower;
@@ -75,6 +76,8 @@ export default function TerrainProfileDialog({
   onPickOnMap,
   onClose,
 }: Props) {
+  const { lang } = useI18n();
+  const isEn = lang === 'en';
   const primaryOp = tower.operators[0]?.name || 'UKE';
   const opColor = operatorColor(primaryOp);
 
@@ -1098,7 +1101,7 @@ export default function TerrainProfileDialog({
       className={`tp-bottom-dock tp-dialog-dock ${isMinimized ? 'is-minimized' : ''}`}
       style={{ '--tp-op-color': opColor } as React.CSSProperties}
       role="region"
-      aria-label="Analiza profilu terenu i widoczności radiowej"
+      aria-label={isEn ? 'Terrain profile & line of sight analysis' : 'Analiza profilu terenu i widoczności radiowej'}
     >
       {/* Rounded Header Bar */}
       <header className="tp-header">
@@ -1107,7 +1110,7 @@ export default function TerrainProfileDialog({
             <Mountain size={17} />
           </span>
           <div className="tp-header-titles">
-            <span className="tp-title">Przekrój terenu LiDAR</span>
+            <span className="tp-title">{isEn ? 'LiDAR Terrain Profile' : 'Przekrój terenu LiDAR'}</span>
             <span className="tp-operator-badge" style={{ background: opColor }}>
               {primaryOp}
             </span>
@@ -1126,30 +1129,30 @@ export default function TerrainProfileDialog({
           {pemLoading ? (
             <span className="tp-top-pill status-loading">
               <RefreshCw size={12} className="tp-spin" />
-              <span>Sprawdzanie SI2PEM…</span>
+              <span>{isEn ? 'Checking SI2PEM…' : 'Sprawdzanie SI2PEM…'}</span>
             </span>
           ) : pemNotFound ? (
             <span className="tp-top-pill status-err">
               <FileX size={13} />
-              <span>Brak pomiaru SI2PEM</span>
+              <span>{isEn ? 'No SI2PEM data' : 'Brak pomiaru SI2PEM'}</span>
             </span>
           ) : loading ? (
             <span className="tp-top-pill status-loading">
               <RefreshCw size={12} className="tp-spin" />
-              <span>Obliczanie profilu…</span>
+              <span>{isEn ? 'Calculating profile…' : 'Obliczanie profilu…'}</span>
             </span>
           ) : profile ? (
             <span className={`tp-top-pill ${profile.isObstructed ? 'status-err' : 'status-ok'}`}>
               {profile.isObstructed ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
               {profile.isObstructed
-                ? `Przesłonięcie ${formatPl(profile.obstructionMaxM, 1)} m`
-                : 'Czysty promień LOS'}
+                ? (isEn ? `Obstruction ${formatPl(profile.obstructionMaxM, 1)} m` : `Przesłonięcie ${formatPl(profile.obstructionMaxM, 1)} m`)
+                : (isEn ? 'Clear LOS ray' : 'Czysty promień LOS')}
             </span>
           ) : null}
           {!pemNotFound && (
             <span className="tp-top-pill source-pill">
               <Layers size={13} />
-              {loading ? 'Pobieranie LiDAR GUGiK…' : profile?.source || 'GUGiK LiDAR'}
+              {loading ? (isEn ? 'Fetching GUGiK LiDAR…' : 'Pobieranie LiDAR GUGiK…') : profile?.source || 'GUGiK LiDAR'}
             </span>
           )}
         </div>
@@ -1159,8 +1162,8 @@ export default function TerrainProfileDialog({
             type="button"
             className="tp-icon-btn"
             onClick={() => setIsMinimized(!isMinimized)}
-            title={isMinimized ? 'Rozwiń panel profilu' : 'Zwiń panel do paska'}
-            aria-label={isMinimized ? 'Rozwiń panel profilu' : 'Zwiń panel do paska'}
+            title={isMinimized ? (isEn ? 'Expand profile panel' : 'Rozwiń panel profilu') : (isEn ? 'Collapse panel to bar' : 'Zwiń panel do paska')}
+            aria-label={isMinimized ? (isEn ? 'Expand profile panel' : 'Rozwiń panel profilu') : (isEn ? 'Collapse panel to bar' : 'Zwiń panel do paska')}
           >
             {isMinimized ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
@@ -1168,8 +1171,8 @@ export default function TerrainProfileDialog({
             type="button"
             className="tp-icon-btn"
             onClick={onClose}
-            title="Zamknij profil terenu"
-            aria-label="Zamknij profil terenu"
+            title={isEn ? 'Close terrain profile' : 'Zamknij profil terenu'}
+            aria-label={isEn ? 'Close terrain profile' : 'Zamknij profil terenu'}
           >
             <X size={18} />
           </button>
@@ -1332,7 +1335,7 @@ export default function TerrainProfileDialog({
               <div className="tp-card-section">
                 <div className="tp-section-head">
                   <span className="tp-section-title">
-                    <Radio size={13} /> SEKTOR I PASMO NADAJNIKA
+                    <Radio size={13} /> {isEn ? 'TRANSMITTER SECTOR & BAND' : 'SEKTOR I PASMO NADAJNIKA'}
                   </span>
                   {autoSelect ? (
                     <span className="tp-tag-auto" title="Automatycznie wybrano optymalny sektor skierowany do odbiornika">
@@ -1459,17 +1462,17 @@ export default function TerrainProfileDialog({
             <div className="tp-card-section">
               <div className="tp-section-head">
                 <span className="tp-section-title">
-                  <Crosshair size={13} /> PUNKT ODBIORU
+                  <Crosshair size={13} /> {isEn ? 'RECEIVER POINT' : 'PUNKT ODBIORU'}
                 </span>
                 {onPickOnMap && (
                   <button
                     type="button"
                     className="tp-btn-change-pt"
                     onClick={onPickOnMap}
-                    title="Wybierz inny punkt pomiarowy na mapie"
+                    title={isEn ? 'Pick another point on the map' : 'Wybierz inny punkt pomiarowy na mapie'}
                   >
                     <Crosshair size={12} />
-                    <span>Zmień punkt</span>
+                    <span>{isEn ? 'Change point' : 'Zmień punkt'}</span>
                   </button>
                 )}
               </div>
@@ -1496,12 +1499,12 @@ export default function TerrainProfileDialog({
                     value={rxHeight}
                     onChange={e => setRxHeight(Math.max(1, Number(e.target.value) || 1))}
                   />
-                  <span>m n.p.t.</span>
+                  <span>{isEn ? 'm AGL' : 'm n.p.t.'}</span>
                 </label>
               </div>
 
               <div className="tp-coords-row">
-                <span>Współrzędne odbiornika:</span>
+                <span>{isEn ? 'Receiver coordinates:' : 'Współrzędne odbiornika:'}</span>
                 <strong className="tp-coords-text">
                   {targetCoords[0].toFixed(5)}, {targetCoords[1].toFixed(5)}
                 </strong>
@@ -1515,16 +1518,16 @@ export default function TerrainProfileDialog({
             <div className="tp-main-head">
               <div className="tp-legend">
                 <span className="tp-leg-item">
-                  <i className="tp-swatch-terrain" /> Grunt (NMT GUGiK)
+                  <i className="tp-swatch-terrain" /> {isEn ? 'Ground (NMT)' : 'Grunt (NMT GUGiK)'}
                 </span>
                 <span className="tp-leg-item">
-                  <i className="tp-swatch-clutter" /> Pokrycie (NMPT: lasy i budynki)
+                  <i className="tp-swatch-clutter" /> {isEn ? 'Cover (NMPT: trees & buildings)' : 'Pokrycie (NMPT: lasy i budynki)'}
                 </span>
                 <span className="tp-leg-item">
-                  <i className="tp-swatch-ray" /> Wiązka LOS + 1. strefa Fresnela
+                  <i className="tp-swatch-ray" /> {isEn ? 'LOS Beam + 1st Fresnel zone' : 'Wiązka LOS + 1. strefa Fresnela'}
                 </span>
                 <span className="tp-leg-item">
-                  <i className="tp-swatch-obstacle" /> Kolizja
+                  <i className="tp-swatch-obstacle" /> {isEn ? 'Obstruction' : 'Kolizja'}
                 </span>
               </div>
 
@@ -1532,7 +1535,7 @@ export default function TerrainProfileDialog({
                 {loading ? (
                   <span className="tp-surface-loading-pill">
                     <RefreshCw size={12} className="tp-spin" />
-                    <span>Pobieranie LiDAR z Geoportalu…</span>
+                    <span>{isEn ? 'Fetching LiDAR from Geoportal…' : 'Pobieranie LiDAR z Geoportalu…'}</span>
                   </span>
                 ) : (
                   <span className="tp-scale-tag">
@@ -1664,19 +1667,19 @@ export default function TerrainProfileDialog({
             <div className="tp-stats-grid">
               <div className="tp-stats-card">
                 <span className="tp-stats-label">
-                  <Compass size={13} /> Dystans
+                  <Compass size={13} /> {isEn ? 'Distance' : 'Dystans'}
                 </span>
                 <strong className="tp-stats-value">
                   {profile ? `${formatPl(profile.distanceKm, 2)} km` : `${formatPl(directDistanceKm, 2)} km`}
                 </strong>
                 <small className="tp-stats-sub">
-                  Azymut {formatPl(profile?.azimuthDeg ?? targetBearing, 1)}° ({getCardinalDirection(profile?.azimuthDeg ?? targetBearing)})
+                  {isEn ? 'Azimuth' : 'Azymut'} {formatPl(profile?.azimuthDeg ?? targetBearing, 1)}° ({getCardinalDirection(profile?.azimuthDeg ?? targetBearing)})
                 </small>
               </div>
 
               <div className="tp-stats-card">
                 <span className="tp-stats-label">
-                  <Mountain size={13} /> Przewyższenie
+                  <Mountain size={13} /> {isEn ? 'Elevation diff' : 'Przewyższenie'}
                 </span>
                 <strong className="tp-stats-value">
                   {!loading && profile ? `${profile.rxElevation - profile.txElevation >= 0 ? '+' : ''}${formatPl(profile.rxElevation - profile.txElevation, 1)} m` : '—'}
@@ -1688,7 +1691,7 @@ export default function TerrainProfileDialog({
 
               <div className="tp-stats-card">
                 <span className="tp-stats-label">
-                  <Radio size={13} /> Maszt TX
+                  <Radio size={13} /> {isEn ? 'TX Mast' : 'Maszt TX'}
                 </span>
                 <strong className="tp-stats-value">
                   {formatPl(activeAntenna.height, 1)} m n.p.t.
@@ -1700,7 +1703,7 @@ export default function TerrainProfileDialog({
 
               <div className="tp-stats-card">
                 <span className="tp-stats-label">
-                  <Crosshair size={13} /> Odbiornik RX
+                  <Crosshair size={13} /> {isEn ? 'RX Receiver' : 'Odbiornik RX'}
                 </span>
                 <strong className="tp-stats-value">
                   {formatPl(rxHeight, 1)} m n.p.t.
@@ -1723,7 +1726,7 @@ export default function TerrainProfileDialog({
                   ) : (
                     <CheckCircle2 size={13} />
                   )}
-                  Przeszkoda LOS
+                  {isEn ? 'LOS Obstacle' : 'Przeszkoda LOS'}
                 </span>
                 <strong
                   className={`tp-stats-value ${
@@ -1734,14 +1737,14 @@ export default function TerrainProfileDialog({
                     ? 'Analiza…'
                     : profile?.isObstructed
                     ? `Kolizja -${formatPl(profile.obstructionMaxM, 1)} m`
-                    : 'Czysty LOS'}
+                    : (isEn ? 'Clear LOS' : 'Czysty LOS')}
                 </strong>
                 <small className="tp-stats-sub">
                   {loading
                     ? 'Pobieranie LiDAR…'
                     : profile?.isObstructed
                     ? `${formatPl(profile.obstructionDistKm, 2)} km od BTS (${profile.isClutterObstructed && !profile.isTerrainObstructed ? 'Lasy/budynki' : 'Grunt'})`
-                    : '100% strefa wolna'}
+                    : (isEn ? '100% clear zone' : '100% strefa wolna')}
                 </small>
               </div>
             </div>

@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Search as SearchIcon,ArrowRight,MapPin,X} from 'lucide-react';
 import type {Tower,TowerResult} from '../types';
 import {api} from '../lib/api';
+import {useI18n} from '../lib/i18n';
 
 export interface SearchProps {
   onSelect: (t: Tower) => void;
@@ -11,6 +12,7 @@ export interface SearchProps {
 }
 
 export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchProps){
+  const {t} = useI18n();
   const [query,setQuery]=useState('');
   const [items,setItems]=useState<Tower[]>([]);
   const [open,setOpen]=useState(false);
@@ -59,8 +61,8 @@ export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchP
     inputRef.current?.blur();
   };
 
-  const handleSelect=(t:Tower)=>{
-    onSelect(t);
+  const handleSelect=(tower:Tower)=>{
+    onSelect(tower);
     dismissSearch();
   };
 
@@ -71,7 +73,7 @@ export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchP
       const coordinates=query.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*$/);
       if(coordinates){
         const lat=Number(coordinates[1]),lng=Number(coordinates[2]);
-        if(Math.abs(lat)>90||Math.abs(lng)>180)throw new Error('Nieprawidłowe współrzędne.');
+        if(Math.abs(lat)>90||Math.abs(lng)>180)throw new Error(t.searchInvalidCoords);
         onPlace(lat,lng);
         dismissSearch();
         return;
@@ -82,9 +84,9 @@ export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchP
         return;
       }
       const response=await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=pl&limit=1&q=${encodeURIComponent(query)}`,{signal:AbortSignal.timeout(10000)});
-      if(!response.ok)throw new Error('Wyszukiwanie miejsc jest chwilowo niedostępne. Spróbuj nazwy stacji lub współrzędnych.');
+      if(!response.ok)throw new Error(t.searchServiceUnavailable);
       const results=await response.json();
-      if(!results.length)throw new Error('Nie znaleziono miejsca. Spróbuj pełnej nazwy miasta lub współrzędnych.');
+      if(!results.length)throw new Error(t.searchPlaceNotFound);
       onPlace(Number(results[0].lat),Number(results[0].lon));
       dismissSearch();
     }catch(e){
@@ -100,8 +102,8 @@ export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchP
         <SearchIcon size={18} aria-hidden="true"/>
         <input
           ref={inputRef}
-          aria-label="Szukaj miejscowości, adresu lub ID stacji"
-          placeholder={isFocused ? 'Wpisz miejscowość, adres lub ID stacji…' : 'Miejscowość, stacja…'}
+          aria-label={t.searchAria}
+          placeholder={isFocused ? t.searchPlaceholderFocused : t.searchPlaceholder}
           value={query}
           onFocus={()=>{setIsFocused(true);setOpen(true);}}
           onBlur={()=>setIsFocused(false)}
@@ -116,7 +118,7 @@ export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchP
           <button
             type="button"
             className="search-clear-button"
-            aria-label="Wyczyść wyszukiwanie"
+            aria-label={t.clear}
             onClick={()=>{
               setQuery('');
               dismissSearch();
@@ -130,20 +132,20 @@ export default function Search({onSelect,onPlace,onError,onActiveChange}:SearchP
       </form>
       {open && query.trim().length>=2 && (
         <div className="search-results">
-          <span className="search-label">{loading?'Szukam stacji…':items.length?'Stacje w bazie':'Brak pasujących stacji'}</span>
-          {items.map(t=>(
-            <button key={t.id} onClick={()=>handleSelect(t)}>
+          <span className="search-label">{loading ? t.filterLoading : items.length ? (t.language === 'Język' ? 'Stacje w bazie' : 'Stations in database') : (t.language === 'Język' ? 'Brak pasujących stacji' : 'No matching stations')}</span>
+          {items.map(tower=>(
+            <button key={tower.id} onClick={()=>handleSelect(tower)}>
               <MapPin size={16}/>
               <span>
-                <strong>{t.address}</strong>
-                <small>{t.operators.map(o=>o.name).join(' · ')} · {t.stationId}</small>
+                <strong>{tower.address || t.dbNoAddress}</strong>
+                <small>{tower.operators.map(o=>o.name).join(' · ')} · {tower.stationId}</small>
               </span>
               <ArrowRight size={14}/>
             </button>
           ))}
           <button className="place-result" disabled={busy} onClick={()=>void findPlace()}>
             <SearchIcon size={16}/>
-            {busy?'Szukam miejsca…':'Znajdź na mapie'}
+            {busy ? (t.language === 'Język' ? 'Szukam miejsca…' : 'Searching location…') : (t.language === 'Język' ? 'Znajdź na mapie' : 'Find on map')}
             <ArrowRight size={14}/>
           </button>
         </div>

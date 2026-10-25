@@ -3,28 +3,18 @@ import {
   X,
   Radar,
   Trophy,
-  ChevronDown,
-  ChevronUp,
   Crosshair,
   CheckCircle2,
   AlertTriangle,
-  Radio,
-  SlidersHorizontal,
-  Compass,
   Mountain,
-  Layers,
-  ArrowUpRight,
   ShieldCheck,
-  ShieldAlert,
-  Activity,
   Maximize2,
   Minimize2,
-  MapPin,
-  TowerControl,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { AreaEvaluationResult, OperatorEvaluation } from '../../server/areaEvaluation';
 import type { Tower } from '../types';
+import { useI18n } from '../lib/i18n';
 
 interface Props {
   targetCoords: [number, number];
@@ -42,13 +32,6 @@ const OP_COLORS: Record<string, string> = {
   'T-Mobile': '#e20074',
 };
 
-const PRESETS = [
-  { label: 'Budynek', radius: 150, area: '0.07 km²' },
-  { label: 'Osiedle', radius: 400, area: '0.50 km²' },
-  { label: 'Okolica', radius: 700, area: '1.54 km²' },
-  { label: 'Maks. 3 km²', radius: 977, area: '3.00 km²' },
-];
-
 function formatDist(km: number): string {
   if (!Number.isFinite(km) || km < 0) return '—';
   if (km < 1.0) {
@@ -65,6 +48,16 @@ export default function AreaEvaluationDialog({
   onClose,
   onOpenTerrainProfile,
 }: Props) {
+  const { lang } = useI18n();
+  const isEn = lang === 'en';
+
+  const presets = useMemo(() => [
+    { label: isEn ? 'Building' : 'Budynek', radius: 150, area: '0.07 km²' },
+    { label: isEn ? 'Estate' : 'Osiedle', radius: 400, area: '0.50 km²' },
+    { label: isEn ? 'Area' : 'Okolica', radius: 700, area: '1.54 km²' },
+    { label: isEn ? 'Max. 3 km²' : 'Maks. 3 km²', radius: 977, area: '3.00 km²' },
+  ], [isEn]);
+
   const [data, setData] = useState<AreaEvaluationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +93,7 @@ export default function AreaEvaluationDialog({
         })
         .catch(err => {
           if (!active || err.name === 'AbortError') return;
-          setError(err.message || 'Nie udało się przeprowadzić oceny operatorów.');
+          setError(err.message || (isEn ? 'Failed to perform operator evaluation.' : 'Nie udało się przeprowadzić oceny operatorów.'));
           setLoading(false);
         });
     }, 250);
@@ -110,7 +103,7 @@ export default function AreaEvaluationDialog({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [targetCoords[0], targetCoords[1], radiusM]);
+  }, [targetCoords[0], targetCoords[1], radiusM, isEn]);
 
   const handleLaunchProfile = useCallback(
     (op: OperatorEvaluation) => {
@@ -142,10 +135,9 @@ export default function AreaEvaluationDialog({
   );
 
   const selectedOp = useMemo(() => {
-    if (!data?.operators) return null;
+    if (!data) return null;
     return (
       data.operators.find(o => o.operator === selectedOpName) ||
-      data.operators.find(o => o.isWinner) ||
       data.operators[0] ||
       null
     );
@@ -161,13 +153,13 @@ export default function AreaEvaluationDialog({
           </div>
           <div className="ae-header-titles">
             <h2 className="ae-title">
-              Audyt zasięgu 4 operatorów
-              <span className="ae-title-badge">Baza BTMap + SI2PEM</span>
+              {isEn ? '4-Operator Coverage Audit' : 'Audyt zasięgu 4 operatorów'}
+              <span className="ae-title-badge">{isEn ? 'BTMap DB + SI2PEM' : 'Baza BTMap + SI2PEM'}</span>
             </h2>
             <div className="ae-subtitle">
               <span>{targetCoords[0].toFixed(5)}, {targetCoords[1].toFixed(5)}</span>
               <span>·</span>
-              <span>Obszar {areaKm2.toFixed(2)} km² ({Math.round(radiusM)} m)</span>
+              <span>{isEn ? `Area ${areaKm2.toFixed(2)} km² (${Math.round(radiusM)} m)` : `Obszar ${areaKm2.toFixed(2)} km² (${Math.round(radiusM)} m)`}</span>
             </div>
           </div>
         </div>
@@ -177,16 +169,16 @@ export default function AreaEvaluationDialog({
             type="button"
             className="ae-pick-another-btn"
             onClick={onPickOnMap}
-            title="Wskaż inny budynek, działkę lub miejsce na mapie"
+            title={isEn ? 'Pick another building, plot or point on map' : 'Wskaż inny budynek, działkę lub miejsce na mapie'}
           >
             <Crosshair size={12} />
-            <span>Zmień punkt</span>
+            <span>{isEn ? 'Change point' : 'Zmień punkt'}</span>
           </button>
           <button
             type="button"
             className="ae-icon-btn"
-            title={isMinimized ? 'Rozwiń panel' : 'Zwiń panel'}
-            aria-label={isMinimized ? 'Rozwiń panel' : 'Zwiń panel'}
+            title={isMinimized ? (isEn ? 'Expand panel' : 'Rozwiń panel') : (isEn ? 'Collapse panel' : 'Zwiń panel')}
+            aria-label={isMinimized ? (isEn ? 'Expand panel' : 'Rozwiń panel') : (isEn ? 'Collapse panel' : 'Zwiń panel')}
             onClick={() => setIsMinimized(!isMinimized)}
           >
             {isMinimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
@@ -194,8 +186,8 @@ export default function AreaEvaluationDialog({
           <button
             type="button"
             className="ae-icon-btn"
-            title="Zamknij audyt"
-            aria-label="Zamknij audyt"
+            title={isEn ? 'Close audit' : 'Zamknij audyt'}
+            aria-label={isEn ? 'Close audit' : 'Zamknij audyt'}
             onClick={onClose}
           >
             <X size={16} />
@@ -209,7 +201,7 @@ export default function AreaEvaluationDialog({
           <div className="ae-target-bar">
             {/* Presets Grid */}
             <div className="ae-radius-presets">
-              {PRESETS.map(p => {
+              {presets.map(p => {
                 const isActive = Math.abs(radiusM - p.radius) < 25;
                 return (
                   <button
@@ -227,7 +219,7 @@ export default function AreaEvaluationDialog({
 
             {/* Slider */}
             <div className="ae-slider-row">
-              <span className="ae-slider-label">Promień terenu:</span>
+              <span className="ae-slider-label">{isEn ? 'Area radius:' : 'Promień terenu:'}</span>
               <input
                 type="range"
                 className="ae-radius-slider"
@@ -251,10 +243,11 @@ export default function AreaEvaluationDialog({
                 <div className="ae-radar-sweep">
                   <Radar size={24} />
                 </div>
-                <h3 className="ae-loading-title">Przeliczanie parametrów 4 operatorów…</h3>
+                <h3 className="ae-loading-title">{isEn ? 'Evaluating 4 operators…' : 'Przeliczanie parametrów 4 operatorów…'}</h3>
                 <p className="ae-loading-desc">
-                  Trwa sprawdzanie najbliższych stacji bazowych, wysokości masztów, azymutów sektorów antenowych,
-                  agregacji pasm oraz sprawozdań laboratoryjnych SI2PEM.
+                  {isEn
+                    ? 'Checking nearest base stations, mast heights, antenna sector azimuths, band aggregation, and SI2PEM lab measurements.'
+                    : 'Trwa sprawdzanie najbliższych stacji bazowych, wysokości masztów, azymutów sektorów antenowych, agregacji pasm oraz sprawozdań laboratoryjnych SI2PEM.'}
                 </p>
               </div>
             ) : error ? (
@@ -266,16 +259,16 @@ export default function AreaEvaluationDialog({
                   className="ae-btn-secondary"
                   onClick={() => onRadiusChange(radiusM)}
                 >
-                  Spróbuj ponownie
+                  {isEn ? 'Try again' : 'Spróbuj ponownie'}
                 </button>
               </div>
             ) : data ? (
               <>
-                {/* 4-Operator Leaderboard Table (All 4 visible at once!) */}
+                {/* 4-Operator Leaderboard Table */}
                 <div className="ae-leaderboard-section">
                   <div className="ae-leaderboard-header">
-                    <span>Ranking operatorów w tym punkcie</span>
-                    <span className="ae-leaderboard-hint">Kliknij operatora, aby rozwinąć audyt</span>
+                    <span>{isEn ? 'Operator ranking at this point' : 'Ranking operatorów w tym punkcie'}</span>
+                    <span className="ae-leaderboard-hint">{isEn ? 'Click operator to expand audit' : 'Kliknij operatora, aby rozwinąć audyt'}</span>
                   </div>
 
                   <div className="ae-leaderboard-grid">
@@ -310,7 +303,7 @@ export default function AreaEvaluationDialog({
                                 {s?.isNetworks && (
                                   <span
                                     className="ae-networks-tag"
-                                    title={`Współdzielenie stacji w ramach NetWorkS! z ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}`}
+                                    title={isEn ? `Station shared via NetWorkS! with ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}` : `Współdzielenie stacji w ramach NetWorkS! z ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}`}
                                   >
                                     N!
                                   </span>
@@ -320,7 +313,7 @@ export default function AreaEvaluationDialog({
                                 className="ae-station-sub"
                                 title={s ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}` : undefined}
                               >
-                                {s ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}` : 'Brak stacji w zasięgu'}
+                                {s ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}` : (isEn ? 'No station in range' : 'Brak stacji w zasięgu')}
                               </span>
                             </div>
                           </div>
@@ -332,32 +325,32 @@ export default function AreaEvaluationDialog({
                                 {s.isNetworks && (
                                   <span
                                     className="ae-metric-chip chip-networks"
-                                    title={`NetWorkS! (N!): stacja współdzielona z operatorem ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}`}
+                                    title={isEn ? `NetWorkS! (N!): station shared with operator ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}` : `NetWorkS! (N!): stacja współdzielona z operatorem ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}`}
                                   >
                                     N! NetWorkS!
                                   </span>
                                 )}
                                 <span
                                   className={`ae-metric-chip ${s.hasCband5G ? 'chip-cband' : 'chip-dim'}`}
-                                  title={s.hasCband5G ? '5G C-Band 3600 MHz n78 aktywny' : 'Brak pasma 5G 3600 MHz'}
+                                  title={s.hasCband5G ? (isEn ? '5G C-Band 3600 MHz n78 active' : '5G C-Band 3600 MHz n78 aktywny') : (isEn ? 'No 5G 3600 MHz band' : 'Brak pasma 5G 3600 MHz')}
                                 >
                                   {s.hasCband5G ? '5G 3.6 GHz' : 'LTE-A'}
                                 </span>
                                 <span
                                   className={`ae-metric-chip ${s.isLosClear ? 'chip-ok' : 'chip-warn'}`}
-                                  title={s.isLosClear ? 'Widoczność optyczna LOS czysta' : `Przeszkoda ${s.obstructionM.toFixed(1)}m`}
+                                  title={s.isLosClear ? (isEn ? 'Line of sight (LOS) clear' : 'Widoczność optyczna LOS czysta') : (isEn ? `Obstruction ${s.obstructionM.toFixed(1)}m` : `Przeszkoda ${s.obstructionM.toFixed(1)}m`)}
                                 >
-                                  {s.isLosClear ? 'LOS Czysty' : `LOS -${s.obstructionM.toFixed(1)}m`}
+                                  {s.isLosClear ? (isEn ? 'LOS Clear' : 'LOS Czysty') : `LOS -${s.obstructionM.toFixed(1)}m`}
                                 </span>
                                 <span
                                   className={`ae-metric-chip ${s.isMainLobe ? 'chip-ok' : s.isBacklobe ? 'chip-err' : 'chip-dim'}`}
-                                  title={`Sektor ${s.bestSectorAzimuth}° (odchylenie ${s.sectorDeviationDeg.toFixed(0)}°)`}
+                                  title={isEn ? `Sector ${s.bestSectorAzimuth}° (deviation ${s.sectorDeviationDeg.toFixed(0)}°)` : `Sektor ${s.bestSectorAzimuth}° (odchylenie ${s.sectorDeviationDeg.toFixed(0)}°)`}
                                 >
                                   {s.bestSectorAzimuth}° ({s.sectorDeviationDeg.toFixed(0)}°)
                                 </span>
                               </>
                             ) : (
-                              <span className="ae-no-station-label">Brak SI2PEM</span>
+                              <span className="ae-no-station-label">{isEn ? 'No SI2PEM' : 'Brak SI2PEM'}</span>
                             )}
                           </div>
 
@@ -386,17 +379,17 @@ export default function AreaEvaluationDialog({
                           className="ae-brand-dot"
                           style={{ background: OP_COLORS[selectedOp.operator] || '#94a3b8' }}
                         />
-                        <strong className="ae-dossier-heading">Audyt inżynieryjny: {selectedOp.operator}</strong>
+                        <strong className="ae-dossier-heading">{isEn ? `RF Engineering Audit: ${selectedOp.operator}` : `Audyt inżynieryjny: ${selectedOp.operator}`}</strong>
                         {selectedOp.isNetworks && (
                           <span
                             className="ae-networks-pill"
-                            title="Infrastruktura współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)"
+                            title={isEn ? 'Infrastructure shared in NetWorkS! alliance (Orange + T-Mobile)' : 'Infrastruktura współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)'}
                           >
                             N! NetWorkS!
                           </span>
                         )}
                         <span className={`ae-grade-tag grade-${selectedOp.grade[0]}`}>
-                          Ocena {selectedOp.grade} ({selectedOp.score} / 100 pkt)
+                          {isEn ? `Grade ${selectedOp.grade} (${selectedOp.score} / 100 pts)` : `Ocena ${selectedOp.grade} (${selectedOp.score} / 100 pkt)`}
                         </span>
                       </div>
 
@@ -405,10 +398,10 @@ export default function AreaEvaluationDialog({
                           type="button"
                           className="ae-profile-btn"
                           onClick={() => handleLaunchProfile(selectedOp)}
-                          title="Otwórz wykres profilu terenu LiDAR z tej stacji"
+                          title={isEn ? 'Open LiDAR terrain profile from this station' : 'Otwórz wykres profilu terenu LiDAR z tej stacji'}
                         >
                           <Mountain size={13} />
-                          <span>Profil terenu</span>
+                          <span>{isEn ? 'Terrain profile' : 'Profil terenu'}</span>
                         </button>
                       )}
                     </div>
@@ -417,53 +410,53 @@ export default function AreaEvaluationDialog({
                     {selectedOp.servingStation ? (
                       <div className="ae-telemetry-grid">
                         <div className="ae-tel-cell">
-                          <span className="ae-tel-k">Najbliższa stacja</span>
+                          <span className="ae-tel-k">{isEn ? 'Nearest station' : 'Najbliższa stacja'}</span>
                           <span className="ae-tel-v" title={selectedOp.servingStation.address}>
                             {selectedOp.servingStation.stationId || selectedOp.servingStation.id}
                           </span>
                         </div>
                         <div className="ae-tel-cell">
-                          <span className="ae-tel-k">Fizyczna odległość</span>
+                          <span className="ae-tel-k">{isEn ? 'Physical distance' : 'Fizyczna odległość'}</span>
                           <span className="ae-tel-v ae-highlight">
                             {formatDist(selectedOp.servingStation.distanceKm)}
                           </span>
                         </div>
                         <div className="ae-tel-cell">
-                          <span className="ae-tel-k">Wysokość anteny</span>
+                          <span className="ae-tel-k">{isEn ? 'Antenna height' : 'Wysokość anteny'}</span>
                           <span className="ae-tel-v">
-                            {selectedOp.servingStation.antennaHeightM} m n.p.t.
+                            {selectedOp.servingStation.antennaHeightM} {isEn ? 'm AGL' : 'm n.p.t.'}
                           </span>
                         </div>
                         <div className="ae-tel-cell">
-                          <span className="ae-tel-k">Sektor antenowy</span>
+                          <span className="ae-tel-k">{isEn ? 'Antenna sector' : 'Sektor antenowy'}</span>
                           <span className="ae-tel-v">
-                            {selectedOp.servingStation.bestSectorAzimuth}° (odch. {selectedOp.servingStation.sectorDeviationDeg.toFixed(1)}°)
+                            {selectedOp.servingStation.bestSectorAzimuth}° ({isEn ? 'dev.' : 'odch.'} {selectedOp.servingStation.sectorDeviationDeg.toFixed(1)}°)
                           </span>
                         </div>
                         <div className="ae-tel-cell">
-                          <span className="ae-tel-k">Widoczność LiDAR</span>
+                          <span className="ae-tel-k">{isEn ? 'LiDAR Visibility' : 'Widoczność LiDAR'}</span>
                           <span className={`ae-tel-v ${selectedOp.servingStation.isLosClear ? 'text-ok' : 'text-warn'}`}>
-                            {selectedOp.servingStation.isLosClear ? 'Czysty tor (LOS)' : `Przesłonięcie ${selectedOp.servingStation.obstructionM.toFixed(1)}m`}
+                            {selectedOp.servingStation.isLosClear ? (isEn ? 'Clear path (LOS)' : 'Czysty tor (LOS)') : (isEn ? `Obstruction ${selectedOp.servingStation.obstructionM.toFixed(1)}m` : `Przesłonięcie ${selectedOp.servingStation.obstructionM.toFixed(1)}m`)}
                           </span>
                         </div>
                         <div className="ae-tel-cell">
-                          <span className="ae-tel-k">Pasmo 5G C-Band</span>
+                          <span className="ae-tel-k">{isEn ? '5G C-Band' : 'Pasmo 5G C-Band'}</span>
                           <span className={`ae-tel-v ${selectedOp.servingStation.hasCband5G ? 'text-cband' : ''}`}>
-                            {selectedOp.servingStation.hasCband5G ? '3600 MHz (n78)' : 'Brak (tylko LTE)'}
+                            {selectedOp.servingStation.hasCband5G ? '3600 MHz (n78)' : (isEn ? 'None (LTE only)' : 'Brak (tylko LTE)')}
                           </span>
                         </div>
                         {selectedOp.servingStation.isNetworks && (
                           <div className="ae-tel-cell ae-tel-cell-full">
-                            <span className="ae-tel-k">Sojusz radiowy RAN</span>
+                            <span className="ae-tel-k">{isEn ? 'RAN Radio Alliance' : 'Sojusz radiowy RAN'}</span>
                             <span className="ae-tel-v text-networks">
-                              NetWorkS! (N!) · Współdzielenie z {selectedOp.servingStation.networksPartner || (selectedOp.operator === 'Orange' ? 'T-Mobile' : 'Orange')}
+                              NetWorkS! (N!) · {isEn ? 'Shared with' : 'Współdzielenie z'} {selectedOp.servingStation.networksPartner || (selectedOp.operator === 'Orange' ? 'T-Mobile' : 'Orange')}
                             </span>
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className="ae-no-station-box">
-                        Brak aktywnych stacji bazowych ze sprawozdaniem SI2PEM w promieniu 7.5 km.
+                        {isEn ? 'No active base stations with SI2PEM report within 7.5 km.' : 'Brak aktywnych stacji bazowych ze sprawozdaniem SI2PEM w promieniu 7.5 km.'}
                       </div>
                     )}
 
@@ -473,40 +466,40 @@ export default function AreaEvaluationDialog({
                         <div
                           className="ae-seg ae-seg-terrain"
                           style={{ width: `${(selectedOp.scoreBreakdown.terrainLos / 100) * 100}%` }}
-                          title={`Teren i LOS: ${selectedOp.scoreBreakdown.terrainLos}/30`}
+                          title={`${isEn ? 'Terrain & LOS' : 'Teren i LOS'}: ${selectedOp.scoreBreakdown.terrainLos}/30`}
                         />
                         <div
                           className="ae-seg ae-seg-spectrum"
                           style={{ width: `${(selectedOp.scoreBreakdown.spectrumBands / 100) * 100}%` }}
-                          title={`Pasma i 5G: ${selectedOp.scoreBreakdown.spectrumBands}/30`}
+                          title={`${isEn ? 'Bands & 5G' : 'Pasma i 5G'}: ${selectedOp.scoreBreakdown.spectrumBands}/30`}
                         />
                         <div
                           className="ae-seg ae-seg-sector"
                           style={{ width: `${(selectedOp.scoreBreakdown.sectorAlignment / 100) * 100}%` }}
-                          title={`Kąt sektora: ${selectedOp.scoreBreakdown.sectorAlignment}/20`}
+                          title={`${isEn ? 'Sector angle' : 'Kąt sektora'}: ${selectedOp.scoreBreakdown.sectorAlignment}/20`}
                         />
                         <div
                           className="ae-seg ae-seg-infra"
                           style={{ width: `${(selectedOp.scoreBreakdown.infrastructure / 100) * 100}%` }}
-                          title={`Maszt i SI2PEM: ${selectedOp.scoreBreakdown.infrastructure}/20`}
+                          title={`${isEn ? 'Mast & SI2PEM' : 'Maszt i SI2PEM'}: ${selectedOp.scoreBreakdown.infrastructure}/20`}
                         />
                       </div>
                       <div className="ae-breakdown-legend">
                         <span className="ae-legend-item">
                           <span className="ae-legend-dot dot-terrain" />
-                          <span>Teren/LOS: {selectedOp.scoreBreakdown.terrainLos}/30</span>
+                          <span>{isEn ? 'Terrain/LOS' : 'Teren/LOS'}: {selectedOp.scoreBreakdown.terrainLos}/30</span>
                         </span>
                         <span className="ae-legend-item">
                           <span className="ae-legend-dot dot-spectrum" />
-                          <span>Pasma: {selectedOp.scoreBreakdown.spectrumBands}/30</span>
+                          <span>{isEn ? 'Bands' : 'Pasma'}: {selectedOp.scoreBreakdown.spectrumBands}/30</span>
                         </span>
                         <span className="ae-legend-item">
                           <span className="ae-legend-dot dot-sector" />
-                          <span>Sektor: {selectedOp.scoreBreakdown.sectorAlignment}/20</span>
+                          <span>{isEn ? 'Sector' : 'Sektor'}: {selectedOp.scoreBreakdown.sectorAlignment}/20</span>
                         </span>
                         <span className="ae-legend-item">
                           <span className="ae-legend-dot dot-infra" />
-                          <span>Infrastruktura: {selectedOp.scoreBreakdown.infrastructure}/20</span>
+                          <span>{isEn ? 'Infrastructure' : 'Infrastruktura'}: {selectedOp.scoreBreakdown.infrastructure}/20</span>
                         </span>
                       </div>
                     </div>
@@ -523,7 +516,7 @@ export default function AreaEvaluationDialog({
                       <div className="ae-facts-group">
                         <div className="ae-facts-heading text-pro">
                           <CheckCircle2 size={13} />
-                          <span>Mocne strony i atuty ({selectedOp.pros.length})</span>
+                          <span>{isEn ? `Strengths and advantages (${selectedOp.pros.length})` : `Mocne strony i atuty (${selectedOp.pros.length})`}</span>
                         </div>
                         <ul className="ae-facts-list">
                           {selectedOp.pros.map((pro, idx) => (
@@ -541,7 +534,7 @@ export default function AreaEvaluationDialog({
                       <div className="ae-facts-group">
                         <div className="ae-facts-heading text-con">
                           <AlertTriangle size={13} />
-                          <span>Ograniczenia i słabe punkty ({selectedOp.cons.length})</span>
+                          <span>{isEn ? `Limitations and weaknesses (${selectedOp.cons.length})` : `Ograniczenia i słabe punkty (${selectedOp.cons.length})`}</span>
                         </div>
                         <ul className="ae-facts-list">
                           {selectedOp.cons.map((con, idx) => (
@@ -558,8 +551,8 @@ export default function AreaEvaluationDialog({
                     <div className="ae-dossier-footer">
                       <ShieldCheck size={12} color="#10b981" />
                       <span>
-                        {selectedOp.si2pemStationsCount} stacji z SI2PEM uwzględnionych
-                        {selectedOp.unverifiedStationsCount > 0 && ` · ${selectedOp.unverifiedStationsCount} pozwoleń UKE odrzucono (brak pomiaru SI2PEM)`}
+                        {selectedOp.si2pemStationsCount} {isEn ? 'stations with SI2PEM included' : 'stacji z SI2PEM uwzględnionych'}
+                        {selectedOp.unverifiedStationsCount > 0 && (isEn ? ` · ${selectedOp.unverifiedStationsCount} UKE permits excluded (no SI2PEM report)` : ` · ${selectedOp.unverifiedStationsCount} pozwoleń UKE odrzucono (brak pomiaru SI2PEM)`)}
                       </span>
                     </div>
                   </div>

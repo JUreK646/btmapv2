@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { TelecomStats } from '../types';
 import { api, formatNumber } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 
 export const STATS_OPERATOR_COLORS: Record<string, string> = {
   'Plus': '#10b981',        // Emerald Green
@@ -299,6 +300,8 @@ function SvgStackedBarChart({
 }
 
 export function StatsView({ onRetry }: { health?: unknown; error?: string; onRetry?: () => void }) {
+  const { t, lang } = useI18n();
+  const isPl = lang === 'pl';
   const [source, setSource] = useState<'ALL' | 'UKE' | 'BTMAP'>('UKE');
   const [stats, setStats] = useState<TelecomStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -418,10 +421,10 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
     return (
       <section className="content-view empty-state stats-error-state">
         <Activity size={48} className="muted-icon" />
-        <h2>Statystyki są chwilowo niedostępne</h2>
+        <h2>{t.statsUnavailable}</h2>
         <p>{error}</p>
         <button className="primary-button" onClick={() => loadStats(source)}>
-          <RefreshCw size={16} /> Spróbuj ponownie
+          <RefreshCw size={16} /> {isPl ? 'Spróbuj ponownie' : 'Try again'}
         </button>
       </section>
     );
@@ -435,18 +438,18 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
       <div className="stats-header-container">
         <div>
           <div className="stats-header-title-row">
-            <h1>Statystyki telekomunikacyjne</h1>
+            <h1>{t.statsTitle}</h1>
             <span className="stats-live-pill">
               <span className="pulse-dot" />
-              Na żywo
+              {isPl ? 'Na żywo' : 'Live'}
             </span>
-            <span className="stats-verified-pill" title="Dane wygenerowane z bazy UKE i zweryfikowanych pomiarów">
+            <span className="stats-verified-pill" title={isPl ? "Dane wygenerowane z bazy UKE i zweryfikowanych pomiarów" : "Data generated from UKE database and verified measurements"}>
               <ShieldCheck size={13} />
-              Oficjalne dane UKE
+              {isPl ? 'Oficjalne dane UKE' : 'Official UKE data'}
             </span>
           </div>
           <p className="stats-header-desc">
-            Rzeczywiste dane z państwowego rejestru pozwoleń radiowych UKE (37 302 unikalne stacje, ponad 320 000 pozwoleń) oraz wewnętrznej bazy stacji BTMap.
+            {t.statsSubtitle}
           </p>
         </div>
 
@@ -460,7 +463,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               onClick={() => setSource('UKE')}
             >
               <Radio size={14} />
-              <span>Wykaz pozwoleń UKE</span>
+              <span>{isPl ? 'Wykaz pozwoleń UKE' : 'UKE Radio Permits'}</span>
             </button>
             <button
               role="tab"
@@ -469,7 +472,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               onClick={() => setSource('BTMAP')}
             >
               <Server size={14} />
-              <span>Baza danych BTMap</span>
+              <span>{isPl ? 'Baza danych BTMap' : 'BTMap Database'}</span>
             </button>
             <button
               role="tab"
@@ -478,7 +481,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               onClick={() => setSource('ALL')}
             >
               <Layers size={14} />
-              <span>Wszystkie</span>
+              <span>{isPl ? 'Wszystkie' : 'All'}</span>
             </button>
           </div>
 
@@ -490,7 +493,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
               title="Eksportuj pełne zestawienie w formacie JSON"
             >
               <ArrowDownToLine size={15} />
-              <span>Eksport JSON</span>
+              <span>{isPl ? 'Eksport JSON' : 'Export JSON'}</span>
             </button>
             <button
               className="icon-button"
@@ -536,20 +539,20 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
           <div className="stats-kpi-grid">
             <div className="kpi-card highlight-card">
               <span className="kpi-label">
-                {source === 'BTMAP' ? 'Komórki / Sektory' : 'Pozwolenia ogółem'}
+                {source === 'BTMAP' ? (isPl ? 'Komórki / Sektory' : 'Cells / Sectors') : (isPl ? 'Pozwolenia ogółem' : 'Total Permits')}
               </span>
               <strong className="kpi-value">
                 {formatNumber(source === 'BTMAP' ? (summary?.totalCells || 0) : (summary?.totalPermits || 0))}
               </strong>
               <span className="kpi-subtext">
-                {source === 'BTMAP' ? 'Zarejestrowane sektory w bazie' : 'Wszystkie zarejestrowane pasma i pozwolenia'}
+                {source === 'BTMAP' ? (isPl ? 'Zarejestrowane sektory w bazie' : 'Registered sectors in database') : (isPl ? 'Wszystkie zarejestrowane pasma i pozwolenia' : 'All registered bands and permits')}
               </span>
             </div>
 
             <div className="kpi-card">
-              <span className="kpi-label">Unikalne stacje</span>
+              <span className="kpi-label">{isPl ? 'Unikalne stacje' : 'Unique stations'}</span>
               <strong className="kpi-value">{formatNumber(summary?.totalTowers || 0)}</strong>
-              <span className="kpi-subtext">Fizyczne lokalizacje masztów i obiektów</span>
+              <span className="kpi-subtext">{isPl ? 'Fizyczne lokalizacje masztów i obiektów' : 'Physical tower & rooftop locations'}</span>
             </div>
 
             {stats.technologies.slice(0, 6).map(tech => (
@@ -558,11 +561,11 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
                   <span className="kpi-label" style={{ color: getTechColor(tech.tech) }}>
                     {tech.tech}
                   </span>
-                  <span className="kpi-badge">{tech.percent}% stacji</span>
+                  <span className="kpi-badge">{tech.percent}% {isPl ? 'stacji' : 'stations'}</span>
                 </div>
                 <strong className="kpi-value">{formatNumber(tech.towers)}</strong>
                 <span className="kpi-subtext">
-                  {formatNumber(tech.permits)} {source === 'BTMAP' ? 'komórek' : 'pozwoleń'}
+                  {formatNumber(tech.permits)} {source === 'BTMAP' ? (isPl ? 'komórek' : 'cells') : (isPl ? 'pozwoleń' : 'permits')}
                 </span>
               </div>
             ))}
@@ -574,8 +577,8 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             <div className="stats-panel-card">
               <div className="panel-card-header">
                 <div>
-                  <h2>Rozkład wg technologii</h2>
-                  <p className="muted">Udział poszczególnych technologii w unikalnych lokalizacjach stacji</p>
+                  <h2>{t.statsTechDistribution}</h2>
+                  <p className="muted">{isPl ? 'Udział poszczególnych technologii w unikalnych lokalizacjach stacji' : 'Share of technologies across unique station locations'}</p>
                 </div>
                 <PieChartIcon size={18} className="muted-icon" />
               </div>
@@ -627,7 +630,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
                                 {hoveredTech}
                               </span>
                               <strong className="donut-center-val">{formatNumber(item?.towers || 0)}</strong>
-                              <span className="donut-center-sub">{item?.percent}% stacji</span>
+                              <span className="donut-center-sub">{item?.percent}% {isPl ? 'stacji' : 'stations'}</span>
                             </>
                           );
                         })()
@@ -671,8 +674,8 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             <div className="stats-panel-card">
               <div className="panel-card-header">
                 <div>
-                  <h2>Rozkład wg operatora</h2>
-                  <p className="muted">Liczba unikalnych lokalizacji stacji czołowych operatorów</p>
+                  <h2>{t.statsOperatorDistribution}</h2>
+                  <p className="muted">{isPl ? 'Liczba unikalnych lokalizacji stacji czołowych operatorów' : 'Number of unique station locations of major operators'}</p>
                 </div>
                 <Radio size={18} className="muted-icon" />
               </div>
@@ -724,15 +727,15 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
                                 {hoveredOperator}
                               </span>
                               <strong className="donut-center-val">{formatNumber(item?.towers || 0)}</strong>
-                              <span className="donut-center-sub">{item?.percent}% stacji</span>
+                              <span className="donut-center-sub">{item?.percent}% {isPl ? 'stacji' : 'stations'}</span>
                             </>
                           );
                         })()
                       ) : (
                         <>
-                          <span className="donut-center-label">Operatorzy</span>
+                          <span className="donut-center-label">{isPl ? 'Operatorzy' : 'Operators'}</span>
                           <strong className="donut-center-val">{stats.operators.length}</strong>
-                          <span className="donut-center-sub">aktywnych sieci</span>
+                          <span className="donut-center-sub">{isPl ? 'aktywnych sieci' : 'active networks'}</span>
                         </>
                       )}
                     </div>
@@ -769,8 +772,8 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
           <div className="stats-panel-card stacked-chart-panel">
             <div className="panel-card-header bar-chart-header">
               <div>
-                <h2>Unikalne stacje wg pasma</h2>
-                <p className="muted">Częstotliwości radiowe oraz nasycenie stacjami w podziale na operatorów</p>
+                <h2>{t.statsBandsDistribution}</h2>
+                <p className="muted">{isPl ? 'Częstotliwości radiowe oraz nasycenie stacjami w podziale na operatorów' : 'Radio frequencies and station saturation by operator'}</p>
               </div>
 
               {/* Operators Color Chips Legend */}
@@ -827,8 +830,8 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
           <div className="stats-panel-card stacked-chart-panel">
             <div className="panel-card-header bar-chart-header">
               <div>
-                <h2>Unikalne stacje wg województwa</h2>
-                <p className="muted">Rozkład geograficzny infrastruktury radiowej w 16 województwach (posortowany malejąco)</p>
+                <h2>{t.statsProvinceDistribution}</h2>
+                <p className="muted">{isPl ? 'Rozkład geograficzny infrastruktury radiowej w 16 województwach (posortowany malejąco)' : 'Geographic distribution of radio infrastructure across 16 provinces'}</p>
               </div>
 
               {/* Operators Color Chips Legend */}

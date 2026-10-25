@@ -1,6 +1,7 @@
 import {Check,ChevronDown,Compass,Database,FileText,Layers} from 'lucide-react';
 import type {Filters as FilterState} from '../types';
 import {BANDS,OPERATORS,PROVINCES} from '../lib/constants';
+import {useI18n} from '../lib/i18n';
 
 const technologies=[
   {value:'5G',generation:'5G',label:'NR'},
@@ -12,6 +13,7 @@ const technologies=[
 ];
 
 export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStatus,azimuthsEnabled,onAzimuthsChange}:{filters:FilterState;onChange:(f:FilterState)=>void;pemEnabled?:boolean;onPemChange?:(enabled:boolean)=>void;pemStatus?:string;azimuthsEnabled?:boolean;onAzimuthsChange?:(enabled:boolean)=>void}){
+  const {t} = useI18n();
   const toggle=(key:'operators'|'techs'|'bands',value:string)=>onChange({
     ...filters,
     [key]:filters[key].includes(value)?filters[key].filter(item=>item!==value):[...filters[key],value],
@@ -20,12 +22,12 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
   return <div className="station-filters">
     {(onPemChange || onAzimuthsChange) && (
       <fieldset className="filter-group pem-layer-group">
-        <legend>Warstwy mapy</legend>
+        <legend>{t.filterLayers}</legend>
         {onPemChange && (
           <>
             <label className="pem-layer-toggle">
               <input type="checkbox" checked={pemEnabled} onChange={e=>onPemChange(e.target.checked)}/>
-              <span><strong>Pomiary PEM</strong><small>Planowane i niedawno zakończone · SI2PEM</small></span>
+              <span><strong>{t.filterPemTitle}</strong><small>{t.filterPemDesc}</small></span>
               <i className="pem-layer-key" aria-hidden="true"/>
             </label>
             {pemEnabled && <p className="pem-layer-status" role="status">{pemStatus}</p>}
@@ -34,50 +36,50 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
         {onAzimuthsChange && (
           <label className="pem-layer-toggle azimuth-layer-toggle">
             <input type="checkbox" checked={azimuthsEnabled} onChange={e=>onAzimuthsChange(e.target.checked)}/>
-            <span><strong>Azymuty</strong><small>Kierunki i sektory anten (widoczne przy zbliżeniu)</small></span>
+            <span><strong>{t.filterAzimuthsTitle}</strong><small>{t.filterAzimuthsDesc}</small></span>
             <span className="azimuth-layer-key" aria-hidden="true"><Compass size={14}/></span>
           </label>
         )}
       </fieldset>
     )}
-        <fieldset className="filter-group">
-      <legend>Źródło danych <span>{filters.source === 'BTMAP' ? 'Baza BTMap' : filters.source === 'UKE' ? 'Pozwolenia UKE' : 'Wszystkie'}</span></legend>
+    <fieldset className="filter-group">
+      <legend>{t.filterSource} <span>{filters.source === 'BTMAP' ? t.filterSourceDb : filters.source === 'UKE' ? t.filterSourceUke : t.filterSourceAll}</span></legend>
       <div className="filter-options source-filters">
         <button
           type="button"
           className={`filter-option ${(!filters.source || filters.source === 'ALL') ? 'is-selected' : ''}`}
           onClick={() => onChange({ ...filters, source: 'ALL' })}
           aria-pressed={!filters.source || filters.source === 'ALL'}
-          title="Wyświetlaj stacje z obu źródeł"
+          title={t.filterSourceAllDesc}
         >
           <Layers size={13} />
-          <span>Wszystkie</span>
+          <span>{t.filterSourceAll}</span>
         </button>
         <button
           type="button"
           className={`filter-option ${filters.source === 'BTMAP' ? 'is-selected' : ''}`}
           onClick={() => onChange({ ...filters, source: 'BTMAP' })}
           aria-pressed={filters.source === 'BTMAP'}
-          title="Tylko zweryfikowane stacje w bazie BTMap"
+          title={t.filterSourceDbDesc}
         >
           <Database size={13} />
-          <span>Baza danych</span>
+          <span>{t.filterSourceDb}</span>
         </button>
         <button
           type="button"
           className={`filter-option ${filters.source === 'UKE' ? 'is-selected' : ''}`}
           onClick={() => onChange({ ...filters, source: 'UKE' })}
           aria-pressed={filters.source === 'UKE'}
-          title="Tylko urzędowe pozwolenia radiowe UKE"
+          title={t.filterSourceUkeDesc}
         >
           <FileText size={13} />
-          <span>UKE</span>
+          <span>{t.filterSourceUke}</span>
         </button>
       </div>
     </fieldset>
 
     <fieldset className="filter-group">
-      <legend>Operatorzy <span>{filters.operators.length?`Wybrano ${filters.operators.length}`:'Wszyscy'}</span></legend>
+      <legend>{t.filterOperators} <span>{filters.operators.length ? t.filterSelectedCount(filters.operators.length) : t.filterAll}</span></legend>
       <div className="filter-options operator-filters">
         {OPERATORS.map(operator=>{
           const selected=filters.operators.includes(operator.name);
@@ -90,7 +92,7 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
     </fieldset>
 
     <fieldset className="filter-group">
-      <legend>Technologie <span>{filters.techs.length?`Wybrano ${filters.techs.length}`:'Wszystkie'}</span></legend>
+      <legend>{t.filterTechs} <span>{filters.techs.length ? t.filterSelectedCount(filters.techs.length) : t.filterAllFmt}</span></legend>
       <div className="filter-options technology-filters">
         {technologies.map(technology=><button type="button" key={technology.value} className={`filter-option technology-filter ${filters.techs.includes(technology.value)?'is-selected':''}`} aria-label={`Technologia ${technology.generation} ${technology.label}`.trim()} aria-pressed={filters.techs.includes(technology.value)} onClick={()=>toggle('techs',technology.value)}>
           {technology.generation&&<span className="filter-generation" aria-hidden="true">{technology.generation}</span>}
@@ -100,17 +102,17 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
     </fieldset>
 
     <fieldset className="filter-group">
-      <legend>Pasma <span>MHz</span></legend>
+      <legend>{t.filterBands} <span>MHz</span></legend>
       <div className="filter-options frequency-filters">
         {BANDS.map(band=><button type="button" key={band} className={`filter-option frequency-filter ${filters.bands.includes(band)?'is-selected':''}`} aria-label={`Pasmo ${band} MHz`} aria-pressed={filters.bands.includes(band)} onClick={()=>toggle('bands',band)}>{band}</button>)}
       </div>
     </fieldset>
 
     <div className="filter-region">
-      <label htmlFor="station-province">Województwo</label>
+      <label htmlFor="station-province">{t.filterProvince}</label>
       <div className="filter-select">
         <select id="station-province" value={filters.province} onChange={event=>onChange({...filters,province:event.target.value})}>
-          <option value="">Cała Polska</option>
+          <option value="">{t.filterAllPoland}</option>
           {PROVINCES.map(province=><option key={province}>{province}</option>)}
         </select>
         <ChevronDown size={15} aria-hidden="true"/>
