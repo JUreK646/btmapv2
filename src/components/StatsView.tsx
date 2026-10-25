@@ -13,7 +13,7 @@ import {
   CheckCircle2,
   ShieldCheck
 } from 'lucide-react';
-import type { TelecomStats, StatsBandItem, StatsProvinceItem } from '../types';
+import type { TelecomStats } from '../types';
 import { api, formatNumber } from '../lib/api';
 
 export const STATS_OPERATOR_COLORS: Record<string, string> = {
@@ -98,6 +98,204 @@ interface TooltipState {
   subtitle?: string;
   total?: number;
   items?: { name: string; count: number; percent?: number; color: string }[];
+}
+
+interface SvgStackedBarChartProps {
+  items: {
+    key: string;
+    label: string;
+    total: number;
+    operators: { operator: string; count: number }[];
+  }[];
+  scale: { max: number; ticks: number[] };
+  titlePrefix?: string;
+  subtitle: string;
+  slotWidth?: number;
+  barWidth?: number;
+  onHoverItem: (rect: DOMRect, item: { key: string; label: string; total: number; operators: { operator: string; count: number }[] }) => void;
+  onLeaveItem: () => void;
+}
+
+function SvgStackedBarChart({
+  items,
+  scale,
+  titlePrefix = '',
+  subtitle,
+  slotWidth = 56,
+  barWidth = 30,
+  onHoverItem,
+  onLeaveItem,
+}: SvgStackedBarChartProps) {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
+  const plotLeft = 64;
+  const plotRightPadding = 24;
+  const plotWidth = items.length * slotWidth;
+  const svgWidth = plotLeft + plotWidth + plotRightPadding;
+  const svgHeight = 330;
+  const plotTop = 25;
+  const plotBottom = 220; // Exact bottom baseline
+  const plotHeight = plotBottom - plotTop; // 195px
+
+  return (
+    <div className="svg-chart-scroll-wrapper">
+      <svg
+        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+        className="stacked-bar-svg"
+        style={{ minWidth: `${Math.max(svgWidth, 720)}px` }}
+      >
+        <defs>
+          {items.map(item => {
+            const barH = scale.max > 0 ? (item.total / scale.max) * plotHeight : 0;
+            const clipId = `clip-${item.key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            return (
+              <clipPath id={clipId} key={item.key}>
+                <rect
+                  x="0"
+                  y={plotBottom - barH}
+                  width={barWidth}
+                  height={barH + 4}
+                  rx="5"
+                  ry="5"
+                />
+              </clipPath>
+            );
+          })}
+        </defs>
+
+        {/* Horizontal grid lines & Y labels */}
+        {scale.ticks.map(tick => {
+          const y = scale.max > 0 ? plotBottom - (tick / scale.max) * plotHeight : plotBottom;
+          return (
+            <g key={tick} className="svg-grid-row">
+              <line
+                x1={plotLeft}
+                y1={y}
+                x2={plotLeft + plotWidth}
+                y2={y}
+                stroke="var(--line)"
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+              <text
+                x={plotLeft - 10}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="10.5"
+                fontWeight="600"
+                fill="var(--faint)"
+              >
+                {formatNumber(tick)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Bottom baseline line */}
+        <line
+          x1={plotLeft}
+          y1={plotBottom}
+          x2={plotLeft + plotWidth}
+          y2={plotBottom}
+          stroke="var(--line)"
+          strokeWidth="1.5"
+        />
+
+        {/* Bars and labels */}
+        {items.map((item, i) => {
+          const slotX = plotLeft + i * slotWidth;
+          const barX = slotX + (slotWidth - barWidth) / 2;
+          const barH = scale.max > 0 ? (item.total / scale.max) * plotHeight : 0;
+          const isHovered = hoveredKey === item.key;
+          const clipId = `clip-${item.key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+          const sortedOps = [...item.operators].sort(
+            (a, b) => (OPERATOR_STACK_ORDER[a.operator] || 99) - (OPERATOR_STACK_ORDER[b.operator] || 99)
+          );
+
+          let curY = plotBottom;
+          const segments = sortedOps.map(op => {
+            const segH = item.total > 0 ? (op.count / item.total) * barH : 0;
+            const segY = curY - segH;
+            curY = segY;
+            return {
+              operator: op.operator,
+              count: op.count,
+              y: segY,
+              h: segH,
+              color: getStatsOperatorColor(op.operator),
+            };
+          });
+
+          // Label coordinates: labelY is 16px below the baseline, rotating -45deg with textAnchor="end"
+          // This guarantees the label slopes down & left into the margin, NEVER touching the baseline or bar!
+          const labelX = barX + barWidth / 2;
+          const labelY = plotBottom + 16;
+
+          return (
+            <g
+              key={item.key}
+              className={`svg-bar-col ${isHovered ? 'hovered' : ''}`}
+              onMouseEnter={e => {
+                setHoveredKey(item.key);
+                onHoverItem(e.currentTarget.getBoundingClientRect(), item);
+              }}
+              onMouseLeave={() => {
+                setHoveredKey(null);
+                onLeaveItem();
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              {/* Stacked Pillar with rounded top */}
+              <g
+                transform={`translate(${barX}, 0)`}
+                clipPath={`url(#${clipId})`}
+                style={{
+                  transition: 'opacity 0.15s ease',
+                  opacity: isHovered ? 1 : 0.95,
+                  filter: isHovered ? 'brightness(1.15) drop-shadow(0 2px 6px rgba(0,0,0,0.18))' : 'none',
+                }}
+              >
+                {segments.map(seg => (
+                  <rect
+                    key={seg.operator}
+                    x="0"
+                    y={seg.y}
+                    width={barWidth}
+                    height={seg.h}
+                    fill={seg.color}
+                  />
+                ))}
+              </g>
+
+              {/* Rotated label: starts at labelY (16px below baseline), angles down-left away from chart */}
+              <text
+                x={labelX}
+                y={labelY}
+                transform={`rotate(-45 ${labelX} ${labelY})`}
+                textAnchor="end"
+                fontSize="11"
+                fontWeight={isHovered ? '800' : '600'}
+                fill={isHovered ? 'var(--text)' : 'var(--muted)'}
+                style={{ transition: 'fill 0.15s ease' }}
+              >
+                {item.label}
+              </text>
+
+              {/* Transparent hit area for easy hover on the entire column */}
+              <rect
+                x={slotX}
+                y={plotTop}
+                width={slotWidth}
+                height={svgHeight - plotTop}
+                fill="transparent"
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
 }
 
 export function StatsView({ onRetry }: { health?: unknown; error?: string; onRetry?: () => void }) {
@@ -230,7 +428,6 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
   }
 
   const summary = stats?.summary;
-  const plotHeight = 220; // Exact height of bar plot area in pixels
 
   return (
     <section className="content-view stats-dashboard-view">
@@ -568,7 +765,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             </div>
           </div>
 
-          {/* Chart Row 2: Stacje wg pasma (Stacked Bar Chart) */}
+          {/* Chart Row 2: Stacje wg pasma (SVG Stacked Bar Chart) */}
           <div className="stats-panel-card stacked-chart-panel">
             <div className="panel-card-header bar-chart-header">
               <div>
@@ -588,88 +785,36 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             </div>
 
             {stats.bands.length > 0 ? (
-              <div className="bar-chart-scroll-box">
-                <div className="chart-frame" style={{ minWidth: `${Math.max(stats.bands.length * 52, 720)}px` }}>
-                  {/* Clean Plot Area */}
-                  <div className="chart-plot-area" style={{ height: `${plotHeight}px` }}>
-                    {/* Y Axis Guide Lines */}
-                    <div className="y-axis-guides">
-                      {bandScale.ticks.map(tick => {
-                        const bottomPct = bandScale.max > 0 ? (tick / bandScale.max) * 100 : 0;
-                        return (
-                          <div className="y-guide-line" key={tick} style={{ bottom: `${bottomPct}%` }}>
-                            <span className="y-guide-label">{formatNumber(tick)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Bars Track */}
-                    <div className="bars-track">
-                      {stats.bands.map(item => {
-                        // Calculate exact pillar height (relative to scale max)
-                        const pillarHeightPx = bandScale.max > 0 ? (item.total / bandScale.max) * plotHeight : 0;
-                        // Sort operators consistently
-                        const sortedOps = [...item.operators].sort(
-                          (a, b) => (OPERATOR_STACK_ORDER[a.operator] || 99) - (OPERATOR_STACK_ORDER[b.operator] || 99)
-                        );
-
-                        return (
-                          <div
-                            key={item.key}
-                            className="bar-slot"
-                            onMouseEnter={e => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setTooltip({
-                                visible: true,
-                                x: rect.left + rect.width / 2,
-                                y: rect.top,
-                                title: `Pasmo ${item.tech} ${item.band} MHz`,
-                                subtitle: 'Unikalne stacje z tym pasmem',
-                                total: item.total,
-                                items: sortedOps.map(o => ({
-                                  name: o.operator,
-                                  count: o.count,
-                                  percent: item.total > 0 ? Number(((o.count / item.total) * 100).toFixed(1)) : 0,
-                                  color: getStatsOperatorColor(o.operator),
-                                })),
-                              });
-                            }}
-                            onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
-                          >
-                            <div className="bar-pillar" style={{ height: `${pillarHeightPx}px` }}>
-                              <div className="bar-segments-stack">
-                                {sortedOps.map(op => {
-                                  const segPercent = item.total > 0 ? (op.count / item.total) * 100 : 0;
-                                  return (
-                                    <div
-                                      key={op.operator}
-                                      className="bar-segment"
-                                      style={{
-                                        height: `${segPercent}%`,
-                                        background: getStatsOperatorColor(op.operator),
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Separate X-Axis Row (Labels completely detached from bars) */}
-                  <div className="chart-x-axis">
-                    {stats.bands.map(item => (
-                      <div className="x-axis-slot" key={item.key}>
-                        <span className="band-name-label">{item.tech} {item.band}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <SvgStackedBarChart
+                items={stats.bands.map(b => ({
+                  key: b.key,
+                  label: `${b.tech} ${b.band}`,
+                  total: b.total,
+                  operators: b.operators,
+                }))}
+                scale={bandScale}
+                titlePrefix="Pasmo "
+                subtitle="Unikalne stacje z tym pasmem"
+                slotWidth={52}
+                barWidth={28}
+                onHoverItem={(rect, item) => {
+                  setTooltip({
+                    visible: true,
+                    x: rect.left + rect.width / 2,
+                    y: rect.top,
+                    title: `Pasmo ${item.label} MHz`,
+                    subtitle: 'Unikalne stacje z tym pasmem',
+                    total: item.total,
+                    items: item.operators.map(o => ({
+                      name: o.operator,
+                      count: o.count,
+                      percent: item.total > 0 ? Number(((o.count / item.total) * 100).toFixed(1)) : 0,
+                      color: getStatsOperatorColor(o.operator),
+                    })),
+                  });
+                }}
+                onLeaveItem={() => setTooltip(prev => ({ ...prev, visible: false }))}
+              />
             ) : (
               <div className="stats-empty-panel">
                 <BarChart3 size={32} className="muted-icon" />
@@ -678,7 +823,7 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             )}
           </div>
 
-          {/* Chart Row 3: Stacje wg województwa (Stacked Bar Chart) */}
+          {/* Chart Row 3: Stacje wg województwa (SVG Stacked Bar Chart) */}
           <div className="stats-panel-card stacked-chart-panel">
             <div className="panel-card-header bar-chart-header">
               <div>
@@ -698,88 +843,36 @@ export function StatsView({ onRetry }: { health?: unknown; error?: string; onRet
             </div>
 
             {stats.provinces.length > 0 ? (
-              <div className="bar-chart-scroll-box">
-                <div className="chart-frame" style={{ minWidth: '760px' }}>
-                  {/* Clean Plot Area */}
-                  <div className="chart-plot-area" style={{ height: `${plotHeight}px` }}>
-                    {/* Y Axis Guide Lines */}
-                    <div className="y-axis-guides">
-                      {provScale.ticks.map(tick => {
-                        const bottomPct = provScale.max > 0 ? (tick / provScale.max) * 100 : 0;
-                        return (
-                          <div className="y-guide-line" key={tick} style={{ bottom: `${bottomPct}%` }}>
-                            <span className="y-guide-label">{formatNumber(tick)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Bars Track */}
-                    <div className="bars-track">
-                      {stats.provinces.map(prov => {
-                        // Calculate exact pillar height (relative to nice scale max)
-                        const pillarHeightPx = provScale.max > 0 ? (prov.total / provScale.max) * plotHeight : 0;
-                        // Sort operators consistently
-                        const sortedOps = [...prov.operators].sort(
-                          (a, b) => (OPERATOR_STACK_ORDER[a.operator] || 99) - (OPERATOR_STACK_ORDER[b.operator] || 99)
-                        );
-
-                        return (
-                          <div
-                            key={prov.province}
-                            className="bar-slot"
-                            onMouseEnter={e => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setTooltip({
-                                visible: true,
-                                x: rect.left + rect.width / 2,
-                                y: rect.top,
-                                title: `Woj. ${prov.province}`,
-                                subtitle: 'Unikalne stacje bazowe',
-                                total: prov.total,
-                                items: sortedOps.map(o => ({
-                                  name: o.operator,
-                                  count: o.count,
-                                  percent: prov.total > 0 ? Number(((o.count / prov.total) * 100).toFixed(1)) : 0,
-                                  color: getStatsOperatorColor(o.operator),
-                                })),
-                              });
-                            }}
-                            onMouseLeave={() => setTooltip(prev => ({ ...prev, visible: false }))}
-                          >
-                            <div className="bar-pillar" style={{ height: `${pillarHeightPx}px` }}>
-                              <div className="bar-segments-stack">
-                                {sortedOps.map(op => {
-                                  const segPercent = prov.total > 0 ? (op.count / prov.total) * 100 : 0;
-                                  return (
-                                    <div
-                                      key={op.operator}
-                                      className="bar-segment"
-                                      style={{
-                                        height: `${segPercent}%`,
-                                        background: getStatsOperatorColor(op.operator),
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Separate X-Axis Row with angled labels placed cleanly below */}
-                  <div className="chart-x-axis province-x-axis">
-                    {stats.provinces.map(prov => (
-                      <div className="x-axis-slot province-x-slot" key={prov.province}>
-                        <span className="prov-name-label">{prov.province}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <SvgStackedBarChart
+                items={stats.provinces.map(p => ({
+                  key: p.province,
+                  label: p.province,
+                  total: p.total,
+                  operators: p.operators,
+                }))}
+                scale={provScale}
+                titlePrefix="Woj. "
+                subtitle="Unikalne stacje bazowe"
+                slotWidth={56}
+                barWidth={30}
+                onHoverItem={(rect, item) => {
+                  setTooltip({
+                    visible: true,
+                    x: rect.left + rect.width / 2,
+                    y: rect.top,
+                    title: `Woj. ${item.label}`,
+                    subtitle: 'Unikalne stacje bazowe',
+                    total: item.total,
+                    items: item.operators.map(o => ({
+                      name: o.operator,
+                      count: o.count,
+                      percent: item.total > 0 ? Number(((o.count / item.total) * 100).toFixed(1)) : 0,
+                      color: getStatsOperatorColor(o.operator),
+                    })),
+                  });
+                }}
+                onLeaveItem={() => setTooltip(prev => ({ ...prev, visible: false }))}
+              />
             ) : (
               <div className="stats-empty-panel">
                 <MapPin size={32} className="muted-icon" />
