@@ -16,31 +16,40 @@ import BaseLayer from './BaseLayer';
 import type { BasemapId } from '../lib/basemaps';
 import 'leaflet/dist/leaflet.css';
 import type { Bounds, Radioline, Theme, Tower } from '../types';
-import { operatorColor } from '../lib/constants';
+import { operatorColor, readStored, saveStored } from '../lib/constants';
 import { MAP_STATION_LIMIT } from '../../shared/mapLimits';
 import PemPlanMarkers from './PemPlanMarkers';
 import type { PemPlan } from '../../shared/pemPlans';
 import { operatorName } from '../../shared/operators';
+import { getBtsPinIcon, getBtsBadgeIcon } from './pinIcons';
+import type { AppSettings } from '../lib/settings';
 
 function MapEvents({
   onBounds,
   onReady,
   onMapClick,
+  rememberLocation,
 }: {
   onBounds: (bounds: Bounds) => void;
   onReady: (map: L.Map) => void;
   onMapClick?: (lat: number, lng: number) => void;
+  rememberLocation?: boolean;
 }) {
   const map = useMap();
   const report = () => {
     const b = map.getBounds();
+    const c = map.getCenter();
+    const z = map.getZoom();
     onBounds({
       minLat: Math.max(-90, b.getSouth()),
       maxLat: Math.min(90, b.getNorth()),
       minLng: Math.max(-180, b.getWest()),
       maxLng: Math.min(180, b.getEast()),
-      zoom: map.getZoom(),
+      zoom: z,
     });
+    if (rememberLocation) {
+      saveStored('btmap.mapCenter', { lat: c.lat, lng: c.lng, zoom: z });
+    }
   };
   useMapEvents({
     moveend: report,
@@ -68,6 +77,7 @@ function Stations({
   isPickingEvalTarget,
   onEvalTargetChange,
   renderer,
+  settings,
 }: {
   items: Tower[];
   selected?: string;
@@ -78,14 +88,119 @@ function Stations({
   isPickingEvalTarget?: boolean;
   onEvalTargetChange?: (coords: [number, number]) => void;
   renderer: L.Canvas;
+  settings?: AppSettings;
 }) {
+  const shape = settings?.markerShape || 'dots';
+  const size = settings?.markerSize || 'normal';
+  const labelsMode = settings?.showStationLabels || 'none';
+  const highContrast = Boolean(settings?.highContrastMarkers);
+  const sizeMultiplier = size === 'compact' ? 0.78 : size === 'large' ? 1.3 : 1.0;
+
+  if (shape === 'pins') {
+    return (
+      <>
+        {items.map(t => {
+          const isSel = selected === t.id;
+          const icon = getBtsPinIcon(t, {
+            isSelected: isSel,
+            size,
+            labelsMode,
+            highContrast,
+          });
+          const tipOffset: [number, number] = [0, -(size === 'large' ? 44 : size === 'compact' ? 29 : 36)];
+
+          return (
+            <Marker
+              key={t.id}
+              position={[t.lat, t.lng]}
+              icon={icon}
+              zIndexOffset={isSel ? 1000 : t.source === 'BTMAP' ? 100 : 0}
+              eventHandlers={{
+                click: e => {
+                  L.DomEvent.stopPropagation(e);
+                  if (isPickingEvalTarget && onEvalTargetChange) {
+                    onEvalTargetChange([t.lat, t.lng]);
+                  } else if (isPickingTerrainTarget && onTerrainTargetChange) {
+                    onTerrainTargetChange([t.lat, t.lng]);
+                  } else {
+                    onSelect(t);
+                  }
+                },
+              }}
+            >
+              <Tooltip direction="top" offset={tipOffset}>
+                <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
+                <br />
+                {t.operators
+                  .map(op => {
+                    const sid = op.stationIds?.[0] || (t.operators.length === 1 ? t.stationId : '');
+                    return sid ? `${op.name} (${sid})` : op.name;
+                  })
+                  .join(' · ')}
+              </Tooltip>
+            </Marker>
+          );
+        })}
+      </>
+    );
+  }
+
+  if (shape === 'badges') {
+    return (
+      <>
+        {items.map(t => {
+          const isSel = selected === t.id;
+          const icon = getBtsBadgeIcon(t, {
+            isSelected: isSel,
+            size,
+            labelsMode,
+            highContrast,
+          });
+
+          return (
+            <Marker
+              key={t.id}
+              position={[t.lat, t.lng]}
+              icon={icon}
+              zIndexOffset={isSel ? 1000 : 0}
+              eventHandlers={{
+                click: e => {
+                  L.DomEvent.stopPropagation(e);
+                  if (isPickingEvalTarget && onEvalTargetChange) {
+                    onEvalTargetChange([t.lat, t.lng]);
+                  } else if (isPickingTerrainTarget && onTerrainTargetChange) {
+                    onTerrainTargetChange([t.lat, t.lng]);
+                  } else {
+                    onSelect(t);
+                  }
+                },
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -14]}>
+                <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
+                <br />
+                {t.operators
+                  .map(op => {
+                    const sid = op.stationIds?.[0] || (t.operators.length === 1 ? t.stationId : '');
+                    return sid ? `${op.name} (${sid})` : op.name;
+                  })
+                  .join(' · ')}
+              </Tooltip>
+            </Marker>
+          );
+        })}
+      </>
+    );
+  }
+
+  // Classic Dots (Canvas CircleMarker)
   return (
     <>
       {items.map(t => (
         <Fragment key={t.id}>
           <CircleMarker
             center={[t.lat, t.lng]}
-            radius={selected === t.id ? 11 : t.source === 'BTMAP' ? 8 : (t.operators.length > 1 ? 7 : 6)}
+            radius={(selected === t.id ? 11 : t.source === 'BTMAP' ? 8 : (t.operators.length > 1 ? 7 : 6)) * sizeMultiplier}
             renderer={renderer}
             pathOptions={{
               color:
@@ -95,8 +210,10 @@ function Stations({
                   ? '#00e5ff'
                   : theme === 'light' && operatorName(t.operators[0]?.name || '') === 'Plus'
                   ? '#244230'
+                  : highContrast
+                  ? '#ffffff'
                   : '#fff',
-              weight: selected === t.id ? 4 : t.source === 'BTMAP' ? 3 : 2,
+              weight: (selected === t.id ? 4 : t.source === 'BTMAP' ? 3 : 2) + (highContrast ? 1.5 : 0),
               fillColor: operatorColor(t.operators[0]?.name),
               fillOpacity: 1,
             }}
@@ -127,7 +244,7 @@ function Stations({
           {t.operators.length > 1 && (
             <CircleMarker
               center={[t.lat, t.lng]}
-              radius={2.5}
+              radius={2.5 * sizeMultiplier}
               renderer={renderer}
               pathOptions={{ weight: 0, fillColor: '#fff', fillOpacity: 1 }}
               interactive={false}
@@ -182,11 +299,13 @@ function AzimuthBeams({
   enabled,
   selectedId,
   renderer,
+  settings,
 }: {
   items: Tower[];
   enabled: boolean;
   selectedId?: string;
   renderer: L.Canvas;
+  settings?: AppSettings;
 }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
@@ -202,11 +321,12 @@ function AzimuthBeams({
     },
   });
 
-  if (!enabled) return null;
+  const autoSelected = Boolean(settings?.autoShowAzimuthsOnSelect && selectedId);
+  if (!enabled && !autoSelected) return null;
 
   // Show azimuths only when zoomed in closely (zoom >= 14 - neighborhood/village level),
   // or always for the currently selected station.
-  const showAll = zoom >= 14;
+  const showAll = enabled && zoom >= 14;
   let targetTowers: Tower[] = [];
 
   if (showAll) {
@@ -231,9 +351,12 @@ function AzimuthBeams({
   if (targetTowers.length === 0) return null;
 
   // Scaled cone radius in meters:
-  // zoom 14: 180m, zoom 15: 150m, zoom 16: 130m, zoom 17+: 110m
-  const radiusM = zoom >= 17 ? 110 : zoom >= 16 ? 130 : zoom >= 15 ? 150 : 180;
+  const lengthMul = settings?.azimuthLength === 'short' ? 0.75 : settings?.azimuthLength === 'long' ? 1.45 : 1.0;
+  const radiusM = (zoom >= 17 ? 110 : zoom >= 16 ? 130 : zoom >= 15 ? 150 : 180) * lengthMul;
   const beamwidthDeg = 44;
+
+  const fillOpacity = settings?.azimuthOpacity ? settings.azimuthOpacity * 0.55 : 0.22;
+  const strokeOpacity = settings?.azimuthOpacity ? Math.min(1.0, settings.azimuthOpacity * 1.5) : 0.65;
 
   return (
     <>
@@ -255,9 +378,9 @@ function AzimuthBeams({
                   pathOptions={{
                     color: opColor,
                     weight: 1.5,
-                    opacity: 0.65,
+                    opacity: strokeOpacity,
                     fillColor: opColor,
-                    fillOpacity: 0.22,
+                    fillOpacity,
                   }}
                   interactive={false}
                 />
@@ -278,7 +401,7 @@ function AzimuthBeams({
                   pathOptions={{
                     color: opColor,
                     weight: 1.2,
-                    opacity: 0.45,
+                    opacity: strokeOpacity * 0.7,
                   }}
                   interactive={false}
                 />
@@ -287,7 +410,6 @@ function AzimuthBeams({
 
             {/* Azimuth Degree Labels centered INSIDE each sector cone */}
             {azs.map(az => {
-              // Placed at 60% of the radius, squarely inside the sector cone
               const labelDistM = radiusM * 0.60;
               const dLat = (labelDistM * Math.cos((az * Math.PI) / 180)) / 111320;
               const dLng = (labelDistM * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad));
@@ -338,6 +460,7 @@ export default function MapView({
   onEvalTargetChange,
   isPickingEvalTarget,
   showAzimuths,
+  settings,
 }: {
   theme: Theme;
   basemap: BasemapId;
@@ -360,6 +483,7 @@ export default function MapView({
   onEvalTargetChange?: (coords: [number, number]) => void;
   isPickingEvalTarget?: boolean;
   showAzimuths?: boolean;
+  settings?: AppSettings;
 }) {
   const markers = items.slice(0, MAP_STATION_LIMIT);
   const visible =
@@ -383,10 +507,21 @@ export default function MapView({
     return sectorPolygon(terrainStation.lat, terrainStation.lng, terrainAzimuth);
   }, [terrainStation, terrainAzimuth]);
 
+  // Initial center & zoom from storage if rememberLocation is enabled
+  const initialView = useMemo(() => {
+    if (settings?.rememberMapLocation) {
+      const saved = readStored<{ lat: number; lng: number; zoom: number } | null>('btmap.mapCenter', null);
+      if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng) && Number.isFinite(saved.zoom)) {
+        return { center: [saved.lat, saved.lng] as [number, number], zoom: saved.zoom };
+      }
+    }
+    return { center: [52.2305, 21.0084] as [number, number], zoom: 12 };
+  }, []);
+
   return (
     <MapContainer
-      center={[52.2305, 21.0084]}
-      zoom={12}
+      center={initialView.center}
+      zoom={initialView.zoom}
       minZoom={5}
       maxZoom={18}
       zoomControl={false}
@@ -401,12 +536,18 @@ export default function MapView({
     >
       <BaseLayer theme={theme} basemap={basemap} onError={onBasemapError} />
       <ScaleControl position="bottomleft" imperial={false} />
-      <MapEvents onBounds={onBounds} onReady={onReady} onMapClick={handleMapClick} />
+      <MapEvents
+        onBounds={onBounds}
+        onReady={onReady}
+        onMapClick={handleMapClick}
+        rememberLocation={settings?.rememberMapLocation}
+      />
       <AzimuthBeams
         items={visible}
         enabled={Boolean(showAzimuths)}
         selectedId={selected?.id}
         renderer={canvasRenderer}
+        settings={settings}
       />
       <Stations
         items={visible}
@@ -418,6 +559,7 @@ export default function MapView({
         isPickingEvalTarget={isPickingEvalTarget}
         onEvalTargetChange={onEvalTargetChange}
         renderer={canvasRenderer}
+        settings={settings}
       />
       <PemPlanMarkers items={pemPlans} />
 

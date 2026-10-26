@@ -30,3 +30,4 @@ import './terrain-profile.css';
 import './area-evaluation.css';
 import './azimuths.css';
 import './stats.css';
+import './settings.css';

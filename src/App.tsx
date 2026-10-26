@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {Map as MapIcon,Database,ChartNoAxesCombined,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages} from 'lucide-react';
+import {Map as MapIcon,Database,ChartNoAxesCombined,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages,Settings as SettingsIcon} from 'lucide-react';
 import type L from 'leaflet';
 import MapView from './components/MapView';
 import BasemapPicker from './components/BasemapPicker';
@@ -13,6 +13,7 @@ import {AdminView,DatabaseView,GuidesView,StatsView} from './components/Views';
 import StationSubmissionDialog from './components/StationSubmissionDialog';
 import TerrainProfileDialog from './components/TerrainProfileDialog';
 import AreaEvaluationDialog from './components/AreaEvaluationDialog';
+import SettingsDialog from './components/SettingsDialog';
 import {useAuth} from './hooks/useAuth';
 import {useTowers} from './hooks/useTowers';
 import {usePemPlans} from './hooks/usePemPlans';
@@ -22,8 +23,7 @@ import {getStoredBasemap} from './lib/basemaps';
 import type {BasemapId} from './lib/basemaps';
 import type {Bounds,Filters,Health,Theme,Tower,View} from './types';
 import {i18n, I18nProvider, type Lang} from './lib/i18n';
-
-
+import {AppSettings, DEFAULT_SETTINGS, formatCoordinates, readSettings, saveSettings} from './lib/settings';
 
 const readView=():View=>{
   if(window.location.pathname.replace(/\/+$/,'')==='/btmap/changelog')return 'changelog';
@@ -34,8 +34,12 @@ const readView=():View=>{
 export default function App(){
   const [theme,setTheme]=useState<Theme>(()=>{const stored=readStored<unknown>('btmap.theme',null);return stored==='light'?'light':'dark';});
   const [lang,setLang]=useState<Lang>(()=>{const stored=readStored<unknown>('btmap.lang',null);return stored==='en'?'en':'pl';});
+  const [settings,setSettings]=useState<AppSettings>(readSettings);
   const t = i18n[lang];
+
   useEffect(()=>{saveStored('btmap.lang',lang);document.documentElement.lang=lang;},[lang]);
+  useEffect(()=>{saveSettings(settings);},[settings]);
+
   const navItems=useMemo(()=>[
     {id:'map' as const,label:t.map,icon:MapIcon},
     {id:'database' as const,label:t.database,icon:Database},
@@ -57,7 +61,7 @@ export default function App(){
   const [basemap,setBasemap]=useState<BasemapId>(getStoredBasemap);
   const [map,setMap]=useState<L.Map|null>(null),[bounds,setBounds]=useState<Bounds|null>(null),[selected,setSelected]=useState<Tower|null>(null);
   const [health,setHealth]=useState<Health|null>(null),[healthError,setHealthError]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(0),[refresh,setRefresh]=useState(0),[notice,setNotice]=useState('');
-  const [dialog,setDialog]=useState<'auth'|'profile'|'submit'|null>(null),[editTower,setEditTower]=useState<Tower|null>(null),[position,setPosition]=useState<[number,number]|null>(null),[locating,setLocating]=useState(false);
+  const [dialog,setDialog]=useState<'auth'|'profile'|'submit'|'settings'|null>(null),[editTower,setEditTower]=useState<Tower|null>(null),[position,setPosition]=useState<[number,number]|null>(null),[locating,setLocating]=useState(false);
   const [createStationTower,setCreateStationTower]=useState<Tower|null|'blank'>(null);
   const [terrainTower, setTerrainTower] = useState<Tower | null>(null);
   const [terrainTarget, setTerrainTarget] = useState<[number, number] | null>(null);
@@ -176,7 +180,15 @@ export default function App(){
     window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore);
   },[]);
   useEffect(()=>{document.title=view==='changelog'?'Changelog — BTMap v2':'BTMap v2 — Odkrywaj sieć';if(view==='changelog')document.getElementById('main-content')?.focus();},[view]);
-  useEffect(()=>{if(map&&selected&&view==='map')map.flyTo([selected.lat,selected.lng],Math.max(map.getZoom(),14),{duration:window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:0.65});},[selected?.id,map,view]);
+  useEffect(()=>{
+    if(map&&selected&&view==='map'){
+      if(settings.smoothFlyTo&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+        map.flyTo([selected.lat,selected.lng],Math.max(map.getZoom(),14),{duration:0.65});
+      }else{
+        map.setView([selected.lat,selected.lng],Math.max(map.getZoom(),14));
+      }
+    }
+  },[selected?.id,map,view,settings.smoothFlyTo]);
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !dialog) {
@@ -208,7 +220,16 @@ export default function App(){
   const togglePanel=(next:'filters'|'stations')=>{closeTower();setPanel(panel===next?null:next);};
   const locate=()=>{
     if(!navigator.geolocation){setNotice('Wpisz miejscowość w wyszukiwarce — ta przeglądarka nie udostępnia lokalizacji.');return;}
-    setLocating(true);navigator.geolocation.getCurrentPosition(p=>{setPosition([p.coords.latitude,p.coords.longitude]);map?.flyTo([p.coords.latitude,p.coords.longitude],14);setLocating(false);},()=>{setLocating(false);setNotice('Nie udało się pobrać lokalizacji. Sprawdź zgodę przeglądarki lub wyszukaj miejscowość.');},{enableHighAccuracy:true,timeout:12000});
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(p=>{
+      setPosition([p.coords.latitude,p.coords.longitude]);
+      if(settings.smoothFlyTo&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+        map?.flyTo([p.coords.latitude,p.coords.longitude],14);
+      }else{
+        map?.setView([p.coords.latitude,p.coords.longitude],14);
+      }
+      setLocating(false);
+    },()=>{setLocating(false);setNotice('Nie udało się pobrać lokalizacji. Sprawdź zgodę przeglądarki lub wyszukaj miejscowość.');},{enableHighAccuracy:true,timeout:12000});
   };
   const openSubmit=(tower:Tower)=>{setEditTower(tower);setDialog(user?'submit':'auth');};
   const openCreateStation=(tower:Tower|null)=>{
@@ -226,7 +247,7 @@ export default function App(){
   const basemapError=useCallback((message:string)=>{setBasemap('osm');setNotice(message);},[]);
   const filterTotal=filterCount(filters)+(showPem&&view==='map'?1:0)+(showAzimuths&&view==='map'?1:0);
   const filterPanel=<aside className="floating-panel filter-drawer" aria-labelledby="station-filters-title">
-    <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?t.filterMapTitle:t.filterStationTitle}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?t.filterSourceUke:filters.source==='BTMAP'?t.filterSourceDb:t.filterSourceAll}{showPem&&view==='map'?' · SI2PEM':''}</span><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={18}/></button></div>
+    <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?t.filterMapTitle:t.filterStationTitle}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?t.filterSourceUke:filters.source==='BTMAP'?'BTMap':t.filterSourceAll}{showPem&&view==='map'?' · SI2PEM':''}</span><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={18}/></button></div>
     <div className="panel-scroll"><FiltersPanel filters={filters} onChange={changeFilters} pemEnabled={showPem} onPemChange={view==='map'?setShowPem:undefined} pemStatus={pemStatus} azimuthsEnabled={showAzimuths} onAzimuthsChange={view==='map'?setShowAzimuths:undefined}/></div>
     <div className="filter-drawer-footer"><p className="filter-results" role="status">{loading?t.filterLoading:error?t.filterLoadError:<><strong>{formatNumber(result.total)}</strong> {view==='database'?t.filterResultsInDb(formatNumber(result.total)):t.filterResultsInArea(formatNumber(result.total))}</>}</p><div className="filter-drawer-actions"><button className="filter-reset" disabled={!filterTotal} onClick={()=>{changeFilters(DEFAULT_FILTERS);if(view==='map'){setShowPem(false);setShowAzimuths(false);}}}><RotateCcw size={14}/>{t.clear}{filterTotal>0&&<span>{filterTotal}</span>}</button><button className="primary-button" onClick={()=>setPanel(null)}>{t.ready}</button></div></div>
   </aside>;
@@ -238,10 +259,10 @@ export default function App(){
     <aside className="app-sidebar" aria-label={t.appMenu}>
       <button className="sidebar-brand" onClick={()=>changeView('map')} aria-label={t.brandAria}><span className="sidebar-brand-symbol"><Radio size={25}/></span><span className="sidebar-wordmark">btmap<span>.</span></span><span className="sidebar-version">v2</span></button>
       <nav className="side-nav" aria-label={t.mainNav}>{navItems.map(item=><button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
-      <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title={t.guides} onClick={()=>changeView('guides')}><Info size={18}/><span>{t.guides}</span></button><div className="sidebar-lang-wrap"><button type="button" className="sidebar-about sidebar-lang-compact-btn" onClick={()=>setLang(lang==='pl'?'en':'pl')} title={t.switchLanguage} aria-label={t.switchLanguage}><Languages size={18}/><span className="sidebar-lang-compact-badge">{lang.toUpperCase()}</span></button><div className="sidebar-lang-toggle" title={t.switchLanguage}><Languages size={17} className="sidebar-lang-icon"/><span className="sidebar-lang-text">{t.language}</span><div className="lang-toggle-pills" role="group" aria-label={t.language}><button type="button" className={`lang-pill ${lang==='pl'?'is-active':''}`} onClick={()=>setLang('pl')} aria-pressed={lang==='pl'} title="Polski (PL)">PL</button><button type="button" className={`lang-pill ${lang==='en'?'is-active':''}`} onClick={()=>setLang('en')} aria-pressed={lang==='en'} title="English (ENG)">ENG</button></div></div></div><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?t.account:t.signIn}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:t.signIn}</strong><small>{user?t.account:t.accountDesc}</small></span><ArrowUpRight size={16}/></button></div></div>
+      <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title={t.guides} onClick={()=>changeView('guides')}><Info size={18}/><span>{t.guides}</span></button><button className="sidebar-about" title={t.settings} onClick={()=>setDialog('settings')}><SettingsIcon size={18}/><span>{t.settings}</span></button><div className="sidebar-lang-wrap"><button type="button" className="sidebar-about sidebar-lang-compact-btn" onClick={()=>setLang(lang==='pl'?'en':'pl')} title={t.switchLanguage} aria-label={t.switchLanguage}><Languages size={18}/><span className="sidebar-lang-compact-badge">{lang.toUpperCase()}</span></button><div className="sidebar-lang-toggle" title={t.switchLanguage}><Languages size={17} className="sidebar-lang-icon"/><span className="sidebar-lang-text">{t.language}</span><div className="lang-toggle-pills" role="group" aria-label={t.language}><button type="button" className={`lang-pill ${lang==='pl'?'is-active':''}`} onClick={()=>setLang('pl')} aria-pressed={lang==='pl'} title="Polski (PL)">PL</button><button type="button" className={`lang-pill ${lang==='en'?'is-active':''}`} onClick={()=>setLang('en')} aria-pressed={lang==='en'} title="English (ENG)">ENG</button></div></div></div><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?t.account:t.signIn}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:t.signIn}</strong><small>{user?t.account:t.accountDesc}</small></span><ArrowUpRight size={16}/></button></div></div>
     </aside>
     <section className="app-main">
-      <header className="workspace-header"><div className="workspace-heading"><button className="icon-button desktop-nav-toggle" aria-label={navCollapsed?t.expandNav:t.collapseNav} onClick={()=>setNavCollapsed(!navCollapsed)}>{navCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button className="icon-button mobile-nav-toggle" aria-label={t.openNav} onClick={()=>setMobileNav(!mobileNav)}><Menu size={21}/></button><span className="breadcrumb-parent">{view==='changelog'?'BTMap':t.breadcrumbParent}</span><ChevronRight className="breadcrumb-chevron" size={14}/><h1>{viewNames[view]}</h1></div><div className="workspace-actions"><span className="connection-status"><span className={`connection-dot ${healthError?'offline':''}`}/>{healthError?t.noConnection:health?view==='database'?t.btmapStationsCount(formatNumber(health.stats.btmapTowers??0)):t.locationsTotal(formatNumber(health.stats.towers)):t.connecting}</span><button className="icon-button theme-toggle" onClick={()=>setTheme(theme==='dark'?'light':'dark')} aria-label={theme==='dark'?t.themeLight:t.themeDark}>{theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button></div></header>
+      <header className="workspace-header"><div className="workspace-heading"><button className="icon-button desktop-nav-toggle" aria-label={navCollapsed?t.expandNav:t.collapseNav} onClick={()=>setNavCollapsed(!navCollapsed)}>{navCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button className="icon-button mobile-nav-toggle" aria-label={t.openNav} onClick={()=>setMobileNav(!mobileNav)}><Menu size={21}/></button><span className="breadcrumb-parent">{view==='changelog'?'BTMap':t.breadcrumbParent}</span><ChevronRight className="breadcrumb-chevron" size={14}/><h1>{viewNames[view]}</h1></div><div className="workspace-actions"><span className="connection-status"><span className={`connection-dot ${healthError?'offline':''}`}/>{healthError?t.noConnection:health?view==='database'?t.btmapStationsCount(formatNumber(health.stats.btmapTowers??0)):t.locationsTotal(formatNumber(health.stats.towers)):t.connecting}</span><button className="icon-button" onClick={()=>setDialog('settings')} aria-label={t.settings} title={t.settings}><SettingsIcon size={19}/></button><button className="icon-button theme-toggle" onClick={()=>setTheme(theme==='dark'?'light':'dark')} aria-label={theme==='dark'?t.themeLight:t.themeDark}>{theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button></div></header>
       <main id="main-content" className="workspace-body" tabIndex={-1}>
         {view==='map'?<div className={`map-workspace ${selected?'has-details':''} ${panel?'has-drawer':''}`} ref={mapFrame}>
           <MapView
@@ -266,6 +287,7 @@ export default function App(){
             onEvalTargetChange={handleEvalTargetChange}
             isPickingEvalTarget={isPickingEvalTarget}
             showAzimuths={showAzimuths}
+            settings={settings}
           />
           {isPickingTerrainTarget && (
             <div className="tp-pick-banner" role="status">
@@ -281,11 +303,19 @@ export default function App(){
               <button type="button" className="ae-pick-cancel" onClick={handleCancelEvalPick}>{t.cancel}</button>
             </div>
           )}
-          <div className="map-hud"><button className="map-summary" aria-label={t.stationsInArea} aria-expanded={panel==='stations'} onClick={()=>togglePanel('stations')}><Radio size={17}/><strong>{loading?'…':formatNumber(result.total)}</strong><span>{t.locationsCount}</span><span className="hud-divider"/><span className="hud-source">{filters.source==='UKE'?'UKE':filters.source==='BTMAP'?'BTMap':'BTMap + UKE'}</span><List size={16}/></button><div className="map-coordinates">{bounds?<><span>{t.mapCenter}</span>{((bounds.minLat+bounds.maxLat)/2).toFixed(4)}, {((bounds.minLng+bounds.maxLng)/2).toFixed(4)}<span className="coordinate-zoom">Z{bounds.zoom}</span></>:t.mapLoading}</div></div>
+          <div className="map-hud"><button className="map-summary" aria-label={t.stationsInArea} aria-expanded={panel==='stations'} onClick={()=>togglePanel('stations')}><Radio size={17}/><strong>{loading?'…':formatNumber(result.total)}</strong><span>{t.locationsCount}</span><span className="hud-divider"/><span className="hud-source">{filters.source==='UKE'?'UKE':filters.source==='BTMAP'?'BTMap':'BTMap + UKE'}</span><List size={16}/></button><div className="map-coordinates">{bounds?<><span>{t.mapCenter}</span>{formatCoordinates((bounds.minLat+bounds.maxLat)/2, (bounds.minLng+bounds.maxLng)/2, settings.coordFormat)}<span className="coordinate-zoom">Z{bounds.zoom}</span></>:t.mapLoading}</div></div>
           <div className={`map-searchbar ${isSearchActive ? 'search-active' : ''}`}>
             <Search
               onSelect={selectTower}
-              onPlace={(lat,lng)=>{closeTower();setPanel(null);map?.flyTo([lat,lng],14);}}
+              onPlace={(lat,lng)=>{
+                closeTower();
+                setPanel(null);
+                if(settings.smoothFlyTo&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+                  map?.flyTo([lat,lng],14);
+                }else{
+                  map?.setView([lat,lng],14);
+                }
+              }}
               onError={setNotice}
               onActiveChange={setIsSearchActive}
             />
@@ -386,6 +416,7 @@ export default function App(){
     {dialog==='auth'&&<AuthDialog onClose={()=>setDialog(null)} authenticate={handleAuth}/>}
     {dialog==='profile'&&user&&<ProfileDialog user={user} onClose={()=>setDialog(null)} onLogout={async()=>{await logout();setDialog(null);if(view==='admin')setView('map');}} onAdmin={()=>{setDialog(null);changeView('admin');}}/>}
     {dialog==='submit'&&user&&editTower&&<SubmitDialog tower={editTower} onClose={()=>setDialog(null)} onSuccess={()=>setRefresh(r=>r+1)}/>}
+    {dialog==='settings'&&<SettingsDialog onClose={()=>setDialog(null)} settings={settings} onUpdate={setSettings} onReset={()=>setSettings(DEFAULT_SETTINGS)} theme={theme} onThemeChange={setTheme} lang={lang} onLangChange={setLang} onNotice={setNotice}/>}
     {createStationTower!==null&&<StationSubmissionDialog sourceTower={createStationTower==='blank'?null:createStationTower} onClose={()=>setCreateStationTower(null)} onSuccess={()=>{setCreateStationTower(null);setRefresh(r=>r+1);setNotice(t.stationSubmissionSuccess);}}/>}
     {terrainTower!==null&&terrainTarget!==null&&<TerrainProfileDialog tower={terrainTower} targetCoords={terrainTarget} onTargetChange={setTerrainTarget} onSectorAzimuthChange={setTerrainSectorAzimuth} onPickOnMap={()=>setIsPickingTerrainTarget(true)} onClose={closeTerrainProfile}/>}
     {evalTarget!==null&&<AreaEvaluationDialog targetCoords={evalTarget} radiusM={evalRadiusM} onRadiusChange={setEvalRadiusM} onPickOnMap={()=>setIsPickingEvalTarget(true)} onClose={closeAreaEvaluation} onOpenTerrainProfile={openTerrainProfile}/>}
