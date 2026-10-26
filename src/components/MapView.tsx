@@ -107,7 +107,7 @@ function Stations({
             labelsMode,
             highContrast,
           });
-          const tipOffset: [number, number] = [0, -(size === 'large' ? 44 : size === 'compact' ? 29 : 36)];
+          const tipOffset: [number, number] = [0, -4];
 
           return (
             <Marker
@@ -176,7 +176,7 @@ function Stations({
                 },
               }}
             >
-              <Tooltip direction="top" offset={[0, -14]}>
+              <Tooltip direction="top" offset={[0, -4]}>
                 <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
                 <br />
                 {t.operators

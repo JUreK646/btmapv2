@@ -1,22 +1,38 @@
 import React, { useState } from 'react';
 import {
   MapPin,
-  Radio,
-  RadioTower,
   Compass,
-  SlidersHorizontal,
-  Layers,
+  Navigation,
+  MonitorCog,
   Sun,
   Moon,
   RotateCcw,
   Trash2,
   Check,
-  Sparkles,
+  Languages,
+  Maximize2,
+  Tag,
+  Contrast,
+  Droplet,
+  Ruler,
+  MousePointerClick,
+  Crosshair,
+  Wind,
+  Bookmark,
+  HardDrive,
+  type LucideIcon,
 } from 'lucide-react';
 import Modal from './Modal';
 import { useI18n, type Lang } from '../lib/i18n';
-import type { AppSettings, MarkerShape, MarkerSize, StationLabelsMode, CoordFormat, AzimuthOpacity, AzimuthLength } from '../lib/settings';
-import { DEFAULT_SETTINGS } from '../lib/settings';
+import type {
+  AppSettings,
+  MarkerShape,
+  MarkerSize,
+  StationLabelsMode,
+  CoordFormat,
+  AzimuthOpacity,
+  AzimuthLength,
+} from '../lib/settings';
 import type { Theme } from '../types';
 
 interface Props {
@@ -32,6 +48,132 @@ interface Props {
 }
 
 type SettingsTab = 'markers' | 'azimuths' | 'navigation' | 'system';
+
+/** Splits "Label (detail)" into main label and secondary detail for compact segmented controls. */
+function splitLabel(text: string): { main: string; sub?: string } {
+  const match = text.match(/^(.*?)\s*\((.*)\)\s*$/);
+  if (match) return { main: match[1], sub: match[2] };
+  const dash = text.split(' — ');
+  if (dash.length === 2) return { main: dash[0], sub: dash[1] };
+  return { main: text };
+}
+
+function Segmented<T extends string | number>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+}: {
+  value: T;
+  options: { value: T; label: string; icon?: LucideIcon }[];
+  onChange: (v: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      className="st-segmented"
+      role="radiogroup"
+      aria-label={ariaLabel}
+      style={{ '--st-count': options.length } as React.CSSProperties}
+    >
+      {options.map(opt => {
+        const { main, sub } = splitLabel(opt.label);
+        const active = opt.value === value;
+        const Icon = opt.icon;
+        return (
+          <button
+            key={String(opt.value)}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`st-segment ${active ? 'is-active' : ''}`}
+            onClick={() => onChange(opt.value)}
+          >
+            {Icon && <Icon size={13} />}
+            <span className="st-segment-text">
+              <span className="st-segment-main">{main}</span>
+              {sub && <span className="st-segment-sub">{sub}</span>}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Solid classic teardrop pin matching the map marker 1:1 (no inner hole). */
+function PreviewPin({ className, left, top }: { className: string; left: string; top: string }) {
+  return (
+    <svg
+      className={`st-pv-pin ${className}`}
+      style={{ left, top }}
+      width="17"
+      height="24"
+      viewBox="0 0 22 31"
+    >
+      <path
+        d="M11 1.2C5.6 1.2 1.5 5.3 1.5 10.6c0 6.1 7.1 16.1 8.8 19.1.35.6 1.05.6 1.4 0 1.7-3 8.8-13 8.8-19.1 0-5.3-4.1-9.4-9.5-9.4Z"
+        fill="var(--op)"
+        stroke="#1e1e26"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Switch({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={`st-switch ${checked ? 'is-on' : ''}`}
+      onClick={() => onChange(!checked)}
+    >
+      <span className="st-switch-knob" />
+    </button>
+  );
+}
+
+function Item({
+  icon: Icon,
+  title,
+  hint,
+  control,
+  stacked = false,
+}: {
+  icon: LucideIcon;
+  title: string;
+  hint?: string;
+  control: React.ReactNode;
+  stacked?: boolean;
+}) {
+  return (
+    <div className={`st-item ${stacked ? 'is-stacked' : ''}`}>
+      <div className="st-item-head">
+        <span className="st-item-icon">
+          <Icon size={15} />
+        </span>
+        <div className="st-item-text">
+          <span className="st-item-title">{title}</span>
+          {hint && <span className="st-item-hint">{hint}</span>}
+        </div>
+        {!stacked && <div className="st-item-control">{control}</div>}
+      </div>
+      {stacked && <div className="st-item-body">{control}</div>}
+    </div>
+  );
+}
 
 export default function SettingsDialog({
   onClose,
@@ -68,389 +210,330 @@ export default function SettingsDialog({
     if (onNotice) onNotice(t.settingsResetDefaultsSuccess);
   };
 
+  const tabs: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
+    { id: 'markers', label: t.settingsTabMarkers, icon: MapPin },
+    { id: 'azimuths', label: t.settingsTabAzimuths, icon: Compass },
+    { id: 'navigation', label: t.settingsTabNavigation, icon: Navigation },
+    { id: 'system', label: t.settingsTabSystem, icon: MonitorCog },
+  ];
+
+  const shapes: { id: MarkerShape; title: string; desc: string; preview: React.ReactNode }[] = [
+    {
+      id: 'dots',
+      title: t.settingsShapeDots,
+      desc: t.settingsShapeDotsDesc,
+      preview: (
+        <>
+          <i className="st-pv-dot op-orange" style={{ left: '24%', top: '44%' }} />
+          <i className="st-pv-dot op-play" style={{ left: '44%', top: '62%' }} />
+          <i className="st-pv-dot op-plus" style={{ left: '63%', top: '36%' }} />
+          <i className="st-pv-dot op-tmobile" style={{ left: '79%', top: '56%' }} />
+        </>
+      ),
+    },
+    {
+      id: 'pins',
+      title: t.settingsShapePins,
+      desc: t.settingsShapePinsDesc,
+      preview: (
+        <>
+          <PreviewPin className="op-orange" left="25%" top="66%" />
+          <PreviewPin className="op-play" left="45%" top="80%" />
+          <PreviewPin className="op-plus" left="63%" top="60%" />
+          <PreviewPin className="op-tmobile" left="80%" top="74%" />
+        </>
+      ),
+    },
+    {
+      id: 'badges',
+      title: t.settingsShapeBadges,
+      desc: t.settingsShapeBadgesDesc,
+      preview: (
+        <>
+          <span className="st-pv-badge" style={{ left: '34%', top: '38%' }}>
+            <i className="op-orange" />
+            WAR1021
+          </span>
+          <span className="st-pv-badge" style={{ left: '65%', top: '66%' }}>
+            <i className="op-play" />
+            KRK0412
+          </span>
+        </>
+      ),
+    },
+  ];
+
   return (
     <Modal wide title={t.settingsTitle} onClose={onClose}>
-      <div className="settings-modal-wrap">
-        <p className="settings-modal-intro">{t.settingsDesc}</p>
+      <div className="st-shell">
+        <p className="st-intro">{t.settingsDesc}</p>
 
-        {/* Tab Navigation */}
-        <div className="settings-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'markers'}
-            className={`settings-tab-btn ${activeTab === 'markers' ? 'active' : ''}`}
-            onClick={() => setActiveTab('markers')}
-          >
-            <MapPin size={16} />
-            <span>{t.settingsTabMarkers}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'azimuths'}
-            className={`settings-tab-btn ${activeTab === 'azimuths' ? 'active' : ''}`}
-            onClick={() => setActiveTab('azimuths')}
-          >
-            <Compass size={16} />
-            <span>{t.settingsTabAzimuths}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'navigation'}
-            className={`settings-tab-btn ${activeTab === 'navigation' ? 'active' : ''}`}
-            onClick={() => setActiveTab('navigation')}
-          >
-            <SlidersHorizontal size={16} />
-            <span>{t.settingsTabNavigation}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'system'}
-            className={`settings-tab-btn ${activeTab === 'system' ? 'active' : ''}`}
-            onClick={() => setActiveTab('system')}
-          >
-            <Layers size={16} />
-            <span>{t.settingsTabSystem}</span>
-          </button>
-        </div>
+        <nav className="st-tabs" role="tablist" aria-label={t.settings}>
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`st-tab-btn ${active ? 'is-active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon size={14} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-        {/* Tab Panels */}
-        <div className="settings-tab-content">
-          {/* TAB 1: MARKERS & MAP */}
+        <div className="st-panel" role="tabpanel" key={activeTab}>
           {activeTab === 'markers' && (
-            <div className="settings-section-stack">
-              {/* Marker Shape Selector */}
-              <div className="settings-group">
-                <div className="settings-group-header">
-                  <label className="settings-label">{t.settingsMarkerShape}</label>
-                  <small className="settings-hint">{t.settingsMarkerShapeDesc}</small>
+            <>
+              <section className="st-section">
+                <div className="st-section-head">
+                  <span className="st-section-title">{t.settingsMarkerShape}</span>
+                  <span className="st-section-hint">{t.settingsMarkerShapeDesc}</span>
                 </div>
+                <div className="st-shapes" role="radiogroup" aria-label={t.settingsMarkerShape}>
+                  {shapes.map(shape => {
+                    const selected = settings.markerShape === shape.id;
+                    return (
+                      <button
+                        key={shape.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        className={`st-shape ${selected ? 'is-selected' : ''}`}
+                        onClick={() => updateSetting('markerShape', shape.id)}
+                      >
+                        <span className="st-shape-preview" aria-hidden="true">
+                          {shape.preview}
+                        </span>
+                        <span className="st-shape-meta">
+                          <strong>{shape.title}</strong>
+                          <small>{shape.desc}</small>
+                        </span>
+                        <span className="st-shape-check" aria-hidden="true">
+                          <Check size={11} strokeWidth={3} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
 
-                <div className="settings-shape-grid">
-                  {/* Option 1: Dots */}
-                  <button
-                    type="button"
-                    className={`settings-shape-card ${settings.markerShape === 'dots' ? 'is-selected' : ''}`}
-                    onClick={() => updateSetting('markerShape', 'dots')}
-                  >
-                    <div className="shape-preview preview-dots">
-                      <div className="preview-dot dot-orange" />
-                      <div className="preview-dot dot-play" />
-                      <div className="preview-dot dot-plus" />
-                      <div className="preview-dot dot-tmobile" />
-                    </div>
-                    <div className="shape-meta">
-                      <strong>{t.settingsShapeDots}</strong>
-                      <small>{t.settingsShapeDotsDesc}</small>
-                    </div>
-                    {settings.markerShape === 'dots' && <span className="shape-check"><Check size={14} /></span>}
-                  </button>
-
-                  {/* Option 2: Pins (User specific request!) */}
-                  <button
-                    type="button"
-                    className={`settings-shape-card ${settings.markerShape === 'pins' ? 'is-selected' : ''}`}
-                    onClick={() => updateSetting('markerShape', 'pins')}
-                  >
-                    <div className="shape-preview preview-pins">
-                      <div className="preview-pin pin-orange">
-                        <RadioTower size={11} />
-                      </div>
-                      <div className="preview-pin pin-play">
-                        <RadioTower size={11} />
-                      </div>
-                      <div className="preview-pin pin-tmobile">
-                        <RadioTower size={11} />
-                      </div>
-                    </div>
-                    <div className="shape-meta">
-                      <strong>{t.settingsShapePins}</strong>
-                      <small>{t.settingsShapePinsDesc}</small>
-                    </div>
-                    {settings.markerShape === 'pins' && <span className="shape-check"><Check size={14} /></span>}
-                  </button>
-
-                  {/* Option 3: Badges */}
-                  <button
-                    type="button"
-                    className={`settings-shape-card ${settings.markerShape === 'badges' ? 'is-selected' : ''}`}
-                    onClick={() => updateSetting('markerShape', 'badges')}
-                  >
-                    <div className="shape-preview preview-badges">
-                      <span className="preview-badge"><i className="preview-dot dot-orange" /> Orange</span>
-                      <span className="preview-badge"><i className="preview-dot dot-play" /> Play</span>
-                    </div>
-                    <div className="shape-meta">
-                      <strong>{t.settingsShapeBadges}</strong>
-                      <small>{t.settingsShapeBadgesDesc}</small>
-                    </div>
-                    {settings.markerShape === 'badges' && <span className="shape-check"><Check size={14} /></span>}
-                  </button>
-                </div>
-              </div>
-
-              {/* Marker Size */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsMarkerSize}</span>
-                </div>
-                <div className="settings-pill-group">
-                  {(['compact', 'normal', 'large'] as MarkerSize[]).map(sz => (
-                    <button
-                      key={sz}
-                      type="button"
-                      className={`settings-pill ${settings.markerSize === sz ? 'is-active' : ''}`}
-                      onClick={() => updateSetting('markerSize', sz)}
-                    >
-                      {sz === 'compact' ? t.settingsSizeCompact : sz === 'normal' ? t.settingsSizeNormal : t.settingsSizeLarge}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Station Labels on Map */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsLabels}</span>
-                </div>
-                <div className="settings-pill-group">
-                  {(['none', 'id', 'full'] as StationLabelsMode[]).map(mode => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className={`settings-pill ${settings.showStationLabels === mode ? 'is-active' : ''}`}
-                      onClick={() => updateSetting('showStationLabels', mode)}
-                    >
-                      {mode === 'none' ? t.settingsLabelsNone : mode === 'id' ? t.settingsLabelsId : t.settingsLabelsFull}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* High Contrast Markers Toggle */}
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-text">
-                  <span className="settings-row-title">{t.settingsHighContrast}</span>
-                  <small className="settings-hint">{t.settingsHighContrastDesc}</small>
-                </div>
-                <label className="settings-switch">
-                  <input
-                    type="checkbox"
-                    checked={settings.highContrastMarkers}
-                    onChange={e => updateSetting('highContrastMarkers', e.target.checked)}
-                  />
-                  <span className="settings-slider" />
-                </label>
-              </div>
-            </div>
+              <section className="st-card">
+                <Item
+                  stacked
+                  icon={Maximize2}
+                  title={t.settingsMarkerSize}
+                  control={
+                    <Segmented<MarkerSize>
+                      ariaLabel={t.settingsMarkerSize}
+                      value={settings.markerSize}
+                      onChange={v => updateSetting('markerSize', v)}
+                      options={[
+                        { value: 'compact', label: t.settingsSizeCompact },
+                        { value: 'normal', label: t.settingsSizeNormal },
+                        { value: 'large', label: t.settingsSizeLarge },
+                      ]}
+                    />
+                  }
+                />
+                <Item
+                  stacked
+                  icon={Tag}
+                  title={t.settingsLabels}
+                  control={
+                    <Segmented<StationLabelsMode>
+                      ariaLabel={t.settingsLabels}
+                      value={settings.showStationLabels}
+                      onChange={v => updateSetting('showStationLabels', v)}
+                      options={[
+                        { value: 'none', label: t.settingsLabelsNone },
+                        { value: 'id', label: t.settingsLabelsId },
+                        { value: 'full', label: t.settingsLabelsFull },
+                      ]}
+                    />
+                  }
+                />
+                <Item
+                  icon={Contrast}
+                  title={t.settingsHighContrast}
+                  hint={t.settingsHighContrastDesc}
+                  control={
+                    <Switch
+                      label={t.settingsHighContrast}
+                      checked={settings.highContrastMarkers}
+                      onChange={v => updateSetting('highContrastMarkers', v)}
+                    />
+                  }
+                />
+              </section>
+            </>
           )}
 
-          {/* TAB 2: AZIMUTHS & COVERAGE */}
           {activeTab === 'azimuths' && (
-            <div className="settings-section-stack">
-              {/* Azimuth Opacity */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsAzimuthOpacity}</span>
-                </div>
-                <div className="settings-pill-group">
-                  {([0.2, 0.45, 0.75] as AzimuthOpacity[]).map(op => (
-                    <button
-                      key={op}
-                      type="button"
-                      className={`settings-pill ${settings.azimuthOpacity === op ? 'is-active' : ''}`}
-                      onClick={() => updateSetting('azimuthOpacity', op)}
-                    >
-                      {op === 0.2 ? t.settingsAzOpacitySubtle : op === 0.45 ? t.settingsAzOpacityNormal : t.settingsAzOpacityVibrant}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Azimuth Length */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsAzimuthLength}</span>
-                </div>
-                <div className="settings-pill-group">
-                  {(['short', 'normal', 'long'] as AzimuthLength[]).map(len => (
-                    <button
-                      key={len}
-                      type="button"
-                      className={`settings-pill ${settings.azimuthLength === len ? 'is-active' : ''}`}
-                      onClick={() => updateSetting('azimuthLength', len)}
-                    >
-                      {len === 'short' ? t.settingsAzLengthShort : len === 'normal' ? t.settingsAzLengthNormal : t.settingsAzLengthLong}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Auto Show Azimuths on Select */}
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-text">
-                  <span className="settings-row-title">{t.settingsAutoAzimuthSelect}</span>
-                  <small className="settings-hint">{t.settingsAutoAzimuthSelectDesc}</small>
-                </div>
-                <label className="settings-switch">
-                  <input
-                    type="checkbox"
+            <section className="st-card">
+              <Item
+                stacked
+                icon={Droplet}
+                title={t.settingsAzimuthOpacity}
+                control={
+                  <Segmented<AzimuthOpacity>
+                    ariaLabel={t.settingsAzimuthOpacity}
+                    value={settings.azimuthOpacity}
+                    onChange={v => updateSetting('azimuthOpacity', v)}
+                    options={[
+                      { value: 0.2, label: t.settingsAzOpacitySubtle },
+                      { value: 0.45, label: t.settingsAzOpacityNormal },
+                      { value: 0.75, label: t.settingsAzOpacityVibrant },
+                    ]}
+                  />
+                }
+              />
+              <Item
+                stacked
+                icon={Ruler}
+                title={t.settingsAzimuthLength}
+                control={
+                  <Segmented<AzimuthLength>
+                    ariaLabel={t.settingsAzimuthLength}
+                    value={settings.azimuthLength}
+                    onChange={v => updateSetting('azimuthLength', v)}
+                    options={[
+                      { value: 'short', label: t.settingsAzLengthShort },
+                      { value: 'normal', label: t.settingsAzLengthNormal },
+                      { value: 'long', label: t.settingsAzLengthLong },
+                    ]}
+                  />
+                }
+              />
+              <Item
+                icon={MousePointerClick}
+                title={t.settingsAutoAzimuthSelect}
+                hint={t.settingsAutoAzimuthSelectDesc}
+                control={
+                  <Switch
+                    label={t.settingsAutoAzimuthSelect}
                     checked={settings.autoShowAzimuthsOnSelect}
-                    onChange={e => updateSetting('autoShowAzimuthsOnSelect', e.target.checked)}
+                    onChange={v => updateSetting('autoShowAzimuthsOnSelect', v)}
                   />
-                  <span className="settings-slider" />
-                </label>
-              </div>
-            </div>
+                }
+              />
+            </section>
           )}
 
-          {/* TAB 3: NAVIGATION & UNITS */}
           {activeTab === 'navigation' && (
-            <div className="settings-section-stack">
-              {/* Coordinate Format */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsCoordFormat}</span>
-                </div>
-                <div className="settings-pill-group">
-                  {(['DD', 'DMS'] as CoordFormat[]).map(fmt => (
-                    <button
-                      key={fmt}
-                      type="button"
-                      className={`settings-pill ${settings.coordFormat === fmt ? 'is-active' : ''}`}
-                      onClick={() => updateSetting('coordFormat', fmt)}
-                    >
-                      {fmt === 'DD' ? t.settingsCoordDd : t.settingsCoordDms}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Smooth Camera Animations */}
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-text">
-                  <span className="settings-row-title">{t.settingsSmoothFlyTo}</span>
-                  <small className="settings-hint">{t.settingsSmoothFlyToDesc}</small>
-                </div>
-                <label className="settings-switch">
-                  <input
-                    type="checkbox"
+            <section className="st-card">
+              <Item
+                stacked
+                icon={Crosshair}
+                title={t.settingsCoordFormat}
+                control={
+                  <Segmented<CoordFormat>
+                    ariaLabel={t.settingsCoordFormat}
+                    value={settings.coordFormat}
+                    onChange={v => updateSetting('coordFormat', v)}
+                    options={[
+                      { value: 'DD', label: t.settingsCoordDd },
+                      { value: 'DMS', label: t.settingsCoordDms },
+                    ]}
+                  />
+                }
+              />
+              <Item
+                icon={Wind}
+                title={t.settingsSmoothFlyTo}
+                hint={t.settingsSmoothFlyToDesc}
+                control={
+                  <Switch
+                    label={t.settingsSmoothFlyTo}
                     checked={settings.smoothFlyTo}
-                    onChange={e => updateSetting('smoothFlyTo', e.target.checked)}
+                    onChange={v => updateSetting('smoothFlyTo', v)}
                   />
-                  <span className="settings-slider" />
-                </label>
-              </div>
-
-              {/* Remember Map Location */}
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-text">
-                  <span className="settings-row-title">{t.settingsRememberLocation}</span>
-                  <small className="settings-hint">{t.settingsRememberLocationDesc}</small>
-                </div>
-                <label className="settings-switch">
-                  <input
-                    type="checkbox"
+                }
+              />
+              <Item
+                icon={Bookmark}
+                title={t.settingsRememberLocation}
+                hint={t.settingsRememberLocationDesc}
+                control={
+                  <Switch
+                    label={t.settingsRememberLocation}
                     checked={settings.rememberMapLocation}
-                    onChange={e => updateSetting('rememberMapLocation', e.target.checked)}
+                    onChange={v => updateSetting('rememberMapLocation', v)}
                   />
-                  <span className="settings-slider" />
-                </label>
-              </div>
-            </div>
+                }
+              />
+            </section>
           )}
 
-          {/* TAB 4: INTERFACE & STORAGE */}
           {activeTab === 'system' && (
-            <div className="settings-section-stack">
-              {/* Visual Theme */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsTheme}</span>
-                </div>
-                <div className="settings-pill-group">
-                  <button
-                    type="button"
-                    className={`settings-pill ${theme === 'dark' ? 'is-active' : ''}`}
-                    onClick={() => onThemeChange('dark')}
-                  >
-                    <Moon size={14} />
-                    <span>{t.settingsThemeDark}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`settings-pill ${theme === 'light' ? 'is-active' : ''}`}
-                    onClick={() => onThemeChange('light')}
-                  >
-                    <Sun size={14} />
-                    <span>{t.settingsThemeLight}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Language */}
-              <div className="settings-row">
-                <div className="settings-row-text">
-                  <span className="settings-row-title">{t.settingsLanguage}</span>
-                </div>
-                <div className="settings-pill-group">
-                  <button
-                    type="button"
-                    className={`settings-pill ${lang === 'pl' ? 'is-active' : ''}`}
-                    onClick={() => onLangChange('pl')}
-                  >
-                    Polski (PL)
-                  </button>
-                  <button
-                    type="button"
-                    className={`settings-pill ${lang === 'en' ? 'is-active' : ''}`}
-                    onClick={() => onLangChange('en')}
-                  >
-                    English (ENG)
-                  </button>
-                </div>
-              </div>
-
-              {/* Cache Management */}
-              <div className="settings-storage-card">
-                <div className="settings-storage-info">
-                  <strong className="settings-row-title">{t.settingsStorageTitle}</strong>
-                  <small className="settings-hint">{t.settingsStorageDesc}</small>
-                </div>
-                <button
-                  type="button"
-                  className="secondary-button btn-danger-soft"
-                  onClick={handleClearCache}
-                >
-                  <Trash2 size={14} />
-                  <span>{t.settingsClearCache}</span>
-                </button>
-              </div>
-            </div>
+            <>
+              <section className="st-card">
+                <Item
+                  stacked
+                  icon={theme === 'dark' ? Moon : Sun}
+                  title={t.settingsTheme}
+                  control={
+                    <Segmented<Theme>
+                      ariaLabel={t.settingsTheme}
+                      value={theme}
+                      onChange={onThemeChange}
+                      options={[
+                        { value: 'dark', label: t.settingsThemeDark, icon: Moon },
+                        { value: 'light', label: t.settingsThemeLight, icon: Sun },
+                      ]}
+                    />
+                  }
+                />
+                <Item
+                  stacked
+                  icon={Languages}
+                  title={t.settingsLanguage}
+                  control={
+                    <Segmented<Lang>
+                      ariaLabel={t.settingsLanguage}
+                      value={lang}
+                      onChange={onLangChange}
+                      options={[
+                        { value: 'pl', label: 'Polski (PL)' },
+                        { value: 'en', label: 'English (EN)' },
+                      ]}
+                    />
+                  }
+                />
+              </section>
+              <section className="st-card st-card-danger">
+                <Item
+                  icon={HardDrive}
+                  title={t.settingsStorageTitle}
+                  hint={t.settingsStorageDesc}
+                  control={
+                    <button type="button" className="st-danger-btn" onClick={handleClearCache}>
+                      <Trash2 size={13} />
+                      <span>{t.settingsClearCache}</span>
+                    </button>
+                  }
+                />
+              </section>
+            </>
           )}
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="settings-modal-footer">
-          <button
-            type="button"
-            className="settings-reset-btn"
-            onClick={handleResetDefaults}
-          >
-            <RotateCcw size={14} />
+        <footer className="st-footer">
+          <button type="button" className="st-reset-btn" onClick={handleResetDefaults}>
+            <RotateCcw size={13} />
             <span>{t.settingsResetDefaults}</span>
           </button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={onClose}
-          >
+          <button type="button" className="primary-button" onClick={onClose}>
+            <Check size={14} />
             {t.settingsClose}
           </button>
-        </div>
+        </footer>
       </div>
     </Modal>
   );

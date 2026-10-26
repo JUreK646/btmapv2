@@ -12,62 +12,50 @@ interface PinOptions {
   highContrast: boolean;
 }
 
-const OP_GRADIENTS: Record<string, [string, string]> = {
-  Orange: ['#ff7900', '#d9480f'],
-  Play: ['#8b5cf6', '#6d28d9'],
-  Plus: ['#00a651', '#047857'],
-  'T-Mobile': ['#e20074', '#9d174d'],
-  default: ['#0284c7', '#0369a1'],
-};
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+function labelFor(tower: Tower, opName: string, mode: StationLabelsMode): string {
+  if (mode === 'none') return '';
+  const stationId = tower.stationId || tower.id.slice(0, 10);
+  return mode === 'full' ? `${stationId} · ${opName}` : stationId;
+}
+
+/**
+ * Classic, slim solid teardrop pin (no inner hole/icon) in the operator colour
+ * with a clean dark outline, matching classic BTS map pins.
+ * The icon anchor sits at the bottom tip of the pin.
+ */
 export function getBtsPinIcon(tower: Tower, options: PinOptions): L.DivIcon {
   const { isSelected, size, labelsMode, highContrast } = options;
-  const opName = tower.operators[0]?.name || 'default';
+  const opName = tower.operators[0]?.name || 'UKE';
   const isBtmap = tower.source === 'BTMAP';
-  const stationId = tower.stationId || tower.id.slice(0, 10);
+  const labelText = labelFor(tower, opName, labelsMode);
 
-  const labelText =
-    labelsMode === 'none'
-      ? ''
-      : labelsMode === 'full'
-      ? `${stationId} · ${opName}`
-      : stationId;
-
-  const cacheKey = `${opName}-${isBtmap}-${isSelected}-${size}-${highContrast}-${labelText}`;
+  const cacheKey = `pin-v3-${opName}-${isBtmap}-${isSelected}-${size}-${highContrast}-${labelText}`;
   const cached = iconCache.get(cacheKey);
   if (cached) return cached;
 
-  const [col1, col2] = OP_GRADIENTS[opName] || [operatorColor(opName) || '#3b82f6', '#1d4ed8'];
+  const color = operatorColor(opName) || '#64748b';
+  const baseW = size === 'compact' ? 16 : size === 'large' ? 23 : 19;
+  const w = Math.round(baseW * (isSelected ? 1.22 : 1));
+  const h = Math.round(w * (31 / 22));
 
-  let w = size === 'compact' ? 22 : size === 'large' ? 34 : 28;
-  let h = size === 'compact' ? 29 : size === 'large' ? 44 : 36;
-  if (isSelected) {
-    w = Math.round(w * 1.2);
-    h = Math.round(h * 1.2);
-  }
+  const stroke = isSelected
+    ? '#ffffff'
+    : highContrast
+    ? '#09090b'
+    : '#1e1e26';
+  const strokeWidth = isSelected ? 2 : highContrast ? 1.7 : 1.3;
 
-  const strokeColor = highContrast ? '#ffffff' : isBtmap ? '#00e5ff' : 'rgba(255, 255, 255, 0.7)';
-  const strokeWidth = isSelected ? '2.5' : isBtmap || highContrast ? '2' : '1.2';
-  const shadowFilter = isSelected
-    ? 'drop-shadow(0 0 8px #00e5ff) drop-shadow(0 4px 6px rgba(0,0,0,0.6))'
-    : 'drop-shadow(0 3px 5px rgba(0,0,0,0.45))';
-
-  const svg = `<svg width="${w}" height="${h}" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:${shadowFilter};">
-    <defs>
-      <linearGradient id="g-${cacheKey.replace(/[^a-zA-Z0-9]/g, '_')}" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="${col1}" />
-        <stop offset="100%" stop-color="${col2}" />
-      </linearGradient>
-    </defs>
-    <path d="M14 0.8C6.7 0.8 0.8 6.7 0.8 14c0 9.8 12.1 20.7 12.6 21.2a0.9 0.9 0 0 0 1.2 0c0.5-0.5 12.6-11.4 12.6-21.2 0-7.3-5.9-13.2-13.2-13.2z" fill="url(#g-${cacheKey.replace(/[^a-zA-Z0-9]/g, '_')})" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>
-    <circle cx="14" cy="13.5" r="7" fill="#ffffff" fill-opacity="0.95"/>
-    <path d="M11 10.5a3 3 0 0 0 0 6M17 10.5a3 3 0 0 1 0 6M9 8.5a6 6 0 0 0 0 10M19 8.5a6 6 0 0 1 0 10" stroke="${col1}" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-    <circle cx="14" cy="13.5" r="1.8" fill="${col1}"/>
+  // Classic solid teardrop: smooth circular dome on top tapering to the tip at (11, 30.2)
+  const svg = `<svg class="bts-pin-svg" width="${w}" height="${h}" viewBox="0 0 22 31" xmlns="http://www.w3.org/2000/svg">
+    <path d="M11 1.2C5.6 1.2 1.5 5.3 1.5 10.6c0 6.1 7.1 16.1 8.8 19.1.35.6 1.05.6 1.4 0 1.7-3 8.8-13 8.8-19.1 0-5.3-4.1-9.4-9.5-9.4Z" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
   </svg>`;
 
-  const html = `<div class="bts-pin-container ${isSelected ? 'selected' : ''}">
+  const html = `<div class="bts-pin ${isSelected ? 'is-selected' : ''} ${highContrast ? 'is-contrast' : ''}" style="width:${w}px;height:${h}px">
     ${svg}
-    ${labelText ? `<span class="bts-pin-label">${labelText}</span>` : ''}
+    ${labelText ? `<span class="bts-pin-label">${escapeHtml(labelText)}</span>` : ''}
   </div>`;
 
   const icon = L.divIcon({
@@ -75,37 +63,44 @@ export function getBtsPinIcon(tower: Tower, options: PinOptions): L.DivIcon {
     html,
     iconSize: [w, h],
     iconAnchor: [w / 2, h],
+    tooltipAnchor: [0, -h + 2],
   });
 
   iconCache.set(cacheKey, icon);
   return icon;
 }
 
+/**
+ * Slim label marker: compact pill with an operator dot and station ID.
+ */
 export function getBtsBadgeIcon(tower: Tower, options: PinOptions): L.DivIcon {
   const { isSelected, size, labelsMode, highContrast } = options;
   const opName = tower.operators[0]?.name || 'UKE';
-  const opColor = operatorColor(opName) || '#3b82f6';
+  const color = operatorColor(opName) || '#64748b';
   const stationId = tower.stationId || tower.id.slice(0, 8);
   const isBtmap = tower.source === 'BTMAP';
+  const text =
+    labelsMode === 'full'
+      ? `${stationId} · ${opName}`
+      : stationId || opName;
 
-  const cacheKey = `badge-${opName}-${isBtmap}-${isSelected}-${size}-${highContrast}-${stationId}-${labelsMode}`;
+  const cacheKey = `badge-v3-${opName}-${isBtmap}-${isSelected}-${size}-${highContrast}-${text}`;
   const cached = iconCache.get(cacheKey);
   if (cached) return cached;
 
-  const showId = labelsMode !== 'none';
-  const scale = size === 'compact' ? '0.85' : size === 'large' ? '1.15' : '1.0';
+  const h = size === 'compact' ? 16 : size === 'large' ? 21 : 18;
+  const fontSize = size === 'compact' ? 9 : size === 'large' ? 11 : 10;
 
-  const html = `<div class="bts-badge-container ${isSelected ? 'selected' : ''} ${isBtmap ? 'is-btmap' : ''}" style="transform: translate(-50%, -50%) scale(${scale}); ${highContrast ? 'border-color: #fff; font-weight: 800;' : ''}">
-    <span class="bts-badge-dot" style="background:${opColor};"></span>
-    <span class="bts-badge-name">${opName}</span>
-    ${showId ? `<span class="bts-badge-sub">· ${stationId}</span>` : ''}
+  const html = `<div class="bts-badge ${isSelected ? 'is-selected' : ''} ${highContrast ? 'is-contrast' : ''}" style="--op:${color};height:${h}px;font-size:${fontSize}px">
+    <i class="bts-badge-dot"></i><span>${escapeHtml(text)}</span>
   </div>`;
 
   const icon = L.divIcon({
     className: 'bts-badge-leaflet-icon',
     html,
-    iconSize: [80, 24],
-    iconAnchor: [40, 12],
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+    tooltipAnchor: [0, -Math.round(h / 2) - 2],
   });
 
   iconCache.set(cacheKey, icon);
