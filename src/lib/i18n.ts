@@ -148,12 +148,15 @@ export const i18n = {
     basemapGoogleDesc: 'Zdjęcia Google Maps',
 
     // Search
-    searchAria: 'Szukaj miejscowości, adresu lub ID stacji',
-    searchPlaceholderFocused: 'Wpisz miejscowość, adres lub ID stacji…',
-    searchPlaceholder: 'Miejscowość, stacja…',
+    searchAria: 'Szukaj miejscowości, adresu, stacji, eNodeB lub Cell ID',
+    searchPlaceholderFocused: 'Wpisz miejscowość, adres, ID stacji, eNodeB (np. eNB 24102) lub Cell ID…',
+    searchPlaceholder: 'Miejscowość, stacja, eNB, CID…',
     searchInvalidCoords: 'Nieprawidłowe współrzędne.',
     searchPlaceNotFound: 'Nie znaleziono miejsca. Spróbuj pełnej nazwy miasta lub współrzędnych.',
     searchServiceUnavailable: 'Wyszukiwanie miejsc jest chwilowo niedostępne.',
+    searchCellIdHeader: 'Wykryto identyfikator sieci komórkowej',
+    sectorHighlightTitle: 'Wykryty sektor antenowy',
+    clearSectorHighlight: 'Zamknij podświetlenie sektora',
 
     // Filters
     filterMapTitle: 'Filtry mapy',
@@ -533,12 +536,15 @@ export const i18n = {
     basemapGoogleDesc: 'Google Maps imagery',
 
     // Search
-    searchAria: 'Search city, address or station ID',
-    searchPlaceholderFocused: 'Type town, address or station ID…',
-    searchPlaceholder: 'City, station…',
+    searchAria: 'Search city, address, station ID, eNodeB or Cell ID',
+    searchPlaceholderFocused: 'Search town, address, station ID, eNodeB (e.g. eNB 24102) or Cell ID…',
+    searchPlaceholder: 'City, station, eNB, CID…',
     searchInvalidCoords: 'Invalid coordinates.',
     searchPlaceNotFound: 'Location not found. Try a full city name or coordinates.',
     searchServiceUnavailable: 'Place search is temporarily unavailable.',
+    searchCellIdHeader: 'Cellular Network Identifier Detected',
+    sectorHighlightTitle: 'Detected Antenna Sector',
+    clearSectorHighlight: 'Close sector highlight',
 
     // Filters
     filterMapTitle: 'Map Filters',

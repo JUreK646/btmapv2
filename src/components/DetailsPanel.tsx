@@ -27,6 +27,7 @@ import PemReportList from './PemReportList';
 import type { PemReportsResult } from '../../shared/pem';
 import { operatorColor, towerTechs } from '../lib/constants';
 import { useI18n } from '../lib/i18n';
+import { extractEnodeBId, getStationSectorsInfo } from '../../shared/cellSearch';
 
 const technologyNames: Record<string, string> = {
   '5G': '5G NR',
@@ -44,6 +45,7 @@ type Props = {
   onOpenCreateStation?: (tower: Tower) => void;
   onOpenTerrainProfile?: (tower: Tower) => void;
   onOpenAreaEvaluation?: (coords: [number, number]) => void;
+  onSelectSector?: (azimuth: number, sectorNum: number) => void;
 };
 
 function extractFreq(bandStr: string): number {
@@ -258,6 +260,7 @@ export default function DetailsPanel({
   onOpenCreateStation,
   onOpenTerrainProfile,
   onOpenAreaEvaluation,
+  onSelectSector,
 }: Props) {
   const { t, lang } = useI18n();
   const isPl = lang === 'pl';
@@ -334,6 +337,8 @@ export default function DetailsPanel({
   };
 
   const hasAnyBands = tower.operators.some(op => op.bands && op.bands.length > 0);
+  const enbId = extractEnodeBId(tower.stationId || tower.operators[0]?.stationIds?.[0]);
+  const sectorsInfo = enbId ? getStationSectorsInfo(tower.stationId || tower.operators[0]?.stationIds?.[0], tower.azimuths) : [];
 
   return (
     <aside className="details-panel station-sheet" aria-labelledby="station-sheet-title">
@@ -439,10 +444,20 @@ export default function DetailsPanel({
             <span key={t}>{technologyNames[t] || t}</span>
           ))}
           {tower.azimuths && tower.azimuths.length > 0 && (
-            <span className="station-azimuths-chip" title="Kierunki sektorów anten nadawczych">
+            <div className="station-azimuths-group" title="Kierunki sektorów anten nadawczych (kliknij, aby podświetlić na mapie)">
               <Compass size={11} aria-hidden="true" />
-              {tower.azimuths.map(a => `${a}°`).join(' · ')}
-            </span>
+              {tower.azimuths.map((a, idx) => (
+                <button
+                  key={`${a}-${idx}`}
+                  type="button"
+                  className="station-azimuth-chip-btn"
+                  onClick={() => onSelectSector?.(a, idx + 1)}
+                  title={isPl ? `Podświetl Sektor ${idx + 1} (${a}°) na mapie` : `Highlight Sector ${idx + 1} (${a}°) on map`}
+                >
+                  S{idx + 1}: {a}°
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <span className="sr-only" role="status">
@@ -537,6 +552,37 @@ export default function DetailsPanel({
             </div>
           )}
         </dl>
+
+        {/* Cellular IDs (eNodeB / NetMonster / ECI calculator) */}
+        {sectorsInfo.length > 0 && enbId && (
+          <section className="station-cell-calc-section" aria-label="Numery sieci komórkowej (eNodeB / CID / ECI)">
+            <div className="station-cell-calc-header">
+              <Radio size={14} aria-hidden="true" />
+              <span>{isPl ? 'Identyfikatory komórkowe (NetMonster / *#0011#)' : 'Cellular IDs (NetMonster / FieldTest)'}</span>
+              <span className="station-cell-enb-tag">eNodeB <strong>{enbId}</strong></span>
+            </div>
+            <div className="station-cell-sectors-grid">
+              {sectorsInfo.map(sec => (
+                <button
+                  key={sec.sectorNum}
+                  type="button"
+                  className="station-cell-sector-card"
+                  onClick={() => sec.azimuth != null && onSelectSector?.(sec.azimuth, sec.sectorNum)}
+                  title={isPl ? `Podświetl Sektor ${sec.sectorNum} (${sec.azimuth ?? '—'}°) na mapie` : `Highlight Sector ${sec.sectorNum} on map`}
+                >
+                  <div className="station-cell-sec-top">
+                    <span className="station-cell-sec-badge">Sektor {sec.sectorNum}</span>
+                    {sec.azimuth != null && <span className="station-cell-sec-az">{sec.azimuth}°</span>}
+                  </div>
+                  <div className="station-cell-sec-ids">
+                    <span title="Local Cell ID">CID: <strong>{sec.cid}</strong></span>
+                    <span title="E-UTRAN Cell Identifier">ECI: <strong>{sec.eci}</strong></span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Szczegóły komórek i pasm UKE */}
         {hasAnyBands && (

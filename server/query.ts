@@ -1,19 +1,47 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { MAP_STATION_LIMIT } from '../shared/mapLimits.ts';
 import { withAzimuths } from './azimuths.ts';
+import { parseCellSearch, type ParsedCellId } from '../shared/cellSearch.ts';
 
 const majorOperators = ['Orange', 'T-Mobile', 'Play', 'Plus'];
+
 export function towerWhere(query: Record<string, unknown>) {
   const clauses = ["t.status = 'APPROVED'", 't.lat BETWEEN -90 AND 90', 't.lng BETWEEN -180 AND 180'];
   const params: SQLInputValue[] = [];
   const list = (value: unknown) => typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 20) : [];
+
   if (query.source && query.source !== 'ALL') { clauses.push('t.source = ?'); params.push(String(query.source)); }
   if (query.province) { clauses.push('fold(t.province) = fold(?)'); params.push(String(query.province)); }
+
+  let cellSearch: ParsedCellId | null = null;
+
   if (query.q) {
-    clauses.push("(fold(t.address) LIKE fold(?) ESCAPE '!' OR fold(t.stationId) LIKE fold(?) ESCAPE '!' OR fold(t.id) LIKE fold(?) ESCAPE '!' OR fold(t.operators) LIKE fold(?) ESCAPE '!')");
-    const text = `%${String(query.q).slice(0, 150).replace(/[!%_]/g, '!$&')}%`;
-    params.push(text, text, text, text);
+    const rawQ = String(query.q).slice(0, 150);
+    cellSearch = parseCellSearch(rawQ);
+
+    if (cellSearch?.nodeIdStr) {
+      const enb = cellSearch.nodeIdStr;
+      const btEnb = 'BT' + enb;
+      const wildSuffix = '%' + enb;
+      const wildBoth = '%' + enb + '%';
+      const cleanAddress = `%${rawQ.replace(/[!%_]/g, '!$&')}%`;
+
+      clauses.push(`(
+        fold(t.stationId) = fold(?) OR
+        fold(t.stationId) = fold(?) OR
+        fold(t.stationId) LIKE fold(?) OR
+        fold(t.operators) LIKE fold(?) OR
+        fold(t.id) LIKE fold(?) OR
+        fold(t.address) LIKE fold(?) ESCAPE '!'
+      )`);
+      params.push(enb, btEnb, wildSuffix, wildBoth, wildBoth, cleanAddress);
+    } else {
+      clauses.push("(fold(t.address) LIKE fold(?) ESCAPE '!' OR fold(t.stationId) LIKE fold(?) ESCAPE '!' OR fold(t.id) LIKE fold(?) ESCAPE '!' OR fold(t.operators) LIKE fold(?) ESCAPE '!')");
+      const text = `%${rawQ.replace(/[!%_]/g, '!$&')}%`;
+      params.push(text, text, text, text);
+    }
   }
+
   const bounds = ['minLat','maxLat','minLng','maxLng'].map(key => query[key]);
   if (bounds.some(v => v !== undefined)) {
     if (bounds.some(v => v === undefined || v === '' || !Number.isFinite(Number(v)))) throw new Error('Nieprawidłowy obszar mapy.');
@@ -21,6 +49,7 @@ export function towerWhere(query: Record<string, unknown>) {
     if (south > north || west > east || south < -90 || north > 90 || west < -180 || east > 180) throw new Error('Nieprawidłowy obszar mapy.');
     clauses.push('t.lat BETWEEN ? AND ? AND t.lng BETWEEN ? AND ?'); params.push(south,north,west,east);
   }
+
   const operators = list(query.operators), techs = list(query.techs || query.tech), bands = list(query.bands);
   if (operators.length || techs.length || bands.length) {
     const opClauses: string[] = [];
@@ -40,7 +69,7 @@ export function towerWhere(query: Record<string, unknown>) {
     if (bandClauses.length) opClauses.push(`EXISTS (SELECT 1 FROM json_each(op.value, '$.bands') b WHERE ${bandClauses.join(' AND ')})`);
     clauses.push(`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op WHERE ${opClauses.join(' AND ')})`);
   }
-  return { sql: clauses.join(' AND '), params };
+  return { sql: clauses.join(' AND '), params, cellSearch };
 }
 
 const bandMhz = (band: unknown) => {
@@ -82,7 +111,7 @@ export function withPemCounts<T extends Record<string,unknown>>(db:DatabaseSync,
 }
 
 export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
-  const { sql, params } = towerWhere(query);
+  const { sql, params, cellSearch } = towerWhere(query);
   const isMinimal = query.minimal === '1';
   const total = isMinimal ? 0 : Number(db.prepare(`SELECT COUNT(*) AS count FROM towers t WHERE ${sql}`).get(...params)!.count);
   const zoom = Number(query.zoom ?? 14);
@@ -90,7 +119,32 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
   const isMap = query.view === 'map';
   const limit = Math.min(isMap ? MAP_STATION_LIMIT : 1500, Math.max(1, Number(query.limit) || (isMap ? MAP_STATION_LIMIT : 100)));
   const offset = Math.max(0, Number(query.offset) || 0);
-  const items = db.prepare(`SELECT t.* FROM towers t WHERE ${sql} ORDER BY t.address, t.id LIMIT ? OFFSET ?`).all(...params,Math.floor(limit),Math.floor(offset)).map(normalizeTower);
+
+  let orderSql = 't.address, t.id';
+  const orderParams: SQLInputValue[] = [];
+
+  if (cellSearch?.nodeIdStr) {
+    const enb = cellSearch.nodeIdStr;
+    const btEnb = 'BT' + enb;
+    const playPattern = '___' + enb;
+    const wildSuffix = '%' + enb;
+    const wildBoth = '%' + enb + '%';
+    orderSql = `CASE
+      WHEN fold(t.stationId) = fold(?) THEN 1
+      WHEN fold(t.stationId) = fold(?) THEN 2
+      WHEN fold(t.stationId) LIKE fold(?) THEN 3
+      WHEN fold(t.stationId) LIKE fold(?) THEN 4
+      WHEN fold(t.operators) LIKE fold(?) THEN 5
+      ELSE 6
+    END, t.address, t.id`;
+    orderParams.push(enb, btEnb, playPattern, wildSuffix, wildBoth);
+  }
+
+  const items = db
+    .prepare(`SELECT t.* FROM towers t WHERE ${sql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`)
+    .all(...params, ...orderParams, Math.floor(limit), Math.floor(offset))
+    .map(normalizeTower);
+
   if (isMinimal) {
     return { items, total: items.length, limit, hasMore: false };
   }

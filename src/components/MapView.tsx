@@ -294,16 +294,27 @@ const evalIcon = L.divIcon({
   iconAnchor: [16, 16],
 });
 
+export interface HighlightedSector {
+  towerId: string;
+  azimuth: number;
+  sectorNum?: number;
+  cellId?: number;
+  eci?: number;
+  label?: string;
+}
+
 function AzimuthBeams({
   items,
   enabled,
   selectedId,
+  highlightedSector,
   renderer,
   settings,
 }: {
   items: Tower[];
   enabled: boolean;
   selectedId?: string;
+  highlightedSector?: HighlightedSector | null;
   renderer: L.Canvas;
   settings?: AppSettings;
 }) {
@@ -322,10 +333,10 @@ function AzimuthBeams({
   });
 
   const autoSelected = Boolean(settings?.autoShowAzimuthsOnSelect && selectedId);
-  if (!enabled && !autoSelected) return null;
+  if (!enabled && !autoSelected && !highlightedSector) return null;
 
   // Show azimuths only when zoomed in closely (zoom >= 14 - neighborhood/village level),
-  // or always for the currently selected station.
+  // or always for the currently selected station or highlighted sector.
   const showAll = enabled && zoom >= 14;
   let targetTowers: Tower[] = [];
 
@@ -348,6 +359,14 @@ function AzimuthBeams({
     targetTowers = items.filter(t => t.id === selectedId && Array.isArray(t.azimuths) && t.azimuths.length > 0);
   }
 
+  // Ensure station with highlighted sector is always included
+  if (highlightedSector) {
+    const hlTower = items.find(t => t.id === highlightedSector.towerId);
+    if (hlTower && !targetTowers.some(t => t.id === hlTower.id)) {
+      targetTowers = [hlTower, ...targetTowers];
+    }
+  }
+
   if (targetTowers.length === 0) return null;
 
   // Scaled cone radius in meters:
@@ -361,7 +380,11 @@ function AzimuthBeams({
   return (
     <>
       {targetTowers.map(t => {
-        const azs = t.azimuths || [];
+        const rawAzs = t.azimuths || [];
+        const isHlTower = Boolean(highlightedSector && highlightedSector.towerId === t.id);
+        const azs = isHlTower && highlightedSector && !rawAzs.includes(highlightedSector.azimuth)
+          ? [...rawAzs, highlightedSector.azimuth].sort((a, b) => a - b)
+          : rawAzs;
         const opColor = operatorColor(t.operators[0]?.name) || '#f59e0b';
         const latRad = (t.lat * Math.PI) / 180;
 
@@ -369,18 +392,25 @@ function AzimuthBeams({
           <Fragment key={`az-group-${t.id}`}>
             {/* Sector Cones / Wedges */}
             {azs.map(az => {
-              const poly = sectorPolygon(t.lat, t.lng, az, radiusM, beamwidthDeg);
+              const isTargetSector = Boolean(isHlTower && highlightedSector && highlightedSector.azimuth === az);
+              const poly = sectorPolygon(
+                t.lat,
+                t.lng,
+                az,
+                isTargetSector ? radiusM * 1.3 : radiusM,
+                isTargetSector ? 50 : beamwidthDeg
+              );
               return (
                 <Polygon
                   key={`poly-${t.id}-${az}`}
                   positions={poly}
                   renderer={renderer}
                   pathOptions={{
-                    color: opColor,
-                    weight: 1.5,
-                    opacity: strokeOpacity,
-                    fillColor: opColor,
-                    fillOpacity,
+                    color: isTargetSector ? '#00e5ff' : opColor,
+                    weight: isTargetSector ? 3.5 : 1.5,
+                    opacity: isTargetSector ? 1.0 : strokeOpacity,
+                    fillColor: isTargetSector ? '#00e5ff' : opColor,
+                    fillOpacity: isTargetSector ? 0.65 : fillOpacity,
                   }}
                   interactive={false}
                 />
@@ -389,9 +419,11 @@ function AzimuthBeams({
 
             {/* Subtle centerline ray inside each sector cone */}
             {azs.map(az => {
+              const isTargetSector = Boolean(isHlTower && highlightedSector && highlightedSector.azimuth === az);
+              const rayLen = isTargetSector ? radiusM * 1.35 : radiusM;
               const rayEnd: [number, number] = [
-                t.lat + (radiusM * Math.cos((az * Math.PI) / 180)) / 111320,
-                t.lng + (radiusM * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad)),
+                t.lat + (rayLen * Math.cos((az * Math.PI) / 180)) / 111320,
+                t.lng + (rayLen * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad)),
               ];
               return (
                 <Polyline
@@ -399,9 +431,9 @@ function AzimuthBeams({
                   positions={[[t.lat, t.lng], rayEnd]}
                   renderer={renderer}
                   pathOptions={{
-                    color: opColor,
-                    weight: 1.2,
-                    opacity: strokeOpacity * 0.7,
+                    color: isTargetSector ? '#ffffff' : opColor,
+                    weight: isTargetSector ? 2.8 : 1.2,
+                    opacity: isTargetSector ? 1.0 : strokeOpacity * 0.7,
                   }}
                   interactive={false}
                 />
@@ -410,16 +442,19 @@ function AzimuthBeams({
 
             {/* Azimuth Degree Labels centered INSIDE each sector cone */}
             {azs.map(az => {
-              const labelDistM = radiusM * 0.60;
+              const isTargetSector = Boolean(isHlTower && highlightedSector && highlightedSector.azimuth === az);
+              const labelDistM = (isTargetSector ? radiusM * 1.3 : radiusM) * 0.60;
               const dLat = (labelDistM * Math.cos((az * Math.PI) / 180)) / 111320;
               const dLng = (labelDistM * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad));
               const labelPos: [number, number] = [t.lat + dLat, t.lng + dLng];
 
               const icon = L.divIcon({
-                className: 'az-beam-label',
-                html: `<span>${az}°</span>`,
-                iconSize: [44, 18],
-                iconAnchor: [22, 9],
+                className: `az-beam-label ${isTargetSector ? 'is-target' : ''}`,
+                html: isTargetSector && highlightedSector
+                  ? `<span>🎯 ${highlightedSector.sectorNum ? `Sektor ${highlightedSector.sectorNum} · ` : ''}${az}°</span>`
+                  : `<span>${az}°</span>`,
+                iconSize: isTargetSector ? [120, 24] : [44, 18],
+                iconAnchor: isTargetSector ? [60, 12] : [22, 9],
               });
 
               return (
@@ -460,6 +495,7 @@ export default function MapView({
   onEvalTargetChange,
   isPickingEvalTarget,
   showAzimuths,
+  highlightedSector,
   settings,
 }: {
   theme: Theme;
@@ -483,13 +519,23 @@ export default function MapView({
   onEvalTargetChange?: (coords: [number, number]) => void;
   isPickingEvalTarget?: boolean;
   showAzimuths?: boolean;
+  highlightedSector?: HighlightedSector | null;
   settings?: AppSettings;
 }) {
   const markers = items.slice(0, MAP_STATION_LIMIT);
-  const visible =
-    selected && !markers.some(t => t.id === selected.id)
-      ? [...markers.slice(0, MAP_STATION_LIMIT - 1), selected]
-      : markers;
+  const visible = useMemo(() => {
+    let list = markers;
+    if (selected && !list.some(t => t.id === selected.id)) {
+      list = [...list.slice(0, MAP_STATION_LIMIT - 1), selected];
+    }
+    if (highlightedSector && !list.some(t => t.id === highlightedSector.towerId)) {
+      const hlTower = items.find(t => t.id === highlightedSector.towerId);
+      if (hlTower) {
+        list = [hlTower, ...list];
+      }
+    }
+    return list;
+  }, [markers, selected, highlightedSector, items]);
 
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
   const terrainStation = terrainTower;
@@ -546,6 +592,7 @@ export default function MapView({
         items={visible}
         enabled={Boolean(showAzimuths)}
         selectedId={selected?.id}
+        highlightedSector={highlightedSector}
         renderer={canvasRenderer}
         settings={settings}
       />

@@ -1,10 +1,10 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Map as MapIcon,Database,ChartNoAxesCombined,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages,Settings as SettingsIcon} from 'lucide-react';
 import type L from 'leaflet';
-import MapView from './components/MapView';
+import MapView, { type HighlightedSector } from './components/MapView';
 import BasemapPicker from './components/BasemapPicker';
 import FiltersPanel from './components/Filters';
-import Search from './components/Search';
+import Search, { type SectorSelection } from './components/Search';
 import TowerList from './components/TowerList';
 import DetailsPanel from './components/DetailsPanel';
 import ChangelogView from './components/ChangelogView';
@@ -72,6 +72,7 @@ export default function App(){
   const [evalRadiusM, setEvalRadiusM] = useState<number>(500);
   const [isPickingEvalTarget, setIsPickingEvalTarget] = useState(false);
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [highlightedSector, setHighlightedSector] = useState<HighlightedSector | null>(null);
 
   const openAreaEvaluation = (coords?: [number, number]) => {
     if (coords) {
@@ -164,6 +165,7 @@ export default function App(){
   }, [terrainTower, isPickingTerrainTarget, isPickingEvalTarget]);
   const closeTower = () => {
     setSelected(null);
+    setHighlightedSector(null);
     if (isPickingTerrainTarget) {
       handleCancelPick();
     }
@@ -287,8 +289,30 @@ export default function App(){
             onEvalTargetChange={handleEvalTargetChange}
             isPickingEvalTarget={isPickingEvalTarget}
             showAzimuths={showAzimuths}
+            highlightedSector={highlightedSector}
             settings={settings}
           />
+          {highlightedSector && (
+            <div className="sector-highlight-banner" role="status">
+              <Radio size={16} className="sector-highlight-pulse" />
+              <span className="sector-highlight-text">
+                <strong>{t.sectorHighlightTitle}</strong>
+                {highlightedSector.sectorNum ? ` · Sektor ${highlightedSector.sectorNum}` : ''}
+                {` (${highlightedSector.azimuth}°)`}
+                {highlightedSector.cellId ? ` · CID ${highlightedSector.cellId}` : ''}
+                {highlightedSector.eci ? ` · ECI ${highlightedSector.eci}` : ''}
+              </span>
+              <button
+                type="button"
+                className="sector-highlight-close"
+                onClick={() => setHighlightedSector(null)}
+                aria-label={t.clearSectorHighlight}
+                title={t.clearSectorHighlight}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
           {isPickingTerrainTarget && (
             <div className="tp-pick-banner" role="status">
               <Crosshair size={18} className="tp-pulse-icon" />
@@ -306,7 +330,22 @@ export default function App(){
           <div className="map-hud"><button className="map-summary" aria-label={t.stationsInArea} aria-expanded={panel==='stations'} onClick={()=>togglePanel('stations')}><Radio size={17}/><strong>{loading?'…':formatNumber(result.total)}</strong><span>{t.locationsCount}</span><span className="hud-divider"/><span className="hud-source">{filters.source==='UKE'?'UKE':filters.source==='BTMAP'?'BTMap':'BTMap + UKE'}</span><List size={16}/></button><div className="map-coordinates">{bounds?<><span>{t.mapCenter}</span>{formatCoordinates((bounds.minLat+bounds.maxLat)/2, (bounds.minLng+bounds.maxLng)/2, settings.coordFormat)}<span className="coordinate-zoom">Z{bounds.zoom}</span></>:t.mapLoading}</div></div>
           <div className={`map-searchbar ${isSearchActive ? 'search-active' : ''}`}>
             <Search
-              onSelect={selectTower}
+              onSelect={(tower, sector) => {
+                selectTower(tower);
+                if (sector) {
+                  setHighlightedSector({
+                    towerId: tower.id,
+                    ...sector,
+                  });
+                  if (settings.smoothFlyTo && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                    map?.flyTo([tower.lat, tower.lng], Math.max(map?.getZoom() || 14, 16), { duration: 0.75 });
+                  } else {
+                    map?.setView([tower.lat, tower.lng], Math.max(map?.getZoom() || 14, 16));
+                  }
+                } else {
+                  setHighlightedSector(null);
+                }
+              }}
               onPlace={(lat,lng)=>{
                 closeTower();
                 setPanel(null);
@@ -408,7 +447,20 @@ export default function App(){
           <div className="map-legend" aria-label={t.legendOperators}>{OPERATORS.slice(0,4).map(op=><button key={op.name} aria-label={`${t.filterOperatorPrefix} ${op.name}`} aria-pressed={filters.operators.includes(op.name)} onClick={()=>changeFilters({...filters,operators:filters.operators.length===1&&filters.operators[0]===op.name?[]:[op.name]})}><i style={{background:op.color}}/>{op.name}</button>)}</div>
           {panel==='filters'&&filterPanel}
           {panel==='stations'&&<aside className="floating-panel stations-drawer" aria-label={t.stationsInArea}><div className="floating-panel-heading"><div><h2>{t.stationsInArea}</h2><p>{t.databaseViewTitle} · {formatNumber(result.total)} {t.locationsCount}</p></div><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={19}/></button></div><div className="panel-scroll"><TowerList items={result.items} total={result.total} loading={loading} error={error} selected={selected?.id} onSelect={selectTower} onRetry={()=>setRefresh(r=>r+1)} hasMore={result.hasMore}/></div></aside>}
-          {selected&&<DetailsPanel key={selected.id} tower={selected} onClose={closeTower} onNotice={setNotice} onOpenCreateStation={openCreateStation} onOpenTerrainProfile={openTerrainProfile} onOpenAreaEvaluation={openAreaEvaluation}/>}
+          {selected&&<DetailsPanel key={selected.id} tower={selected} onClose={closeTower} onNotice={setNotice} onOpenCreateStation={openCreateStation} onOpenTerrainProfile={openTerrainProfile} onOpenAreaEvaluation={openAreaEvaluation} onSelectSector={(azimuth, sectorNum) => {
+            setHighlightedSector({
+              towerId: selected.id,
+              azimuth,
+              sectorNum,
+            });
+            if (map && map.getZoom() < 15) {
+              if (settings.smoothFlyTo && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                map.flyTo([selected.lat, selected.lng], 16, { duration: 0.65 });
+              } else {
+                map.setView([selected.lat, selected.lng], 16);
+              }
+            }
+          }}/>}
         </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>{t.filters}{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
       </main>
     </section>

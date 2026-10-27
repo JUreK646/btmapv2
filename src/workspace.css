@@ -317,3 +317,315 @@
   justify-content: center;
   padding-inline: 0;
 }
+
+/* ============================================================
+   Cellular Identifier Search & Sector Highlight HUD
+   NetMonster / Netmode / ServiceMode (*#0011#) Integration
+   ============================================================ */
+
+/* Search Result Cellular Banner */
+.search-cell-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 4px 4px 8px 4px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.12), rgba(14, 165, 233, 0.05));
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 10px;
+}
+.search-cell-pulse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(0, 229, 255, 0.18);
+  color: #00e5ff;
+  flex-shrink: 0;
+}
+[data-theme='light'] .search-cell-pulse {
+  background: rgba(8, 145, 178, 0.15);
+  color: #0891b2;
+}
+.search-cell-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.search-cell-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.search-cell-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #00e5ff;
+  color: #021a24;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+[data-theme='light'] .search-cell-badge {
+  background: #0891b2;
+  color: #ffffff;
+}
+.search-cell-sub {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.search-cell-meta strong {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-tower-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.search-tower-item:hover {
+  background: var(--surface-hover);
+}
+.search-tower-item.has-sector-match {
+  background: rgba(0, 229, 255, 0.06);
+  border-left: 3px solid #00e5ff;
+}
+.search-tower-item.has-sector-match:hover {
+  background: rgba(0, 229, 255, 0.12);
+}
+.search-tower-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.search-sector-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 750;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.14);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  padding: 1px 6px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+[data-theme='light'] .search-sector-pill {
+  color: #0891b2;
+  background: rgba(8, 145, 178, 0.1);
+  border-color: rgba(8, 145, 178, 0.3);
+}
+
+/* Floating Sector Highlight Banner on Map */
+.sector-highlight-banner {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #f8fafc;
+  border: 1px solid rgba(0, 229, 255, 0.5);
+  border-radius: 12px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(0, 229, 255, 0.25);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: auto;
+  animation: slideDownFade 0.25s ease-out;
+  max-width: min(92vw, 560px);
+}
+[data-theme='light'] .sector-highlight-banner {
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  border-color: rgba(8, 145, 178, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 0 16px rgba(8, 145, 178, 0.2);
+}
+.sector-highlight-banner .sector-highlight-pulse {
+  color: #00e5ff;
+  flex-shrink: 0;
+  animation: pulse 1.8s infinite;
+}
+[data-theme='light'] .sector-highlight-banner .sector-highlight-pulse {
+  color: #0891b2;
+}
+.sector-highlight-banner .sector-highlight-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sector-highlight-banner .sector-highlight-text strong {
+  color: #00e5ff;
+  font-weight: 750;
+}
+[data-theme='light'] .sector-highlight-banner .sector-highlight-text strong {
+  color: #0891b2;
+}
+.sector-highlight-banner .sector-highlight-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.sector-highlight-banner .sector-highlight-close:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+/* Clickable Azimuth Chips in Station Sheet Header */
+.station-azimuths-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+.station-azimuth-chip-btn {
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 750;
+  padding: 1.5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  transition: all 0.15s ease;
+}
+.station-azimuth-chip-btn:hover {
+  background: #00e5ff;
+  color: #021a24;
+  border-color: #00e5ff;
+  transform: translateY(-1px);
+}
+
+/* Cellular IDs Calculator in Station Sheet */
+.station-cell-calc-section {
+  margin: 16px 0;
+  padding: 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.station-cell-calc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.station-cell-calc-header svg {
+  color: #00e5ff;
+}
+[data-theme='light'] .station-cell-calc-header svg {
+  color: #0891b2;
+}
+.station-cell-enb-tag {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+}
+.station-cell-enb-tag strong {
+  color: var(--text);
+  font-weight: 750;
+}
+.station-cell-sectors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+.station-cell-sector-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.station-cell-sector-card:hover {
+  border-color: #00e5ff;
+  box-shadow: 0 4px 12px rgba(0, 229, 255, 0.18);
+  transform: translateY(-2px);
+}
+[data-theme='light'] .station-cell-sector-card:hover {
+  border-color: #0891b2;
+  box-shadow: 0 4px 12px rgba(8, 145, 178, 0.18);
+}
+.station-cell-sec-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.station-cell-sec-badge {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.station-cell-sec-az {
+  font-size: 10px;
+  font-weight: 750;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.14);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+[data-theme='light'] .station-cell-sec-az {
+  color: #0891b2;
+  background: rgba(8, 145, 178, 0.12);
+}
+.station-cell-sec-ids {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+}
+.station-cell-sec-ids strong {
+  color: var(--text);
+  font-weight: 650;
+}
