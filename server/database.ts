@@ -23,7 +23,7 @@ export function openDatabase(
       status TEXT DEFAULT 'OFFLINE', createdAt TEXT
     );
     CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
-    CREATE TABLE IF NOT EXISTS comments (id TEXT PRIMARY KEY, towerId TEXT, userNick TEXT, text TEXT, createdAt TEXT);
+    CREATE TABLE IF NOT EXISTS comments (id TEXT PRIMARY KEY, towerId TEXT, userNick TEXT, text TEXT, photoUrl TEXT, createdAt TEXT);
     CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, towerId TEXT, userNick TEXT, url TEXT, caption TEXT, createdAt TEXT);
     CREATE TABLE IF NOT EXISTS queue (id TEXT PRIMARY KEY, type TEXT, data TEXT, userNick TEXT, status TEXT DEFAULT 'PENDING', createdAt TEXT);
     CREATE TABLE IF NOT EXISTS logs (id TEXT PRIMARY KEY, userNick TEXT, action TEXT, target TEXT, status TEXT, createdAt TEXT);
@@ -37,6 +37,11 @@ export function openDatabase(
     CREATE TABLE IF NOT EXISTS pem_report_operator_counts (towerId TEXT NOT NULL,operator TEXT NOT NULL,count INTEGER NOT NULL,partial INTEGER NOT NULL,checkedAt TEXT NOT NULL,PRIMARY KEY(towerId,operator));
     CREATE TABLE IF NOT EXISTS pem_pdf_cache (key TEXT PRIMARY KEY,data TEXT NOT NULL,checkedAt INTEGER NOT NULL);
   `);
+  try {
+    db.exec('ALTER TABLE comments ADD COLUMN photoUrl TEXT');
+  } catch {
+    // Column already exists
+  }
   if (!db.prepare("SELECT value FROM metadata WHERE key='pemReportCatalogV2'").get()) {
     db.exec(
       `BEGIN;DELETE FROM pem_reports_cache;DELETE FROM pem_report_counts;INSERT INTO metadata(key,value) VALUES('pemReportCatalogV2','1');COMMIT;`

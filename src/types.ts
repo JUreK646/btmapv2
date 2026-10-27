@@ -8,7 +8,8 @@ export interface Filters { operators:string[]; techs:string[]; bands:string[]; p
 export interface TowerResult { items:Tower[]; total:number; limit:number; hasMore:boolean; }
 export interface Bounds { minLat:number; maxLat:number; minLng:number; maxLng:number; zoom:number; }
 export interface User { id:string; email:string; nick:string; role:string; points:number; level:number; }
-export interface Comment { id:string; userNick:string; text:string; createdAt:string; }
+export interface Comment { id:string; towerId:string; userNick:string; text:string; photoUrl?:string; createdAt:string; }
+export interface Photo { id:string; towerId:string; userNick:string; url:string; caption?:string; createdAt:string; }
 export interface Count { name:string; count:number; }
 export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
 export interface Submission { id:string; type:string; status:string; createdAt:string; userNick?:string; data?:any; }

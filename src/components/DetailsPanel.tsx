@@ -20,10 +20,11 @@ import {
   Radar,
   Compass,
 } from 'lucide-react';
-import type { Tower, Operator, Band } from '../types';
+import type { Tower, Operator, Band, User } from '../types';
 import { cachedPemReports, freshPemReports, loadPemReports, pemSummary } from '../lib/pemCache';
 import PemReportsDialog from './PemReportsDialog';
 import PemReportList from './PemReportList';
+import StationComments from './StationComments';
 import type { PemReportsResult } from '../../shared/pem';
 import { operatorColor, towerTechs } from '../lib/constants';
 import { useI18n } from '../lib/i18n';
@@ -46,6 +47,8 @@ type Props = {
   onOpenTerrainProfile?: (tower: Tower) => void;
   onOpenAreaEvaluation?: (coords: [number, number]) => void;
   onSelectSector?: (azimuth: number, sectorNum: number) => void;
+  user?: User | null;
+  onRequireAuth?: () => void;
 };
 
 function extractFreq(bandStr: string): number {
@@ -261,6 +264,8 @@ export default function DetailsPanel({
   onOpenTerrainProfile,
   onOpenAreaEvaluation,
   onSelectSector,
+  user,
+  onRequireAuth,
 }: Props) {
   const { t, lang } = useI18n();
   const isPl = lang === 'pl';
@@ -606,6 +611,15 @@ export default function DetailsPanel({
             </div>
           </section>
         )}
+
+        {/* Komentarze i zdjęcia terenowe (tylko dla stacji w bazie BTMap) */}
+        <StationComments
+          tower={tower}
+          user={user ?? null}
+          onRequireAuth={onRequireAuth || (() => {})}
+          onNotice={onNotice}
+          onOpenCreateStation={onOpenCreateStation}
+        />
 
         <p className="station-data-note">
           <Info size={15} />

@@ -1,8 +1,11 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
+import { mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { resolve, basename } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
+import sharp from 'sharp';
 import { getTowers, normalizeTower,withPemCounts } from './query.ts';
 import { withAzimuths } from './azimuths.ts';
 import {createPemService,towerForPemOperator} from './pem.ts';
@@ -28,7 +31,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
   const pemPlans=si2pem?.plans||createPemPlansService(db);
   const getPemPdf=createPemPdfService(getPemReports,db);
   app.disable('x-powered-by');
-  app.use(express.json({ limit:'100kb' }));
+  app.use(express.json({ limit: '15mb' }));
   app.use((req,res,next) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Cache-Control','no-store');
@@ -198,15 +201,122 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     if(bounds.some(x=>!Number.isFinite(x))) return res.status(400).json({error:'Wybierz obszar mapy.'});
     res.json(db.prepare('SELECT * FROM radiolines WHERE (latA BETWEEN ? AND ? AND lngA BETWEEN ? AND ?) OR (latB BETWEEN ? AND ? AND lngB BETWEEN ? AND ?) LIMIT 1500').all(...bounds,...bounds));
   });
-  app.get('/api/towers/:id/comments',(req,res)=>res.json(db.prepare('SELECT * FROM comments WHERE towerId=? ORDER BY createdAt DESC LIMIT 200').all(String(req.params.id))));
-  app.post('/api/towers/:id/comments',requireUser,(req,res)=>{
-    const message=text(req.body.text,2000), id=randomUUID();
-    if(!message) return res.status(400).json({error:'Wpisz treść komentarza.'});
-    if(!db.prepare("SELECT id FROM towers WHERE id=? ").get(String(req.params.id)))return res.status(404).json({error:'Nie znaleziono stacji.'});
-    const comment={id,towerId:String(req.params.id),userNick:res.locals.user.nick,text:message,createdAt:new Date().toISOString()};
-    db.prepare('INSERT INTO comments VALUES (?,?,?,?,?)').run(...Object.values(comment));res.status(201).json(comment);
+  // Static WebP photo uploads serving
+  app.get('/api/uploads/:filename', (req, res) => {
+    const filename = basename(String(req.params.filename));
+    if (!/^[a-zA-Z0-9_-]+\.webp$/.test(filename)) {
+      return res.status(400).json({ error: 'Nieprawidłowa nazwa pliku.' });
+    }
+    const filePath = resolve(process.cwd(), 'data', 'uploads', filename);
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ error: 'Nie znaleziono pliku.' });
+    }
+    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.sendFile(filePath);
   });
-  app.get('/api/towers/:id/photos',(req,res)=>res.json(db.prepare('SELECT * FROM photos WHERE towerId=? ORDER BY createdAt DESC').all(String(req.params.id))));
+
+  // Station Comments & Field Photos
+  app.get('/api/towers/:id/comments', (req, res) => {
+    const comments = db.prepare('SELECT * FROM comments WHERE towerId=? ORDER BY createdAt DESC LIMIT 200').all(String(req.params.id));
+    res.json(comments);
+  });
+
+  app.post('/api/towers/:id/comments', requireUser, async (req, res) => {
+    try {
+      const towerId = String(req.params.id);
+      const tower = db.prepare('SELECT id, source FROM towers WHERE id=?').get(towerId) as { id: string; source: string } | undefined;
+      if (!tower) return res.status(404).json({ error: 'Nie znaleziono stacji.' });
+
+      // Only allow comments on stations added to our BTMap database (not raw UKE permits)
+      const isBtmap = tower.source === 'BTMAP' || tower.source === 'User';
+      if (!isBtmap) {
+        return res.status(403).json({
+          error: 'Komentarze i zdjęcia można dodawać wyłącznie do stacji w bazie BTMap. Stacje z surowego rejestru UKE nie obsługują komentarzy.'
+        });
+      }
+
+      const message = text(req.body.text, 2000);
+      const imageBase64 = typeof req.body.imageBase64 === 'string' ? req.body.imageBase64.trim() : '';
+
+      if (!message && !imageBase64) {
+        return res.status(400).json({ error: 'Wpisz treść komentarza lub dołącz zdjęcie.' });
+      }
+
+      let photoUrl: string | null = null;
+      if (imageBase64) {
+        const match = imageBase64.match(/^data:image\/[a-zA-Z0-9+.-]+;base64,(.+)$/);
+        const rawData = match ? match[1] : imageBase64;
+        const buffer = Buffer.from(rawData, 'base64');
+
+        if (buffer.length > 15 * 1024 * 1024) {
+          return res.status(400).json({ error: 'Zdjęcie przekracza dopuszczalny rozmiar 15 MB.' });
+        }
+
+        const photoId = randomUUID();
+        const uploadsDir = resolve(process.cwd(), 'data', 'uploads');
+        if (!existsSync(uploadsDir)) {
+          mkdirSync(uploadsDir, { recursive: true });
+        }
+        const filename = `${photoId}.webp`;
+        const filePath = resolve(uploadsDir, filename);
+
+        // Auto-orient based on EXIF, downscale large phone camera resolutions, and compress to crisp WebP
+        await sharp(buffer)
+          .rotate()
+          .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 82, effort: 4 })
+          .toFile(filePath);
+
+        photoUrl = `/api/uploads/${filename}`;
+        db.prepare('INSERT INTO photos (id, towerId, userNick, url, caption, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(photoId, towerId, res.locals.user.nick, photoUrl, message || null, new Date().toISOString());
+      }
+
+      const commentId = randomUUID();
+      const createdAt = new Date().toISOString();
+      db.prepare('INSERT INTO comments (id, towerId, userNick, text, photoUrl, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(commentId, towerId, res.locals.user.nick, message, photoUrl, createdAt);
+
+      // Award points (+15 for photo, +5 for text comment)
+      const points = photoUrl ? 15 : 5;
+      db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(points, res.locals.user.id);
+
+      const comment = {
+        id: commentId,
+        towerId,
+        userNick: res.locals.user.nick,
+        text: message,
+        photoUrl,
+        createdAt,
+      };
+      res.status(201).json(comment);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message || 'Wystąpił błąd podczas dodawania komentarza.' });
+    }
+  });
+
+  app.delete('/api/towers/:towerId/comments/:commentId', requireUser, (req, res) => {
+    const comment = db.prepare('SELECT * FROM comments WHERE id=? AND towerId=?').get(String(req.params.commentId), String(req.params.towerId)) as { id: string; userNick: string; photoUrl?: string } | undefined;
+    if (!comment) return res.status(404).json({ error: 'Nie znaleziono komentarza.' });
+    const isAuthor = comment.userNick === res.locals.user.nick;
+    const isAdmin = res.locals.user.role === 'ADMIN';
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ error: 'Brak uprawnień do usunięcia tego komentarza.' });
+    }
+    db.prepare('DELETE FROM comments WHERE id=?').run(comment.id);
+    if (comment.photoUrl) {
+      const fn = basename(comment.photoUrl);
+      const fp = resolve(process.cwd(), 'data', 'uploads', fn);
+      if (existsSync(fp)) {
+        try { unlinkSync(fp); } catch {}
+      }
+      db.prepare('DELETE FROM photos WHERE url=?').run(comment.photoUrl);
+    }
+    res.json({ success: true, message: 'Komentarz został usunięty.' });
+  });
+
+  app.get('/api/towers/:id/photos', (req, res) => res.json(db.prepare('SELECT * FROM photos WHERE towerId=? ORDER BY createdAt DESC').all(String(req.params.id))));
   app.post('/api/submit',requireUser,(req,res)=>{
     const type=req.body.type, data=req.body.data || {};
     if(type==='NEW_STATION'){
