@@ -25,6 +25,18 @@ export function openDatabase(
     CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
     CREATE TABLE IF NOT EXISTS comments (id TEXT PRIMARY KEY, towerId TEXT, userNick TEXT, text TEXT, photoUrl TEXT, createdAt TEXT);
     CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, towerId TEXT, userNick TEXT, url TEXT, caption TEXT, createdAt TEXT);
+    CREATE TABLE IF NOT EXISTS tower_history (
+      id TEXT PRIMARY KEY,
+      towerId TEXT NOT NULL,
+      userNick TEXT NOT NULL,
+      changeType TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      diffJson TEXT,
+      createdAt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS tower_history_towerId ON tower_history(towerId);
+    CREATE INDEX IF NOT EXISTS tower_history_createdAt ON tower_history(createdAt);
     CREATE TABLE IF NOT EXISTS queue (id TEXT PRIMARY KEY, type TEXT, data TEXT, userNick TEXT, status TEXT DEFAULT 'PENDING', createdAt TEXT);
     CREATE TABLE IF NOT EXISTS logs (id TEXT PRIMARY KEY, userNick TEXT, action TEXT, target TEXT, status TEXT, createdAt TEXT);
     CREATE TABLE IF NOT EXISTS radiolines (id TEXT PRIMARY KEY, latA REAL, lngA REAL, latB REAL, lngB REAL, frequency REAL, operator TEXT, stationA TEXT, stationB TEXT);

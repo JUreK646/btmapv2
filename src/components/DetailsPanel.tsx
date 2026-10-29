@@ -19,12 +19,15 @@ import {
   Mountain,
   Radar,
   Compass,
+  History,
+  ChevronRight,
 } from 'lucide-react';
 import type { Tower, Operator, Band, User } from '../types';
 import { cachedPemReports, freshPemReports, loadPemReports, pemSummary } from '../lib/pemCache';
 import PemReportsDialog from './PemReportsDialog';
 import PemReportList from './PemReportList';
 import StationComments from './StationComments';
+import StationHistoryDialog from './StationHistoryDialog';
 import type { PemReportsResult } from '../../shared/pem';
 import { operatorColor, towerTechs } from '../lib/constants';
 import { useI18n } from '../lib/i18n';
@@ -49,6 +52,7 @@ type Props = {
   onSelectSector?: (azimuth: number, sectorNum: number) => void;
   user?: User | null;
   onRequireAuth?: () => void;
+  onSelectTower?: (towerId: string) => void;
 };
 
 function extractFreq(bandStr: string): number {
@@ -266,12 +270,14 @@ export default function DetailsPanel({
   onSelectSector,
   user,
   onRequireAuth,
+  onSelectTower,
 }: Props) {
   const { t, lang } = useI18n();
   const isPl = lang === 'pl';
   const [operator, setOperator] = useState(0);
   const [reportOpen, setReportOpen] = useState<string | null>(null);
   const [copied, setCopied] = useState<'link' | 'gps' | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const pemOperator = tower.operators[operator]?.name || '';
   const [reportData, setReportData] = useState<{ towerId: string; operator: string; result: PemReportsResult | null }>(
@@ -289,6 +295,7 @@ export default function DetailsPanel({
     setOperator(0);
     setReportOpen(null);
     setCopied(null);
+    setHistoryOpen(false);
   }, [tower.id]);
 
   useEffect(() => {
@@ -413,6 +420,16 @@ export default function DetailsPanel({
               </button>
             )}
             <button
+              type="button"
+              className="header-profile-btn"
+              onClick={() => setHistoryOpen(true)}
+              title={isPl ? "Historia stacji i zmian pozwoleń UKE" : "Station & UKE permit history"}
+              aria-label={isPl ? "Historia stacji i zmian pozwoleń UKE" : "Station & UKE permit history"}
+            >
+              <History size={14} />
+              <span>{isPl ? 'Historia' : 'History'}</span>
+            </button>
+            <button
               className="icon-button"
               onClick={() => void copy('link')}
               aria-label={copied === 'link' ? t.detailsLinkCopied : t.detailsCopyLink}
@@ -472,6 +489,52 @@ export default function DetailsPanel({
 
       {/* Main scrollable body with facts and bands */}
       <div className="station-sheet-scroll">
+        {/* Station History & UKE Quick Card */}
+        <div className="station-history-preview-card" onClick={() => setHistoryOpen(true)}>
+          <div className="history-preview-header">
+            <div className="history-preview-title">
+              <History size={15} />
+              <span>{isPl ? 'Historia stacji i UKE' : 'Station & UKE History'}</span>
+              <span className={`history-preview-tag ${tower.source === 'BTMAP' ? 'btmap' : 'uke'}`}>
+                {tower.source === 'BTMAP' ? (isPl ? 'Baza BTMap' : 'BTMap') : (isPl ? 'Rejestr UKE' : 'UKE')}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="history-preview-open-link"
+              onClick={e => {
+                e.stopPropagation();
+                setHistoryOpen(true);
+              }}
+            >
+              <span>{isPl ? 'Oś czasu zmian' : 'Changes timeline'}</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="history-preview-pills">
+            {tower.source === 'BTMAP' && (
+              <span className="history-pill btmap-pill" title={isPl ? 'Stacja zweryfikowana w bazie BTMap' : 'Station in BTMap'}>
+                🏛️ {isPl ? 'Zweryfikowana w BTMap' : 'Verified in BTMap'}
+              </span>
+            )}
+            {tower.operators.some(op => op.bands?.some(b => b.tech === '5G' && (b.band.includes('3600') || b.band.includes('3500')))) && (
+              <span className="history-pill cband-pill" title={isPl ? 'Zezwolenie na 5G C-Band 3.6 GHz n78' : '5G C-Band 3.6 GHz'}>
+                🚀 5G C-Band 3.6 GHz
+              </span>
+            )}
+            {tower.operators.some(op => op.bands?.some(b => b.permit?.includes('[zmP]'))) && (
+              <span className="history-pill mod-pill" title={isPl ? 'Zmiana pozwolenia radiowego [zmP]' : 'Permit modified [zmP]'}>
+                📜 {isPl ? 'Zmiana pozwolenia [zmP]' : 'Permit modified [zmP]'}
+              </span>
+            )}
+            {tower.operators.some(op => (op.bands?.filter(b => b.tech === 'LTE').length || 0) >= 3) && (
+              <span className="history-pill lte-pill" title={isPl ? 'Wielopasmowa agregacja LTE' : 'LTE Carrier Aggregation'}>
+                📶 LTE-Advanced
+              </span>
+            )}
+          </div>
+        </div>
+
         <dl className="station-facts">
           <div>
             <dt>
@@ -635,6 +698,15 @@ export default function DetailsPanel({
           reports={reports.reports.filter(r => r.kind === 'pdf')}
           initialReportId={reportOpen}
           onClose={() => setReportOpen(null)}
+        />
+      )}
+
+      {historyOpen && (
+        <StationHistoryDialog
+          tower={tower}
+          onClose={() => setHistoryOpen(false)}
+          onOpenCreateStation={onOpenCreateStation}
+          onSelectTower={onSelectTower}
         />
       )}
     </aside>

@@ -22,6 +22,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><
 import './workspace.css';
 import './filters.css';
 import './station.css';
+import './station-history.css';
 import './pem-reports.css';
 import './pem-plans.css';
 import './changelog.css';

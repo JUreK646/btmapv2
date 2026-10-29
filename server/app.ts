@@ -18,6 +18,7 @@ import {validateStationSubmission} from '../shared/cellValidation.ts';
 import {calculateTerrainProfile} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
 import {getTelecomStats, invalidateStatsCache} from './stats.ts';
+import {getTowerHistory, recordTowerChange} from './towerHistory.ts';
 
 type User = { id: string; email: string; nick: string; role: string; points: number; level: number };
 const publicUser = (user: Record<string, unknown>) => ({ id:user.id, email:user.email, nick:user.nick, role:user.role, points:user.points, level:user.level });
@@ -216,6 +217,13 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     res.sendFile(filePath);
   });
 
+  // Station History & UKE Radio Evolution Timeline
+  app.get('/api/towers/:id/history', (req, res) => {
+    const history = getTowerHistory(db, String(req.params.id));
+    if (!history) return res.status(404).json({ error: 'Nie znaleziono stacji w bazie.' });
+    res.json(history);
+  });
+
   // Station Comments & Field Photos
   app.get('/api/towers/:id/comments', (req, res) => {
     const comments = db.prepare('SELECT * FROM comments WHERE towerId=? ORDER BY createdAt DESC LIMIT 200').all(String(req.params.id));
@@ -404,6 +412,18 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
           new Date().toISOString()
         );
         db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId,status) VALUES(?,?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id,'APPROVED');
+        recordTowerChange(db, {
+          towerId: newId,
+          userNick: res.locals.user.nick || 'BTMAP',
+          changeType: clean.sourceTowerId ? 'UPDATED' : 'CREATED',
+          title: clean.sourceTowerId ? 'Weryfikacja parametrów stacji w BTMap' : 'Utworzenie stacji w bazie BTMap',
+          description: clean.notes || 'Zaktualizowano dane stacji w bazie BTMap.',
+          diff: {
+            mastType: { old: null, new: clean.mastType || null },
+            height: { old: null, new: clean.height || null },
+            owner: { old: null, new: clean.owner || null }
+          }
+        });
         log(res.locals.user.nick,'NOWA_STACJA_AUTO_APPROVE',id);
         cachedStats=null; invalidateStatsCache();
         return res.status(201).json({id,status:'APPROVED',towerId:newId});
@@ -439,7 +459,18 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
         if(item.type==='NEW_STATION'){
           const stData=JSON.parse(String(item.data));
           if(stData.sourceTowerId){
-            db.prepare('UPDATE towers SET mastType=COALESCE(?, mastType), owner=COALESCE(?, owner), notes=COALESCE(?, notes) WHERE id=?').run(stData.mastType||null, stData.owner||null, stData.notes||null, stData.sourceTowerId);
+            db.prepare('UPDATE towers SET mastType=COALESCE(?, mastType), owner=COALESCE(?, owner), notes=COALESCE(?, notes), source="BTMAP" WHERE id=?').run(stData.mastType||null, stData.owner||null, stData.notes||null, stData.sourceTowerId);
+            recordTowerChange(db, {
+              towerId: stData.sourceTowerId,
+              userNick: String(item.userNick || 'Moderator'),
+              changeType: 'UPDATED',
+              title: 'Zatwierdzenie aktualizacji stacji przez moderatora',
+              description: stData.notes || 'Zaktualizowano parametry stacji w bazie BTMap.',
+              diff: {
+                mastType: { old: null, new: stData.mastType || null },
+                owner: { old: null, new: stData.owner || null }
+              }
+            });
           }
           if(item.userId){
             db.prepare('UPDATE users SET points=points+10 WHERE id=?').run(item.userId);

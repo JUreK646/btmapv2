@@ -56,3 +56,77 @@ export interface TelecomStats {
   provinces: StatsProvinceItem[];
   updatedAt: string;
 }
+
+export interface TowerHistoryEvent {
+  id: string;
+  userNick: string;
+  changeType: string;
+  title: string;
+  description: string | null;
+  diff?: Record<string, { old: unknown; new: unknown }> | null;
+  photoUrl?: string | null;
+  createdAt: string;
+}
+
+export interface UkePermitGroup {
+  permitId: string;
+  rawPermit: string;
+  operator: string;
+  revision?: number;
+  decisionYear?: number;
+  kind: string;
+  expires?: string;
+  bands: Array<{ tech: string; band: string }>;
+}
+
+export interface UkeMilestone {
+  badge: string;
+  badgeType: 'purple' | 'success' | 'info' | 'warning';
+  title: string;
+  description: string;
+  year?: number;
+}
+
+export interface CollocatedStation {
+  towerId: string;
+  stationId?: string;
+  operator: string;
+  distanceMeters: number;
+}
+
+export interface PemTimelineItem {
+  id?: string;
+  date: string | null;
+  laboratory?: string;
+  operator?: string;
+  number?: string;
+  intensity?: number;
+  downloadUrl?: string;
+}
+
+export interface TowerHistoryData {
+  towerId: string;
+  stationId: string;
+  address: string;
+  source: string;
+  isBtmap: boolean;
+  createdAt: string;
+  addedBy: string;
+  mastType: string | null;
+  height: number | null;
+  notes: string | null;
+  btmap: {
+    timeline: TowerHistoryEvent[];
+    totalEvents: number;
+  };
+  uke: {
+    lastRevisionYear?: number;
+    milestones: UkeMilestone[];
+    permits: UkePermitGroup[];
+    has5GCBand: boolean;
+    has5GDSS: boolean;
+    lteBandsCount: number;
+    collocated: CollocatedStation[];
+  };
+  pem: PemTimelineItem[];
+}
