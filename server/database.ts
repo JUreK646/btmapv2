@@ -40,6 +40,9 @@ export function openDatabase(
     CREATE TABLE IF NOT EXISTS queue (id TEXT PRIMARY KEY, type TEXT, data TEXT, userNick TEXT, status TEXT DEFAULT 'PENDING', createdAt TEXT);
     CREATE TABLE IF NOT EXISTS logs (id TEXT PRIMARY KEY, userNick TEXT, action TEXT, target TEXT, status TEXT, createdAt TEXT);
     CREATE TABLE IF NOT EXISTS radiolines (id TEXT PRIMARY KEY, latA REAL, lngA REAL, latB REAL, lngB REAL, frequency REAL, operator TEXT, stationA TEXT, stationB TEXT);
+    CREATE INDEX IF NOT EXISTS radiolines_coordsA ON radiolines(latA, lngA);
+    CREATE INDEX IF NOT EXISTS radiolines_coordsB ON radiolines(latB, lngB);
+    CREATE INDEX IF NOT EXISTS radiolines_operator ON radiolines(operator);
     CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS pem_plans (id TEXT PRIMARY KEY,lat REAL NOT NULL,lng REAL NOT NULL,operator TEXT NOT NULL,dateTo TEXT NOT NULL,data TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS pem_plans_location ON pem_plans(lat,lng);

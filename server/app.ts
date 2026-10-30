@@ -197,10 +197,21 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     try{res.json(await getPem(normalizeTower(row) as unknown as Tower));}
     catch{res.status(502).json({error:'Nie udało się pobrać pomiarów SI2PEM. Spróbuj ponownie lub otwórz mapę SI2PEM.'});}
   });
-  app.get('/api/radiolines',(req,res)=>{
-    const bounds=['minLat','maxLat','minLng','maxLng'].map(k=>Number(req.query[k]));
-    if(bounds.some(x=>!Number.isFinite(x))) return res.status(400).json({error:'Wybierz obszar mapy.'});
-    res.json(db.prepare('SELECT * FROM radiolines WHERE (latA BETWEEN ? AND ? AND lngA BETWEEN ? AND ?) OR (latB BETWEEN ? AND ? AND lngB BETWEEN ? AND ?) LIMIT 1500').all(...bounds,...bounds));
+  app.get('/api/radiolines', (req, res) => {
+    const bounds = ['minLat', 'maxLat', 'minLng', 'maxLng'].map(k => Number(req.query[k]));
+    if (bounds.some(x => !Number.isFinite(x))) return res.status(400).json({ error: 'Wybierz obszar mapy.' });
+    const rawOperators = typeof req.query.operators === 'string' ? req.query.operators : '';
+    const operators = rawOperators ? rawOperators.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    let sql = 'SELECT * FROM radiolines WHERE ((latA BETWEEN ? AND ? AND lngA BETWEEN ? AND ?) OR (latB BETWEEN ? AND ? AND lngB BETWEEN ? AND ?))';
+    const params: (number | string)[] = [...bounds, ...bounds];
+
+    if (operators.length > 0) {
+      sql += ` AND operator IN (${operators.map(() => '?').join(',')})`;
+      params.push(...operators);
+    }
+    sql += ' LIMIT 1500';
+    res.json(db.prepare(sql).all(...params));
   });
   // Static WebP photo uploads serving
   app.get('/api/uploads/:filename', (req, res) => {

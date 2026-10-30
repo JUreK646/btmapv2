@@ -60,13 +60,15 @@
 }
 
 /* Azimuth layer toggle in Map Filters drawer */
-.azimuth-layer-toggle {
+.azimuth-layer-toggle,
+.radiolines-layer-toggle {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px dashed var(--line);
 }
 
-.azimuth-layer-key {
+.azimuth-layer-key,
+.radioline-layer-key {
   margin-left: auto;
   color: var(--muted);
   display: flex;
@@ -77,7 +79,8 @@
 }
 
 /* Map Status Indicator pill at bottom-left */
-.azimuth-map-status {
+.azimuth-map-status,
+.radioline-map-status {
   position: relative;
   left: auto;
   bottom: auto;

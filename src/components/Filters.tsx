@@ -1,4 +1,4 @@
-import {Check,ChevronDown,Compass,Database,FileText,Layers} from 'lucide-react';
+import {Check,ChevronDown,Compass,Database,FileText,Layers,Radio} from 'lucide-react';
 import type {Filters as FilterState} from '../types';
 import {BANDS,OPERATORS,PROVINCES} from '../lib/constants';
 import {useI18n} from '../lib/i18n';
@@ -12,7 +12,29 @@ const technologies=[
   {value:'CDMA',generation:'',label:'CDMA'},
 ];
 
-export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStatus,azimuthsEnabled,onAzimuthsChange}:{filters:FilterState;onChange:(f:FilterState)=>void;pemEnabled?:boolean;onPemChange?:(enabled:boolean)=>void;pemStatus?:string;azimuthsEnabled?:boolean;onAzimuthsChange?:(enabled:boolean)=>void}){
+export default function Filters({
+  filters,
+  onChange,
+  pemEnabled,
+  onPemChange,
+  pemStatus,
+  azimuthsEnabled,
+  onAzimuthsChange,
+  radiolinesEnabled,
+  onRadiolinesChange,
+  radiolinesStatus,
+}:{
+  filters:FilterState;
+  onChange:(f:FilterState)=>void;
+  pemEnabled?:boolean;
+  onPemChange?:(enabled:boolean)=>void;
+  pemStatus?:string;
+  azimuthsEnabled?:boolean;
+  onAzimuthsChange?:(enabled:boolean)=>void;
+  radiolinesEnabled?:boolean;
+  onRadiolinesChange?:(enabled:boolean)=>void;
+  radiolinesStatus?:string;
+}){
   const {t} = useI18n();
   const toggle=(key:'operators'|'techs'|'bands',value:string)=>onChange({
     ...filters,
@@ -20,7 +42,7 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
   });
 
   return <div className="station-filters">
-    {(onPemChange || onAzimuthsChange) && (
+    {(onPemChange || onAzimuthsChange || onRadiolinesChange) && (
       <fieldset className="filter-group pem-layer-group">
         <legend>{t.filterLayers}</legend>
         {onPemChange && (
@@ -39,6 +61,16 @@ export default function Filters({filters,onChange,pemEnabled,onPemChange,pemStat
             <span><strong>{t.filterAzimuthsTitle}</strong><small>{t.filterAzimuthsDesc}</small></span>
             <span className="azimuth-layer-key" aria-hidden="true"><Compass size={14}/></span>
           </label>
+        )}
+        {onRadiolinesChange && (
+          <>
+            <label className="pem-layer-toggle radiolines-layer-toggle">
+              <input type="checkbox" checked={radiolinesEnabled} onChange={e=>onRadiolinesChange(e.target.checked)}/>
+              <span><strong>{t.filterRadiolinesTitle}</strong><small>{t.filterRadiolinesDesc}</small></span>
+              <span className="radioline-layer-key" aria-hidden="true"><Radio size={14}/></span>
+            </label>
+            {radiolinesEnabled && radiolinesStatus && <p className="pem-layer-status" role="status">{radiolinesStatus}</p>}
+          </>
         )}
       </fieldset>
     )}

@@ -17,6 +17,7 @@ import SettingsDialog from './components/SettingsDialog';
 import {useAuth} from './hooks/useAuth';
 import {useTowers} from './hooks/useTowers';
 import {usePemPlans} from './hooks/usePemPlans';
+import {useRadiolines} from './hooks/useRadiolines';
 import {api,formatNumber} from './lib/api';
 import {DEFAULT_FILTERS,OPERATORS,filterCount,readStored,saveStored} from './lib/constants';
 import {getStoredBasemap} from './lib/basemaps';
@@ -57,6 +58,7 @@ export default function App(){
   const [filters,setFilters]=useState<Filters>(DEFAULT_FILTERS);
   const [showPem,setShowPem]=useState(false);
   const [showAzimuths,setShowAzimuths]=useState(false);
+  const [showRadiolines,setShowRadiolines]=useState(false);
   const [panel,setPanel]=useState<'filters'|'stations'|null>(null),[navCollapsed,setNavCollapsed]=useState(false),[mobileNav,setMobileNav]=useState(false);
   const [basemap,setBasemap]=useState<BasemapId>(getStoredBasemap);
   const [map,setMap]=useState<L.Map|null>(null),[bounds,setBounds]=useState<Bounds|null>(null),[selected,setSelected]=useState<Tower|null>(null);
@@ -134,6 +136,14 @@ export default function App(){
   const pemCount=pem.data?.items.length??0;
   const pemUnit=pemCount===1?'pomiar':pemCount%10>=2&&pemCount%10<=4&&(pemCount%100<12||pemCount%100>14)?'pomiary':'pomiarów';
   const pemStatus=pem.loading?'Wczytywanie pomiarów SI2PEM…':pem.error?'Nie udało się wczytać pomiarów SI2PEM':!pem.data?.checkedAt?(pem.data?.error||'Wczytywanie z SI2PEM…'):pemCount===0?'Brak pomiarów SI2PEM w tym obszarze':`${pemCount} ${pemUnit} w obszarze${pem.data.hasMore?' · przybliż mapę, aby zobaczyć pozostałe':''}`;
+  const radiolines=useRadiolines(showRadiolines&&view==='map',bounds,filters.operators,refresh);
+  const radiolinesStatus = bounds && bounds.zoom < 10
+    ? t.radiolinesZoomHint
+    : radiolines.loading
+    ? (lang === 'pl' ? 'Wczytywanie radiolinii…' : 'Loading microwave links…')
+    : radiolines.data.length > 0
+    ? t.radiolinesCount(radiolines.data.length)
+    : t.radiolinesActive;
   const mapFrame=useRef<HTMLDivElement>(null);
   const pendingPlace=useRef<[number,number]|null>(null);
   const lastView=useRef<{center:[number,number];zoom:number}>({center:[52.2305,21.0084],zoom:12});
@@ -247,11 +257,11 @@ export default function App(){
   };
   const fullscreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await mapFrame.current?.requestFullscreen();}catch{setNotice(t.fullscreenUnavailable);}};
   const basemapError=useCallback((message:string)=>{setBasemap('osm');setNotice(message);},[]);
-  const filterTotal=filterCount(filters)+(showPem&&view==='map'?1:0)+(showAzimuths&&view==='map'?1:0);
+  const filterTotal=filterCount(filters)+(showPem&&view==='map'?1:0)+(showAzimuths&&view==='map'?1:0)+(showRadiolines&&view==='map'?1:0);
   const filterPanel=<aside className="floating-panel filter-drawer" aria-labelledby="station-filters-title">
-    <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?t.filterMapTitle:t.filterStationTitle}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?t.filterSourceUke:filters.source==='BTMAP'?'BTMap':t.filterSourceAll}{showPem&&view==='map'?' · SI2PEM':''}</span><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={18}/></button></div>
-    <div className="panel-scroll"><FiltersPanel filters={filters} onChange={changeFilters} pemEnabled={showPem} onPemChange={view==='map'?setShowPem:undefined} pemStatus={pemStatus} azimuthsEnabled={showAzimuths} onAzimuthsChange={view==='map'?setShowAzimuths:undefined}/></div>
-    <div className="filter-drawer-footer"><p className="filter-results" role="status">{loading?t.filterLoading:error?t.filterLoadError:<><strong>{formatNumber(result.total)}</strong> {view==='database'?t.filterResultsInDb(formatNumber(result.total)):t.filterResultsInArea(formatNumber(result.total))}</>}</p><div className="filter-drawer-actions"><button className="filter-reset" disabled={!filterTotal} onClick={()=>{changeFilters(DEFAULT_FILTERS);if(view==='map'){setShowPem(false);setShowAzimuths(false);}}}><RotateCcw size={14}/>{t.clear}{filterTotal>0&&<span>{filterTotal}</span>}</button><button className="primary-button" onClick={()=>setPanel(null)}>{t.ready}</button></div></div>
+    <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?t.filterMapTitle:t.filterStationTitle}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?t.filterSourceUke:filters.source==='BTMAP'?'BTMap':t.filterSourceAll}{showPem&&view==='map'?' · SI2PEM':''}{showRadiolines&&view==='map'?' · Radiolinie':''}</span><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={18}/></button></div>
+    <div className="panel-scroll"><FiltersPanel filters={filters} onChange={changeFilters} pemEnabled={showPem} onPemChange={view==='map'?setShowPem:undefined} pemStatus={pemStatus} azimuthsEnabled={showAzimuths} onAzimuthsChange={view==='map'?setShowAzimuths:undefined} radiolinesEnabled={showRadiolines} onRadiolinesChange={view==='map'?setShowRadiolines:undefined} radiolinesStatus={radiolinesStatus}/></div>
+    <div className="filter-drawer-footer"><p className="filter-results" role="status">{loading?t.filterLoading:error?t.filterLoadError:<><strong>{formatNumber(result.total)}</strong> {view==='database'?t.filterResultsInDb(formatNumber(result.total)):t.filterResultsInArea(formatNumber(result.total))}</>}</p><div className="filter-drawer-actions"><button className="filter-reset" disabled={!filterTotal} onClick={()=>{changeFilters(DEFAULT_FILTERS);if(view==='map'){setShowPem(false);setShowAzimuths(false);setShowRadiolines(false);}}}><RotateCcw size={14}/>{t.clear}{filterTotal>0&&<span>{filterTotal}</span>}</button><button className="primary-button" onClick={()=>setPanel(null)}>{t.ready}</button></div></div>
   </aside>;
 
   return <I18nProvider lang={lang} setLang={setLang}>
@@ -276,7 +286,7 @@ export default function App(){
             onSelect={selectTower}
             onBounds={boundsChanged}
             onReady={mapReady}
-            radiolines={[]}
+            radiolines={showRadiolines ? radiolines.data : []}
             position={position}
             pemPlans={showPem?pem.data?.items:[]}
             terrainTower={terrainTower}
@@ -404,9 +414,10 @@ export default function App(){
             </div>
           </div>
           {error&&<div className="map-error" role="alert">{error}<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button></div>}
-          {((showPem || showAzimuths) && !panel && !selected) && (
+          {((showPem || showAzimuths || showRadiolines) && !panel && !selected) && (
             <div className="map-status-stack">
               {showAzimuths && <div className="azimuth-map-status" role="status"><Compass size={13} aria-hidden="true"/><span>{bounds&&bounds.zoom<14?t.azimuthsZoomHint:t.azimuthsActive}</span></div>}
+              {showRadiolines && <div className="radioline-map-status" role="status"><Radio size={13} aria-hidden="true"/><span>{radiolinesStatus}</span></div>}
               {showPem && <div className="pem-map-status" role="status"><i aria-hidden="true"/>{pemStatus}{(pem.error||pem.data?.error)&&<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button>}</div>}
             </div>
           )}
