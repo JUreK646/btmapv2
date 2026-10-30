@@ -16,8 +16,43 @@ export interface Submission { id:string; type:string; status:string; createdAt:s
 export interface RadiolineChannel {
   dir: string;
   freqGHz: number;
+  freqMHz?: number;
   pol: string;
   mbps: number;
+  rowId?: string;
+  channelNum?: string;
+  planSymbol?: string;
+  widthMHz?: number;
+  modulation?: string;
+  eirpDbm?: number;
+  txLat?: number;
+  txLng?: number;
+  txHeightM?: number;
+  txCity?: string;
+  txProvince?: string;
+  txStreet?: string;
+  txAntType?: string;
+  txAntManufacturer?: string;
+  txAntGainDbi?: number;
+  txAntHeightM?: number;
+  txTransmitterType?: string;
+  txManufacturer?: string;
+  rxLat?: number;
+  rxLng?: number;
+  rxHeightM?: number;
+  rxCity?: string;
+  rxProvince?: string;
+  rxStreet?: string;
+  rxAntType?: string;
+  rxAntManufacturer?: string;
+  rxAntGainDbi?: number;
+  rxAntHeightM?: number;
+  rxNoiseFigureDb?: number;
+  rxAttenuationDb?: number;
+  permitType?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  snapshotDate?: string;
 }
 export interface Radioline {
   id: string;

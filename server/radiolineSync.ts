@@ -10,8 +10,76 @@ const FALLBACK_ZIP_URL = 'https://api.dane.gov.pl/media/resources/20260430/wykaz
 export interface RadiolineChannelRecord {
   dir: 'A → B' | 'B → A';
   freqGHz: number;
+  freqMHz?: number;
   pol: string;
   mbps: number;
+  rowId?: string;
+  channelNum?: string;
+  planSymbol?: string;
+  widthMHz?: number;
+  modulation?: string;
+  eirpDbm?: number;
+  txLat?: number;
+  txLng?: number;
+  txHeightM?: number;
+  txCity?: string;
+  txProvince?: string;
+  txStreet?: string;
+  txAntType?: string;
+  txAntManufacturer?: string;
+  txAntGainDbi?: number;
+  txAntHeightM?: number;
+  txTransmitterType?: string;
+  txManufacturer?: string;
+  rxLat?: number;
+  rxLng?: number;
+  rxHeightM?: number;
+  rxCity?: string;
+  rxProvince?: string;
+  rxStreet?: string;
+  rxAntType?: string;
+  rxAntManufacturer?: string;
+  rxAntGainDbi?: number;
+  rxAntHeightM?: number;
+  rxNoiseFigureDb?: number;
+  rxAttenuationDb?: number;
+  permitType?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  snapshotDate?: string;
+}
+
+function parseOptNum(val: unknown, decimals = 1): number | undefined {
+  if (val === undefined || val === null || val === '') return undefined;
+  const n = parseFloat(String(val).replace(',', '.'));
+  if (!Number.isFinite(n)) return undefined;
+  const factor = 10 ** decimals;
+  return Math.round(n * factor) / factor;
+}
+
+function parseOptStr(val: unknown): string | undefined {
+  if (val === undefined || val === null) return undefined;
+  const s = String(val).trim();
+  return s.length > 0 ? s : undefined;
+}
+
+function excelSerialToDateStr(val: unknown): string | undefined {
+  if (val === undefined || val === null) return undefined;
+  const s = String(val).trim();
+  if (!s) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.slice(0, 10).split('-');
+    return `${d}.${m}.${y}`;
+  }
+  const n = Number(s);
+  if (Number.isFinite(n) && n > 20000 && n < 80000) {
+    const dt = new Date(Math.round((n - 25569) * 86400 * 1000));
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const y = dt.getUTCFullYear();
+    return `${d}.${m}.${y}`;
+  }
+  return s;
 }
 
 export function parseDMS(str: unknown): number | null {
@@ -172,6 +240,8 @@ export async function syncRadiolinesFromUke(
     }
 
     const xlsxPath = resolve(extractZipDir, xlsxFile);
+    const dateMatch = xlsxFile.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const snapshotDate = dateMatch ? `${dateMatch[3]}.${dateMatch[2]}.${dateMatch[1]}` : undefined;
     const extractXlsxDir = resolve(workDir, 'xlsx_contents');
     mkdirSync(extractXlsxDir, { recursive: true });
     console.log(`[Radiolines Sync] Rozpakowywanie arkusza: ${xlsxFile}...`);
@@ -303,8 +373,43 @@ export async function syncRadiolinesFromUke(
         link.channels.push({
           dir,
           freqGHz: Math.round(freqGHz * 10) / 10,
+          freqMHz: freqGHz > 0 ? Math.round(freqGHz * 1000) : undefined,
           pol,
           mbps,
+          rowId: parseOptStr(c[0]),
+          channelNum: parseOptStr(c[16]),
+          planSymbol: parseOptStr(c[17]),
+          widthMHz: parseOptNum(c[18], 1),
+          modulation: parseOptStr(c[20]),
+          eirpDbm: parseOptNum(c[22], 1),
+          txLat,
+          txLng: txLon,
+          txHeightM: parseOptNum(c[3], 1),
+          txCity: parseOptStr(c[4]),
+          txProvince: parseOptStr(c[5]),
+          txStreet: parseOptStr(c[6]),
+          txAntType: parseOptStr(c[28]),
+          txAntManufacturer: parseOptStr(c[29]),
+          txAntGainDbi: parseOptNum(c[30], 1),
+          txAntHeightM: parseOptNum(c[31], 1),
+          txTransmitterType: parseOptStr(c[24]),
+          txManufacturer: parseOptStr(c[25]),
+          rxLat,
+          rxLng: rxLon,
+          rxHeightM: parseOptNum(c[10], 1),
+          rxCity: parseOptStr(c[11]),
+          rxProvince: parseOptStr(c[12]),
+          rxStreet: parseOptStr(c[13]),
+          rxAntType: parseOptStr(c[32]),
+          rxAntManufacturer: parseOptStr(c[33]),
+          rxAntGainDbi: parseOptNum(c[34], 1),
+          rxAntHeightM: parseOptNum(c[35], 1),
+          rxNoiseFigureDb: parseOptNum(c[26], 1),
+          rxAttenuationDb: parseOptNum(c[23], 1),
+          permitType: parseOptStr(c[38]),
+          issueDate: excelSerialToDateStr(c[39]),
+          expiryDate: excelSerialToDateStr(c[40]),
+          snapshotDate,
         });
         totalChannels++;
       }

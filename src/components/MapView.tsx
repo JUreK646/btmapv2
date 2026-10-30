@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MapContainer,
   ScaleControl,
@@ -13,7 +14,25 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { Check, Copy, MapPin, X } from 'lucide-react';
+import {
+  Activity,
+  Building2,
+  Calendar,
+  Check,
+  Copy,
+  FileText,
+  Gauge,
+  MapPin,
+  Radar,
+  Radio,
+  RefreshCw,
+  Ruler,
+  Share2,
+  Signal,
+  SlidersHorizontal,
+  X,
+  Zap,
+} from 'lucide-react';
 import BaseLayer from './BaseLayer';
 import type { BasemapId } from '../lib/basemaps';
 import 'leaflet/dist/leaflet.css';
@@ -665,12 +684,424 @@ function createEndpointIcon(letter: 'A' | 'B', color: string): L.DivIcon {
   });
 }
 
-function RadiolineCard({
+function parseRadiolineChannels(line: Radioline): RadiolineChannel[] {
+  if (line.channelsJson) {
+    try {
+      const parsed = JSON.parse(line.channelsJson);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      // Fallback below
+    }
+  }
+  const freqGHz = Number(((line.frequency || 15000) / 1000).toFixed(1));
+  return [{ dir: 'A → B', freqGHz, pol: 'H', mbps: 150 }];
+}
+
+function RadiolineDetailsDialog({
   line,
+  initialChannelIdx = 0,
   onClose,
 }: {
   line: Radioline;
+  initialChannelIdx?: number;
   onClose: () => void;
+}) {
+  const channels = useMemo(() => parseRadiolineChannels(line), [line]);
+  const [activeIdx, setActiveIdx] = useState(() =>
+    Math.min(Math.max(0, initialChannelIdx), Math.max(0, channels.length - 1))
+  );
+  const [copiedShare, setCopiedShare] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  const brand = getRadiolineBrand(line);
+  const distanceKm = line.distanceKm ?? computeHaversineKm(line.latA, line.lngA, line.latB, line.lngB);
+  const mode = line.mode || '1+0';
+  const capacityText = line.capacityText || '150 Mbps';
+  const ch = channels[activeIdx] || channels[0];
+
+  const isAB = ch?.dir !== 'B → A';
+  const fallbackTxLat = isAB ? line.latA : line.latB;
+  const fallbackTxLng = isAB ? line.lngA : line.lngB;
+  const fallbackRxLat = isAB ? line.latB : line.latA;
+  const fallbackRxLng = isAB ? line.lngB : line.lngA;
+
+  const txGps =
+    ch?.txLat != null && ch?.txLng != null
+      ? `${ch.txLat.toFixed(5)}, ${ch.txLng.toFixed(5)}`
+      : `${fallbackTxLat.toFixed(5)}, ${fallbackTxLng.toFixed(5)}`;
+
+  const rxGps =
+    ch?.rxLat != null && ch?.rxLng != null
+      ? `${ch.rxLat.toFixed(5)}, ${ch.rxLng.toFixed(5)}`
+      : `${fallbackRxLat.toFixed(5)}, ${fallbackRxLng.toFixed(5)}`;
+
+  const freqDisplay =
+    ch?.freqGHz != null
+      ? `${ch.freqMHz ?? Math.round(ch.freqGHz * 1000)} MHz (${ch.freqGHz} GHz)`
+      : 'Brak danych';
+
+  const handleShare = () => {
+    const midLat = ((line.latA + line.latB) / 2).toFixed(5);
+    const midLng = ((line.lngA + line.lngB) / 2).toFixed(5);
+    const shareUrl = `${window.location.origin}${window.location.pathname}?lat=${midLat}&lng=${midLng}&zoom=13`;
+    if (navigator.share) {
+      navigator
+        .share({
+          title: `Radiolinia ${brand.displayName} ${line.permitId || ''}`,
+          text: `${brand.displayName} (${distanceKm.toFixed(2)} km / ${mode} / ${capacityText})`,
+          url: shareUrl,
+        })
+        .catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(shareUrl);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 1600);
+    }
+  };
+
+  return createPortal(
+    <div
+      className="rl-details-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Szczegóły radiolinii ${brand.displayName}`}
+    >
+      <div className="rl-details-modal" onClick={e => e.stopPropagation()}>
+        <header className="rl-details-header">
+          <div className="rl-details-top-row">
+            <div className="rl-details-brand">
+              <RadiolineOperatorIcon brand={brand} />
+              <span className="rl-details-op-name">{brand.displayName}</span>
+              <span className={`rl-mode ${mode === 'XPIC' ? 'is-xpic' : ''}`}>{mode}</span>
+            </div>
+            <div className="rl-details-top-actions">
+              <button
+                type="button"
+                className="rl-icon-btn"
+                onClick={handleShare}
+                title="Udostępnij lokalizację radiolinii"
+              >
+                {copiedShare ? <Check size={16} className="rl-copied-icon" /> : <Share2 size={16} />}
+              </button>
+              <button
+                type="button"
+                className="rl-icon-btn"
+                onClick={onClose}
+                title="Zamknij"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          <div className="rl-details-sub-row">
+            <strong className="rl-details-metric">{distanceKm.toFixed(2)} km</strong>
+            <span className="rl-details-dot">·</span>
+            <span className="rl-details-metric">
+              <strong>{channels[0]?.freqGHz ?? 15.0} GHz</strong>
+              {channels.length > 1 && <span className="rl-details-plus">+{channels.length - 1}</span>}
+            </span>
+            <span className="rl-details-dot">·</span>
+            <span className="rl-cap">
+              <span className="rl-cap-arrows">⇅</span> {capacityText}
+            </span>
+          </div>
+        </header>
+
+        <div className="rl-details-body">
+          {/* Channel Selector Pill Bar */}
+          <div className="rl-details-tabs-bar">
+            <div className="rl-details-tabs" role="tablist">
+              {channels.map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeIdx === idx}
+                  className={`rl-details-tab ${activeIdx === idx ? 'is-active' : ''}`}
+                  onClick={() => setActiveIdx(idx)}
+                >
+                  <span className="rl-tab-dir">{item.dir}</span>
+                  <strong className="rl-tab-freq">{item.freqGHz} GHz</strong>
+                  <span className="rl-tab-pol">{item.pol}</span>
+                  {item.rowId && <span className="rl-tab-rowid">#{item.rowId}</span>}
+                </button>
+              ))}
+            </div>
+            <span className="rl-details-tab-counter">
+              {activeIdx + 1} / {channels.length}
+            </span>
+          </div>
+
+          {/* Section 1: PARAMETRY ŁĄCZA */}
+          <section className="rl-details-section">
+            <div className="rl-section-heading">
+              <h3>PARAMETRY ŁĄCZA</h3>
+              <span className="rl-snapshot-pill">
+                <Calendar size={12} />
+                <span>stan na {ch?.snapshotDate || '27.07.2026'}</span>
+              </span>
+            </div>
+
+            <div className="rl-params-grid">
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <Radio size={14} /> Częstotliwość
+                </span>
+                <strong className="rl-param-value">{freqDisplay}</strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <SlidersHorizontal size={14} /> Szerokość kanału
+                </span>
+                <strong className="rl-param-value">
+                  {ch?.widthMHz != null ? `${ch.widthMHz} MHz` : 'Brak danych'}
+                </strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <RefreshCw size={14} /> Polaryzacja
+                </span>
+                <strong className="rl-param-value">{ch?.pol || 'Brak danych'}</strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <Activity size={14} /> Modulacja
+                </span>
+                <strong className="rl-param-value">{ch?.modulation || 'Brak danych'}</strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <Gauge size={14} /> Szybkość transmisji
+                </span>
+                <strong className="rl-param-value">
+                  {ch?.mbps != null ? `${ch.mbps} Mbps` : 'Brak danych'}
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          {/* Section 2: Strona wysyłająca (TX) | Strona odbierająca (RX) */}
+          <section className="rl-details-section rl-txrx-section">
+            <div className="rl-txrx-columns">
+              {/* TX Column */}
+              <div className="rl-txrx-col">
+                <h4 className="rl-txrx-title">Strona wysyłająca (TX)</h4>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <MapPin size={14} /> GPS
+                  </span>
+                  <strong className="rl-param-value">{txGps}</strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Ruler size={14} /> Wysokość
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.txHeightM != null ? `${ch.txHeightM} m` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Radar size={14} /> Typ anteny
+                  </span>
+                  <strong className="rl-param-value">{ch?.txAntType || 'Brak danych'}</strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Signal size={14} /> Zysk anteny
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.txAntGainDbi != null ? `${ch.txAntGainDbi} dBi` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Ruler size={14} /> Wysokość anteny
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.txAntHeightM != null ? `${ch.txAntHeightM} m` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Zap size={14} /> EIRP
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.eirpDbm != null ? `${ch.eirpDbm} dBm` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Radio size={14} /> Typ nadajnika
+                  </span>
+                  <strong className="rl-param-value">{ch?.txTransmitterType || 'Brak danych'}</strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Building2 size={14} /> Producent
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.txManufacturer || ch?.txAntManufacturer || 'Brak danych'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* RX Column */}
+              <div className="rl-txrx-col">
+                <h4 className="rl-txrx-title">Strona odbierająca (RX)</h4>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <MapPin size={14} /> GPS
+                  </span>
+                  <strong className="rl-param-value">{rxGps}</strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Ruler size={14} /> Wysokość
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.rxHeightM != null ? `${ch.rxHeightM} m` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Radar size={14} /> Typ odbiornika
+                  </span>
+                  <strong className="rl-param-value">{ch?.rxAntType || 'Brak danych'}</strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Signal size={14} /> Zysk anteny
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.rxAntGainDbi != null ? `${ch.rxAntGainDbi} dBi` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Ruler size={14} /> Wysokość anteny
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.rxAntHeightM != null ? `${ch.rxAntHeightM} m` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Activity size={14} /> Współczynnik szumów
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.rxNoiseFigureDb != null ? `${ch.rxNoiseFigureDb} dB` : 'Brak danych'}
+                  </strong>
+                </div>
+
+                <div className="rl-param-item">
+                  <span className="rl-param-label">
+                    <Building2 size={14} /> Producent
+                  </span>
+                  <strong className="rl-param-value">
+                    {ch?.rxAntManufacturer || ch?.txAntManufacturer || 'Brak danych'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Section 3: POZWOLENIE */}
+          <section className="rl-details-section rl-permit-section">
+            <div className="rl-section-heading">
+              <h3>POZWOLENIE</h3>
+              <span className="rl-uke-logo">
+                U<em>K</em>E
+              </span>
+            </div>
+
+            <div className="rl-params-grid">
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <FileText size={14} /> Numer pozwolenia
+                </span>
+                <strong className="rl-param-value">{line.permitId || 'Brak danych'}</strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <Calendar size={14} /> Data wydania
+                </span>
+                <strong className="rl-param-value">{ch?.issueDate || 'Brak danych'}</strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <Calendar size={14} /> Ważne do
+                </span>
+                <strong className="rl-param-value">{ch?.expiryDate || 'Brak danych'}</strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <MapPin size={14} /> Lokalizacja TX
+                </span>
+                <strong className="rl-param-value">
+                  {ch?.txCity
+                    ? `${ch.txCity}${ch.txStreet ? `, ${ch.txStreet}` : ''}`
+                    : line.stationA || 'Brak danych'}
+                </strong>
+              </div>
+
+              <div className="rl-param-item">
+                <span className="rl-param-label">
+                  <MapPin size={14} /> Lokalizacja RX
+                </span>
+                <strong className="rl-param-value">
+                  {ch?.rxCity
+                    ? `${ch.rxCity}${ch.rxStreet ? `, ${ch.rxStreet}` : ''}`
+                    : line.stationB || 'Brak danych'}
+                </strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function RadiolineCard({
+  line,
+  onClose,
+  onOpenDetails,
+}: {
+  line: Radioline;
+  onClose: () => void;
+  onOpenDetails: (channelIdx?: number) => void;
 }) {
   const [copiedCoords, setCopiedCoords] = useState(false);
 
@@ -679,18 +1110,7 @@ function RadiolineCard({
   const mode = line.mode || '1+0';
   const capacityText = line.capacityText || '150 Mbps';
 
-  const channels = useMemo<RadiolineChannel[]>(() => {
-    if (line.channelsJson) {
-      try {
-        const parsed = JSON.parse(line.channelsJson);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {
-        // Fallback below
-      }
-    }
-    const freqGHz = Number(((line.frequency || 15000) / 1000).toFixed(1));
-    return [{ dir: 'A → B', freqGHz, pol: 'H', mbps: 150 }];
-  }, [line.channelsJson, line.frequency]);
+  const channels = useMemo(() => parseRadiolineChannels(line), [line]);
 
   const midLat = ((line.latA + line.latB) / 2).toFixed(5);
   const midLng = ((line.lngA + line.lngB) / 2).toFixed(5);
@@ -704,7 +1124,14 @@ function RadiolineCard({
   };
 
   return (
-    <div className="rl-popup-card" onClick={e => e.stopPropagation()}>
+    <div
+      className="rl-popup-card is-clickable"
+      onClick={e => {
+        e.stopPropagation();
+        onOpenDetails(0);
+      }}
+      title="Kliknij, aby zobaczyć pełne parametry radiolinii"
+    >
       <div className="rl-popup-header">
         <div className="rl-popup-brand">
           <RadiolineOperatorIcon brand={brand} />
@@ -738,7 +1165,14 @@ function RadiolineCard({
 
       <div className="rl-popup-channels">
         {channels.map((ch, idx) => (
-          <div key={idx} className="rl-channel-row">
+          <div
+            key={idx}
+            className="rl-channel-row"
+            onClick={e => {
+              e.stopPropagation();
+              onOpenDetails(idx);
+            }}
+          >
             <span className="rl-ch-dir">{ch.dir}</span>
             <span className="rl-ch-freq">{ch.freqGHz} GHz</span>
             <span className="rl-ch-pol">{ch.pol}</span>
@@ -749,6 +1183,7 @@ function RadiolineCard({
 
       <div
         className="rl-popup-footer"
+        onClick={e => e.stopPropagation()}
         title={line.stationA && line.stationB ? `A: ${line.stationA} ↔ B: ${line.stationB}` : undefined}
       >
         <div className="rl-footer-coords">
@@ -776,6 +1211,7 @@ function RadiolinesLayer({
   renderer: L.Canvas;
 }) {
   const [selectedRl, setSelectedRl] = useState<{ line: Radioline; pos: [number, number] } | null>(null);
+  const [detailsModal, setDetailsModal] = useState<{ line: Radioline; channelIdx: number } | null>(null);
 
   useMapEvents({
     click: () => {
@@ -803,7 +1239,7 @@ function RadiolinesLayer({
     [selectedBrand]
   );
 
-  if (!radiolines.length) return null;
+  if (!radiolines.length && !detailsModal) return null;
 
   return (
     <>
@@ -871,9 +1307,23 @@ function RadiolinesLayer({
               remove: () => setSelectedRl(null),
             }}
           >
-            <RadiolineCard line={selectedRl.line} onClose={() => setSelectedRl(null)} />
+            <RadiolineCard
+              line={selectedRl.line}
+              onClose={() => setSelectedRl(null)}
+              onOpenDetails={(channelIdx = 0) =>
+                setDetailsModal({ line: selectedRl.line, channelIdx })
+              }
+            />
           </Popup>
         </>
+      )}
+
+      {detailsModal && (
+        <RadiolineDetailsDialog
+          line={detailsModal.line}
+          initialChannelIdx={detailsModal.channelIdx}
+          onClose={() => setDetailsModal(null)}
+        />
       )}
     </>
   );
