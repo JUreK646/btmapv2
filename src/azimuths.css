@@ -159,15 +159,45 @@
 }
 
 .rl-popup-card {
-  background: rgba(18, 20, 24, 0.96);
+  --rl-bg: rgba(255, 255, 255, 0.98);
+  --rl-border: rgba(15, 23, 42, 0.11);
+  --rl-shadow: 0 14px 36px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.08);
+  --rl-text: #0f172a;
+  --rl-subtext: #334155;
+  --rl-muted: #64748b;
+  --rl-sep: #94a3b8;
+  --rl-btn-hover-bg: rgba(15, 23, 42, 0.07);
+  --rl-footer-bg: #f8fafc;
+  --rl-footer-border: rgba(15, 23, 42, 0.08);
+  --rl-speed: #059669;
+  --rl-mode: #d97706;
+  --rl-xpic: #ea580c;
+
+  background: var(--rl-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  border: 1px solid var(--rl-border);
   border-radius: 11px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.72), 0 2px 10px rgba(0, 0, 0, 0.45);
-  color: #f8fafc;
+  box-shadow: var(--rl-shadow);
+  color: var(--rl-text);
   overflow: hidden;
   user-select: text;
+}
+
+[data-theme="dark"] .rl-popup-card {
+  --rl-bg: rgba(18, 20, 24, 0.96);
+  --rl-border: rgba(255, 255, 255, 0.11);
+  --rl-shadow: 0 16px 40px rgba(0, 0, 0, 0.72), 0 2px 10px rgba(0, 0, 0, 0.45);
+  --rl-text: #f8fafc;
+  --rl-subtext: #cbd5e1;
+  --rl-muted: #94a3b8;
+  --rl-sep: #64748b;
+  --rl-btn-hover-bg: rgba(255, 255, 255, 0.09);
+  --rl-footer-bg: rgba(0, 0, 0, 0.24);
+  --rl-footer-border: rgba(255, 255, 255, 0.08);
+  --rl-speed: #10b981;
+  --rl-mode: #f59e0b;
+  --rl-xpic: #ff7900;
 }
 
 .rl-popup-header {
@@ -190,7 +220,7 @@
   height: 22px;
   flex-shrink: 0;
   border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   display: block;
 }
 
@@ -201,7 +231,7 @@
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
 }
 
 .rl-op-img-wrap.is-square {
@@ -212,6 +242,7 @@
 .rl-op-img-wrap.is-white-bg {
   background: #ffffff;
   padding: 2px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .rl-op-img-wrap.is-play {
@@ -225,6 +256,7 @@
   padding: 2.5px 5px;
   border-radius: 4px;
   background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .rl-op-img-wrap.is-emitel {
@@ -252,7 +284,7 @@
   font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14.5px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--rl-text);
   white-space: nowrap;
   letter-spacing: -0.015em;
 }
@@ -261,14 +293,14 @@
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 500;
-  color: #8b95a5;
+  color: var(--rl-muted);
   white-space: nowrap;
 }
 
 .rl-icon-btn {
   background: transparent;
   border: none;
-  color: #8b95a5;
+  color: var(--rl-muted);
   padding: 4px;
   border-radius: 6px;
   cursor: pointer;
@@ -280,12 +312,12 @@
 }
 
 .rl-icon-btn:hover {
-  color: #f8fafc;
-  background: rgba(255, 255, 255, 0.09);
+  color: var(--rl-text);
+  background: var(--rl-btn-hover-bg);
 }
 
 .rl-copied-icon {
-  color: #10b981;
+  color: var(--rl-speed);
 }
 
 .rl-popup-summary {
@@ -296,33 +328,33 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #cbd5e1;
+  color: var(--rl-subtext);
   white-space: nowrap;
 }
 
 .rl-sep {
-  color: #64748b;
+  color: var(--rl-sep);
 }
 
 .rl-mode {
   font-weight: 700;
-  color: #f59e0b;
+  color: var(--rl-mode);
 }
 
 .rl-mode.is-xpic {
-  color: #ff7900;
+  color: var(--rl-xpic);
 }
 
 .rl-cap {
   font-weight: 700;
-  color: #10b981;
+  color: var(--rl-speed);
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
 .rl-cap-arrows {
-  color: #94a3b8;
+  color: var(--rl-muted);
   font-weight: 600;
   font-size: 12px;
 }
@@ -349,28 +381,28 @@
 }
 
 .rl-ch-dir {
-  color: #94a3b8;
+  color: var(--rl-muted);
 }
 
 .rl-ch-freq {
-  color: #f8fafc;
+  color: var(--rl-text);
   font-weight: 700;
 }
 
 .rl-ch-pol {
-  color: #94a3b8;
+  color: var(--rl-muted);
   text-align: center;
 }
 
 .rl-ch-speed {
-  color: #10b981;
+  color: var(--rl-speed);
   font-weight: 600;
 }
 
 .rl-popup-footer {
   padding: 8px 13px 8px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.24);
+  border-top: 1px solid var(--rl-footer-border);
+  background: var(--rl-footer-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -378,7 +410,7 @@
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #94a3b8;
+  color: var(--rl-muted);
 }
 
 .rl-footer-coords {
@@ -388,7 +420,7 @@
 }
 
 .rl-pin-icon {
-  color: #8b95a5;
+  color: var(--rl-muted);
   flex-shrink: 0;
 }
 
