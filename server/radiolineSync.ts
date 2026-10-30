@@ -66,9 +66,18 @@ function normalizeRadiolineOperator(raw: unknown): { operator: string; display: 
   const s = String(raw || '').toUpperCase();
   if (s.includes('ORANGE')) return { operator: 'Orange', display: 'Orange Polska' };
   if (s.includes('T-MOBILE')) return { operator: 'T-Mobile', display: 'T-Mobile Polska' };
-  if (s.includes('P4') || s.includes('PLAY')) return { operator: 'Play', display: 'Play (P4)' };
-  if (s.includes('POLKOMTEL') || s.includes('PLUS') || s.includes('AERO')) {
-    return { operator: 'Plus', display: 'Plus (Polkomtel)' };
+  if (s.includes('P4') || s.includes('PLAY') || s.includes('ON TOWER')) return { operator: 'Play', display: 'Play' };
+  if (
+    s.includes('POLKOMTEL') ||
+    s.includes('PLUS') ||
+    s.includes('TOWERLINK') ||
+    s.includes('CELLNEX') ||
+    s.includes('AERO')
+  ) {
+    return {
+      operator: 'Plus',
+      display: s.includes('TOWERLINK') ? 'Plus (Towerlink)' : 'Plus',
+    };
   }
   if (s.includes('NETWORKS')) return { operator: 'Orange', display: 'NetWorkS!' };
   const clean = String(raw || 'Inny operator')

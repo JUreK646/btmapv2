@@ -86,6 +86,13 @@ export function openDatabase(
       db.exec(`ALTER TABLE radiolines ADD COLUMN ${col[0]} ${col[1]}`);
     }
   }
+  if (!db.prepare("SELECT value FROM metadata WHERE key='radiolineOperatorsV2'").get()) {
+    db.exec(`BEGIN;
+      UPDATE radiolines SET operator='Plus', operatorRaw='Plus (Towerlink)' WHERE operatorRaw LIKE '%Towerlink%' OR operatorRaw LIKE '%POLKOMTEL%' OR operatorRaw LIKE '%Cellnex%';
+      UPDATE radiolines SET operatorRaw='Play' WHERE operator='Play';
+      INSERT OR REPLACE INTO metadata(key,value) VALUES('radiolineOperatorsV2','1');
+      COMMIT;`);
+  }
   if (!db.prepare("SELECT value FROM metadata WHERE key='pemReportCatalogV2'").get()) {
     db.exec(
       `BEGIN;DELETE FROM pem_reports_cache;DELETE FROM pem_report_counts;INSERT INTO metadata(key,value) VALUES('pemReportCatalogV2','1');COMMIT;`

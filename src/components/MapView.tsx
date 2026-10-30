@@ -13,7 +13,7 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { Check, ClipboardList, Copy, MapPin, Share2, X } from 'lucide-react';
+import { Check, Copy, MapPin, X } from 'lucide-react';
 import BaseLayer from './BaseLayer';
 import type { BasemapId } from '../lib/basemaps';
 import 'leaflet/dist/leaflet.css';
@@ -485,35 +485,209 @@ function computeHaversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
 }
 
-function getRadiolineBrand(line: Radioline): { displayName: string; badgeText: string; badgeBg: string; badgeClass: string } {
+type RadiolineBrandKind =
+  | 'orange'
+  | 'play'
+  | 'tmobile'
+  | 'plus'
+  | 'emitel'
+  | 'netia'
+  | 'exatel'
+  | 'tauron'
+  | 'pge'
+  | 'enea'
+  | 'other';
+
+interface RadiolineBrand {
+  kind: RadiolineBrandKind;
+  displayName: string;
+  color: string;
+}
+
+function getRadiolineBrand(line: Radioline): RadiolineBrand {
   const op = line.operator;
-  if (op === 'Orange') {
-    return { displayName: 'Orange Polska', badgeText: 'orange', badgeBg: '#ff7900', badgeClass: 'is-orange' };
+  const rawUpper = (line.operatorRaw || '').toUpperCase();
+
+  if (op === 'Orange' || rawUpper.includes('ORANGE') || rawUpper.includes('NETWORKS')) {
+    return {
+      kind: 'orange',
+      displayName: rawUpper.includes('NETWORKS') ? 'NetWorkS!' : 'Orange Polska',
+      color: '#ff7900',
+    };
   }
-  if (op === 'Play') {
-    return { displayName: 'Play (P4)', badgeText: 'PLAY', badgeBg: '#6c43bf', badgeClass: 'is-play' };
+  if (op === 'Play' || rawUpper.includes('PLAY') || rawUpper.includes('P4')) {
+    return {
+      kind: 'play',
+      displayName: 'Play',
+      color: '#7137c8',
+    };
   }
-  if (op === 'T-Mobile') {
-    return { displayName: 'T-Mobile Polska', badgeText: 'T', badgeBg: '#e20074', badgeClass: 'is-tmobile' };
+  if (op === 'T-Mobile' || rawUpper.includes('T-MOBILE')) {
+    return {
+      kind: 'tmobile',
+      displayName: 'T-Mobile Polska',
+      color: '#e20074',
+    };
   }
-  if (op === 'Plus') {
-    return { displayName: 'Plus (Polkomtel)', badgeText: 'plus', badgeBg: '#16a34a', badgeClass: 'is-plus' };
+  if (
+    op === 'Plus' ||
+    rawUpper.includes('PLUS') ||
+    rawUpper.includes('TOWERLINK') ||
+    rawUpper.includes('POLKOMTEL') ||
+    rawUpper.includes('CELLNEX') ||
+    rawUpper.includes('AERO')
+  ) {
+    return {
+      kind: 'plus',
+      displayName: rawUpper.includes('TOWERLINK') ? 'Plus (Towerlink)' : 'Plus',
+      color: '#00b140',
+    };
   }
+  if (rawUpper.includes('EMITEL')) {
+    return { kind: 'emitel', displayName: 'EmiTel', color: '#0284c7' };
+  }
+  if (rawUpper.includes('NETIA')) {
+    return { kind: 'netia', displayName: 'Netia', color: '#009fe3' };
+  }
+  if (rawUpper.includes('EXATEL')) {
+    return { kind: 'exatel', displayName: 'EXATEL', color: '#ea580c' };
+  }
+  if (rawUpper.includes('TAURON')) {
+    return { kind: 'tauron', displayName: 'Tauron Dystrybucja', color: '#d9006c' };
+  }
+  if (rawUpper.includes('PGE')) {
+    return { kind: 'pge', displayName: 'PGE Dystrybucja', color: '#f59e0b' };
+  }
+  if (rawUpper.includes('ENEA')) {
+    return { kind: 'enea', displayName: 'ENEA Operator', color: '#2563eb' };
+  }
+
   const cleaned = (line.operatorRaw || line.operator || 'Operator')
     .replace(/\b(S\.?A\.?|SP\.?\s*Z\s*O\.?O\.?|SPÓŁKA AKCYJNA)\b/gi, '')
     .trim();
   const displayName =
     cleaned.length > 2
-      ? cleaned
-          .toLowerCase()
-          .replace(/(^|\s|-)\S/g, m => m.toUpperCase())
+      ? cleaned.toLowerCase().replace(/(^|\s|-)\S/g, m => m.toUpperCase())
       : line.operatorRaw || 'Inny operator';
+
   return {
+    kind: 'other',
     displayName,
-    badgeText: displayName.slice(0, 2).toUpperCase(),
-    badgeBg: '#475569',
-    badgeClass: 'is-other',
+    color: '#64748b',
   };
+}
+
+function RadiolineOperatorIcon({ brand }: { brand: RadiolineBrand }) {
+  switch (brand.kind) {
+    case 'orange':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="3.5" fill="#ff7900" />
+          <text
+            x="2.2"
+            y="20.4"
+            fill="#ffffff"
+            fontFamily="Inter, Arial, sans-serif"
+            fontWeight="800"
+            fontSize="5.6"
+            letterSpacing="-0.2"
+          >
+            orange
+          </text>
+        </svg>
+      );
+    case 'play':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill="#7137c8" />
+          <path d="M8.2 6.6L17.4 12L8.2 17.4V6.6Z" fill="#ffffff" />
+        </svg>
+      );
+    case 'tmobile':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill="#e20074" />
+          <path
+            d="M6.5 6.2H17.5V9.8H16.1C16 8.1 15.2 7.5 13.5 7.5H13.1V16.2C13.1 17.2 13.5 17.5 14.8 17.5V18.6H9.2V17.5C10.5 17.5 10.9 17.2 10.9 16.2V7.5H10.5C8.8 7.5 8 8.1 7.9 9.8H6.5V6.2Z"
+            fill="#ffffff"
+          />
+          <rect x="6.5" y="11.8" width="2.1" height="2.1" fill="#ffffff" />
+          <rect x="15.4" y="11.8" width="2.1" height="2.1" fill="#ffffff" />
+        </svg>
+      );
+    case 'plus':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill="#00b140" />
+          <path
+            d="M12 5.8V18.2M5.8 12H18.2"
+            stroke="#ffffff"
+            strokeWidth="3.1"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case 'emitel':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill="#0284c7" />
+          <circle cx="12" cy="12" r="2.2" fill="#ffffff" />
+          <path
+            d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.8 5.8a8.8 8.8 0 0 0 0 12.4M18.2 5.8a8.8 8.8 0 0 1 0 12.4"
+            stroke="#ffffff"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+      );
+    case 'netia':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill="#009fe3" />
+          <path
+            d="M7.2 17V7h2.3l5 6.4V7h2.3v10h-2.2l-5.1-6.5V17H7.2Z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case 'tauron':
+    case 'pge':
+    case 'enea':
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill={brand.color} />
+          <path
+            d="M13.2 5.2L7.5 13h4.3l-1 5.8 5.7-7.8h-4.3l1-5.8Z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case 'exatel':
+    default:
+      return (
+        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="24" height="24" rx="4" fill={brand.color} />
+          <path
+            d="M6.5 17.5L10.5 13.5M14.5 9.5a5 5 0 0 1 0 7.07 5 5 0 0 1-7.07 0l7.07-7.07ZM14 6.5a4 4 0 0 1 3.5 3.5"
+            stroke="#ffffff"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
+      );
+  }
+}
+
+function createEndpointIcon(letter: 'A' | 'B', color: string): L.DivIcon {
+  return L.divIcon({
+    className: 'rl-endpoint-leaflet-icon',
+    html: `<div class="rl-endpoint-badge" style="--rl-color:${color}">${letter}</div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
 }
 
 function RadiolineCard({
@@ -523,8 +697,6 @@ function RadiolineCard({
   line: Radioline;
   onClose: () => void;
 }) {
-  const [copiedDetails, setCopiedDetails] = useState(false);
-  const [copiedShare, setCopiedShare] = useState(false);
   const [copiedCoords, setCopiedCoords] = useState(false);
 
   const brand = getRadiolineBrand(line);
@@ -549,35 +721,6 @@ function RadiolineCard({
   const midLng = ((line.lngA + line.lngB) / 2).toFixed(5);
   const coordsStr = `${midLat}, ${midLng}`;
 
-  const handleCopyDetails = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const lines = [
-      `${brand.displayName}${line.permitId ? ` ${line.permitId}` : ''}`,
-      `${distanceKm.toFixed(2)} km / ${mode} / ⇅ ${capacityText}`,
-      ...channels.map(ch => `${ch.dir} ${ch.freqGHz} GHz ${ch.pol} ${ch.mbps} Mbps`),
-      coordsStr,
-    ];
-    navigator.clipboard?.writeText(lines.join('\n'));
-    setCopiedDetails(true);
-    setTimeout(() => setCopiedDetails(false), 1600);
-  };
-
-  const handleShare = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const shareUrl = `${window.location.origin}${window.location.pathname}?lat=${midLat}&lng=${midLng}&zoom=13`;
-    if (navigator.share) {
-      navigator.share({
-        title: `Radiolinia ${brand.displayName} ${line.permitId || ''}`,
-        text: `${brand.displayName} (${distanceKm.toFixed(2)} km / ${mode} / ${capacityText})`,
-        url: shareUrl,
-      }).catch(() => {});
-    } else {
-      navigator.clipboard?.writeText(shareUrl);
-      setCopiedShare(true);
-      setTimeout(() => setCopiedShare(false), 1600);
-    }
-  };
-
   const handleCopyCoords = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard?.writeText(coordsStr);
@@ -589,41 +732,23 @@ function RadiolineCard({
     <div className="rl-popup-card" onClick={e => e.stopPropagation()}>
       <div className="rl-popup-header">
         <div className="rl-popup-brand">
-          <span className={`rl-op-logo ${brand.badgeClass}`} style={{ backgroundColor: brand.badgeBg }}>
-            <span>{brand.badgeText}</span>
-          </span>
-          <span className="rl-op-name">{brand.displayName}</span>
-          {line.permitId && <span className="rl-permit-id">{line.permitId}</span>}
+          <RadiolineOperatorIcon brand={brand} />
+          <div className="rl-popup-title-group">
+            <span className="rl-op-name">{brand.displayName}</span>
+            {line.permitId && <span className="rl-permit-id">{line.permitId}</span>}
+          </div>
         </div>
-        <div className="rl-popup-actions">
-          <button
-            type="button"
-            className="rl-icon-btn"
-            onClick={handleCopyDetails}
-            title="Skopiuj parametry radiolinii"
-          >
-            {copiedDetails ? <Check size={14} className="rl-copied-icon" /> : <ClipboardList size={14} />}
-          </button>
-          <button
-            type="button"
-            className="rl-icon-btn"
-            onClick={handleShare}
-            title="Udostępnij lokalizację radiolinii"
-          >
-            {copiedShare ? <Check size={14} className="rl-copied-icon" /> : <Share2 size={14} />}
-          </button>
-          <button
-            type="button"
-            className="rl-icon-btn"
-            onClick={e => {
-              e.stopPropagation();
-              onClose();
-            }}
-            title="Zamknij"
-          >
-            <X size={15} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="rl-icon-btn rl-close-btn"
+          onClick={e => {
+            e.stopPropagation();
+            onClose();
+          }}
+          title="Zamknij"
+        >
+          <X size={15} />
+        </button>
       </div>
 
       <div className="rl-popup-summary">
@@ -649,7 +774,7 @@ function RadiolineCard({
 
       <div
         className="rl-popup-footer"
-        title={line.stationA && line.stationB ? `${line.stationA} ↔ ${line.stationB}` : undefined}
+        title={line.stationA && line.stationB ? `A: ${line.stationA} ↔ B: ${line.stationB}` : undefined}
       >
         <div className="rl-footer-coords">
           <MapPin size={13.5} className="rl-pin-icon" />
@@ -689,13 +814,27 @@ function RadiolinesLayer({
     }
   }, [radiolines, selectedRl]);
 
+  const selectedBrand = useMemo(
+    () => (selectedRl ? getRadiolineBrand(selectedRl.line) : null),
+    [selectedRl]
+  );
+
+  const iconA = useMemo(
+    () => (selectedBrand ? createEndpointIcon('A', selectedBrand.color) : null),
+    [selectedBrand]
+  );
+  const iconB = useMemo(
+    () => (selectedBrand ? createEndpointIcon('B', selectedBrand.color) : null),
+    [selectedBrand]
+  );
+
   if (!radiolines.length) return null;
 
   return (
     <>
       {radiolines.map(line => {
         const isSelected = selectedRl?.line.id === line.id;
-        const color = operatorColor(line.operator);
+        const brand = getRadiolineBrand(line);
         return (
           <Polyline
             key={line.id}
@@ -705,9 +844,9 @@ function RadiolinesLayer({
             ]}
             renderer={renderer}
             pathOptions={{
-              color,
-              weight: isSelected ? 3.6 : 2.1,
-              opacity: isSelected ? 1 : 0.88,
+              color: brand.color,
+              weight: isSelected ? 3.8 : 2.3,
+              opacity: isSelected ? 1 : 0.9,
             }}
             eventHandlers={{
               click: e => {
@@ -722,30 +861,29 @@ function RadiolinesLayer({
         );
       })}
 
-      {selectedRl && (
+      {selectedRl && selectedBrand && iconA && iconB && (
         <>
-          <CircleMarker
-            center={[selectedRl.line.latA, selectedRl.line.lngA]}
-            radius={4}
+          <Polyline
+            positions={[
+              [selectedRl.line.latA, selectedRl.line.lngA],
+              [selectedRl.line.latB, selectedRl.line.lngB],
+            ]}
             renderer={renderer}
             pathOptions={{
-              color: '#ffffff',
-              weight: 1.5,
-              fillColor: operatorColor(selectedRl.line.operator),
-              fillOpacity: 1,
+              color: selectedBrand.color,
+              weight: 8,
+              opacity: 0.28,
             }}
             interactive={false}
           />
-          <CircleMarker
-            center={[selectedRl.line.latB, selectedRl.line.lngB]}
-            radius={4}
-            renderer={renderer}
-            pathOptions={{
-              color: '#ffffff',
-              weight: 1.5,
-              fillColor: operatorColor(selectedRl.line.operator),
-              fillOpacity: 1,
-            }}
+          <Marker
+            position={[selectedRl.line.latA, selectedRl.line.lngA]}
+            icon={iconA}
+            interactive={false}
+          />
+          <Marker
+            position={[selectedRl.line.latB, selectedRl.line.lngB]}
+            icon={iconB}
             interactive={false}
           />
           <Popup
@@ -753,7 +891,7 @@ function RadiolinesLayer({
             closeButton={false}
             autoPan={true}
             className="radioline-leaflet-popup"
-            offset={[0, -4]}
+            offset={[0, -6]}
             eventHandlers={{
               remove: () => setSelectedRl(null),
             }}

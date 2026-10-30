@@ -144,13 +144,13 @@
   padding: 0 !important;
   border: none !important;
   box-shadow: none !important;
-  border-radius: 10px !important;
+  border-radius: 12px !important;
 }
 
 .radioline-leaflet-popup .leaflet-popup-content {
   margin: 0 !important;
   width: auto !important;
-  min-width: 285px;
+  min-width: 278px;
   line-height: 1.4;
 }
 
@@ -159,12 +159,12 @@
 }
 
 .rl-popup-card {
-  background: rgba(20, 22, 26, 0.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.68), 0 2px 8px rgba(0, 0, 0, 0.45);
+  background: rgba(18, 20, 24, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 11px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.72), 0 2px 10px rgba(0, 0, 0, 0.45);
   color: #f8fafc;
   overflow: hidden;
   user-select: text;
@@ -175,50 +175,39 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 13px 7px 14px;
+  padding: 13px 13px 8px 14px;
 }
 
 .rl-popup-brand {
   display: flex;
   align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.rl-op-svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+  display: block;
+}
+
+.rl-popup-title-group {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
   min-width: 0;
 }
 
-.rl-op-logo {
-  width: 19px;
-  height: 19px;
-  border-radius: 2px;
-  display: inline-flex;
-  align-items: flex-end;
-  justify-content: flex-start;
-  padding: 1.5px 2px;
-  color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 5px;
-  font-weight: 800;
-  line-height: 1;
-  flex-shrink: 0;
-  letter-spacing: -0.02em;
-  overflow: hidden;
-  user-select: none;
-}
-
-.rl-op-logo.is-play,
-.rl-op-logo.is-tmobile,
-.rl-op-logo.is-other {
-  align-items: center;
-  justify-content: center;
-  font-size: 6.5px;
-}
-
 .rl-op-name {
   font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #f8fafc;
   white-space: nowrap;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 .rl-permit-id {
@@ -229,29 +218,23 @@
   white-space: nowrap;
 }
 
-.rl-popup-actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
 .rl-icon-btn {
   background: transparent;
   border: none;
   color: #8b95a5;
   padding: 4px;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   transition: color 0.14s ease, background-color 0.14s ease;
 }
 
 .rl-icon-btn:hover {
   color: #f8fafc;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .rl-copied-icon {
@@ -262,6 +245,7 @@
   padding: 2px 14px 10px 14px;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -297,20 +281,22 @@
 }
 
 .rl-popup-channels {
-  padding: 0 14px 12px 14px;
+  padding: 0 14px 13px 14px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  max-height: 200px;
+  font-variant-numeric: tabular-nums;
+  max-height: 210px;
   overflow-y: auto;
 }
 
 .rl-channel-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
   align-items: center;
-  gap: 7px;
+  column-gap: 9px;
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -326,6 +312,7 @@
 
 .rl-ch-pol {
   color: #94a3b8;
+  text-align: center;
 }
 
 .rl-ch-speed {
@@ -336,13 +323,14 @@
 .rl-popup-footer {
   padding: 8px 13px 8px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.24);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   color: #94a3b8;
 }
 
@@ -355,4 +343,28 @@
 .rl-pin-icon {
   color: #8b95a5;
   flex-shrink: 0;
+}
+
+/* Endpoint A / B badges on the map when a radioline is selected */
+.rl-endpoint-leaflet-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.rl-endpoint-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--rl-color, #ff7900);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  font-family: 'JetBrains Mono', 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
 }
