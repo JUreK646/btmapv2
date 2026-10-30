@@ -581,89 +581,64 @@ function RadiolineOperatorIcon({ brand }: { brand: RadiolineBrand }) {
   switch (brand.kind) {
     case 'orange':
       return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="3.5" fill="#ff7900" />
-          <text
-            x="2.2"
-            y="20.4"
-            fill="#ffffff"
-            fontFamily="Inter, Arial, sans-serif"
-            fontWeight="800"
-            fontSize="5.6"
-            letterSpacing="-0.2"
-          >
-            orange
-          </text>
-        </svg>
-      );
-    case 'play':
-      return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="4" fill="#7137c8" />
-          <path d="M8.2 6.6L17.4 12L8.2 17.4V6.6Z" fill="#ffffff" />
-        </svg>
+        <span className="rl-op-img-wrap is-square">
+          <img src="/logos/orange.svg" alt="Orange" className="rl-op-img" />
+        </span>
       );
     case 'tmobile':
       return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="4" fill="#e20074" />
-          <path
-            d="M6.5 6.2H17.5V9.8H16.1C16 8.1 15.2 7.5 13.5 7.5H13.1V16.2C13.1 17.2 13.5 17.5 14.8 17.5V18.6H9.2V17.5C10.5 17.5 10.9 17.2 10.9 16.2V7.5H10.5C8.8 7.5 8 8.1 7.9 9.8H6.5V6.2Z"
-            fill="#ffffff"
-          />
-          <rect x="6.5" y="11.8" width="2.1" height="2.1" fill="#ffffff" />
-          <rect x="15.4" y="11.8" width="2.1" height="2.1" fill="#ffffff" />
-        </svg>
+        <span className="rl-op-img-wrap is-square">
+          <img src="/logos/tmobile.svg" alt="T-Mobile" className="rl-op-img" />
+        </span>
+      );
+    case 'play':
+      return (
+        <span className="rl-op-img-wrap is-play">
+          <img src="/logos/play.svg" alt="Play" className="rl-op-img" />
+        </span>
       );
     case 'plus':
       return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="4" fill="#00b140" />
-          <path
-            d="M12 5.8V18.2M5.8 12H18.2"
-            stroke="#ffffff"
-            strokeWidth="3.1"
-            strokeLinecap="round"
-          />
-        </svg>
+        <span className="rl-op-img-wrap is-plus">
+          <img src="/logos/plus.svg" alt="Plus" className="rl-op-img" />
+        </span>
       );
     case 'emitel':
       return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="4" fill="#0284c7" />
-          <circle cx="12" cy="12" r="2.2" fill="#ffffff" />
-          <path
-            d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.8 5.8a8.8 8.8 0 0 0 0 12.4M18.2 5.8a8.8 8.8 0 0 1 0 12.4"
-            stroke="#ffffff"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </svg>
+        <span className="rl-op-img-wrap is-emitel">
+          <img src="/logos/emitel.svg" alt="EmiTel" className="rl-op-img" />
+        </span>
       );
     case 'netia':
       return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="4" fill="#009fe3" />
-          <path
-            d="M7.2 17V7h2.3l5 6.4V7h2.3v10h-2.2l-5.1-6.5V17H7.2Z"
-            fill="#ffffff"
-          />
-        </svg>
+        <span className="rl-op-img-wrap is-square is-white-bg">
+          <img src="/logos/netia.png" alt="Netia" className="rl-op-img" />
+        </span>
       );
     case 'tauron':
-    case 'pge':
-    case 'enea':
       return (
-        <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="4" fill={brand.color} />
-          <path
-            d="M13.2 5.2L7.5 13h4.3l-1 5.8 5.7-7.8h-4.3l1-5.8Z"
-            fill="#ffffff"
-          />
-        </svg>
+        <span className="rl-op-img-wrap is-square is-white-bg">
+          <img src="/logos/tauron.png" alt="Tauron" className="rl-op-img" />
+        </span>
+      );
+    case 'pge':
+      return (
+        <span className="rl-op-img-wrap is-square is-white-bg">
+          <img src="/logos/pge.png" alt="PGE" className="rl-op-img" />
+        </span>
       );
     case 'exatel':
+      return (
+        <span className="rl-op-img-wrap is-square is-white-bg">
+          <img src="/logos/exatel.png" alt="EXATEL" className="rl-op-img" />
+        </span>
+      );
+    case 'enea':
+      return (
+        <span className="rl-op-img-wrap is-square is-white-bg">
+          <img src="/logos/enea.png" alt="ENEA" className="rl-op-img" />
+        </span>
+      );
     default:
       return (
         <svg className="rl-op-svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">

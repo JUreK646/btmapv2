@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MessageSquare,
   Camera,
@@ -396,33 +397,35 @@ export default function StationComments({
       )}
 
       {/* Lightbox Modal for Fullscreen Photo View */}
-      {activePhoto && (
-        <div className="photo-lightbox-overlay" onClick={() => setActivePhoto(null)}>
-          <div className="photo-lightbox-content" onClick={e => e.stopPropagation()}>
-            <img src={activePhoto} alt="Zdjęcie stacji bazowej" className="photo-lightbox-img" />
-            <div className="photo-lightbox-actions">
-              <a
-                href={activePhoto}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="photo-lightbox-btn"
-                title={isPl ? 'Pobierz zdjęcie' : 'Download photo'}
-              >
-                <Download size={16} />
-              </a>
-              <button
-                type="button"
-                className="photo-lightbox-btn"
-                onClick={() => setActivePhoto(null)}
-                title={isPl ? 'Zamknij' : 'Close'}
-              >
-                <X size={18} />
-              </button>
+      {activePhoto &&
+        createPortal(
+          <div className="photo-lightbox-overlay" onClick={() => setActivePhoto(null)}>
+            <div className="photo-lightbox-content" onClick={e => e.stopPropagation()}>
+              <img src={activePhoto} alt="Zdjęcie stacji bazowej" className="photo-lightbox-img" />
+              <div className="photo-lightbox-actions">
+                <a
+                  href={activePhoto}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  className="photo-lightbox-btn"
+                  title={isPl ? 'Pobierz zdjęcie' : 'Download photo'}
+                >
+                  <Download size={16} />
+                </a>
+                <button
+                  type="button"
+                  className="photo-lightbox-btn"
+                  onClick={() => setActivePhoto(null)}
+                  title={isPl ? 'Zamknij' : 'Close'}
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </section>
   );
 }

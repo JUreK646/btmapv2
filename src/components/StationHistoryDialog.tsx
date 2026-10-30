@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   History,
@@ -102,7 +103,7 @@ export default function StationHistoryDialog({ tower, onClose, onOpenCreateStati
 
   const isBtmapStation = tower.source === 'BTMAP' || tower.source === 'User';
 
-  return (
+  return createPortal(
     <div className="modal-backdrop station-history-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-window station-history-window" onClick={e => e.stopPropagation()}>
         <header className="station-history-header">
@@ -552,6 +553,7 @@ export default function StationHistoryDialog({ tower, onClose, onOpenCreateStati
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
