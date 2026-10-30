@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 const DANE_GOV_DATASET_URL = 'https://api.dane.gov.pl/1.4/datasets/1066/resources';
 const FALLBACK_ZIP_URL = 'https://api.dane.gov.pl/media/resources/20260430/wykaz_pozwolen_linie_radiowe.zip';
+const HARDWARE_REF_ZIP_URL = 'https://api.dane.gov.pl/media/resources/20260430/wykaz_pozwolen_linie_radiowe.zip';
 
 export interface RadiolineChannelRecord {
   dir: 'A → B' | 'B → A';
@@ -200,6 +201,159 @@ async function resolveLatestUkeZipUrl(): Promise<{ url: string; title: string }>
   };
 }
 
+interface HardwareRefEntry {
+  modulation?: string;
+  rawMbps?: string;
+  rxAttenuationDb?: number;
+  txTransmitterType?: string;
+  txManufacturer?: string;
+  rxNoiseFigureDb?: number;
+  txAntType?: string;
+  txAntManufacturer?: string;
+  txAntGainDbi?: number;
+  rxAntType?: string;
+  rxAntManufacturer?: string;
+  rxAntGainDbi?: number;
+}
+
+function parseSharedStrings(extractXlsxDir: string): string[] {
+  const sstPath = resolve(extractXlsxDir, 'xl', 'sharedStrings.xml');
+  const sharedStrings: string[] = [];
+  if (existsSync(sstPath)) {
+    const sstXml = readFileSync(sstPath, 'utf8');
+    const siRegex = /<si>([\s\S]*?)<\/si>/g;
+    let m: RegExpExecArray | null;
+    while ((m = siRegex.exec(sstXml)) !== null) {
+      const inner = m[1];
+      const tRegex = /<t[^>]*>([\s\S]*?)<\/t>/g;
+      let text = '';
+      let tm: RegExpExecArray | null;
+      while ((tm = tRegex.exec(inner)) !== null) {
+        text += tm[1];
+      }
+      sharedStrings.push(
+        text
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+      );
+    }
+  }
+  return sharedStrings;
+}
+
+function makeRowParser(sharedStrings: string[]) {
+  return (rowXml: string): string[] => {
+    const cells: string[] = [];
+    const cRegex = /<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    let cm: RegExpExecArray | null;
+    while ((cm = cRegex.exec(rowXml)) !== null) {
+      const colIdx = colLettersToIndex(cm[1]);
+      const body = cm[3];
+      if (!body) continue;
+      const vMatch = body.match(/<v>([\s\S]*?)<\/v>/);
+      if (!vMatch) continue;
+      cells[colIdx] = cm[2].includes('t="s"')
+        ? (sharedStrings[parseInt(vMatch[1], 10)] ?? '')
+        : vMatch[1];
+    }
+    return cells;
+  };
+}
+
+async function loadHardwareReferenceMap(workDir: string): Promise<Map<string, HardwareRefEntry>> {
+  const hwMap = new Map<string, HardwareRefEntry>();
+  try {
+    const cachedHwZip = resolve(process.cwd(), 'data', 'uke_rl_hw_ref.zip');
+    if (!existsSync(cachedHwZip)) {
+      console.log(`[Radiolines Sync] Pobieranie słownika sprzętowego UKE (41 kolumn) z: ${HARDWARE_REF_ZIP_URL}`);
+      const res = await fetch(HARDWARE_REF_ZIP_URL);
+      if (!res.ok) return hwMap;
+      writeFileSync(cachedHwZip, Buffer.from(await res.arrayBuffer()));
+    }
+    const hwZipDir = resolve(workDir, 'hw_zip');
+    const hwXlsxDir = resolve(workDir, 'hw_xlsx');
+    mkdirSync(hwZipDir, { recursive: true });
+    mkdirSync(hwXlsxDir, { recursive: true });
+    execSync(`tar -xf "${cachedHwZip}" -C "${hwZipDir}"`);
+    const xlsxFile = readdirSync(hwZipDir).find(f => f.toLowerCase().endsWith('.xlsx'));
+    if (!xlsxFile) return hwMap;
+    execSync(`tar -xf "${resolve(hwZipDir, xlsxFile)}" -C "${hwXlsxDir}"`);
+
+    const sst = parseSharedStrings(hwXlsxDir);
+    const parseRow = makeRowParser(sst);
+    const sheetPath = resolve(hwXlsxDir, 'xl', 'worksheets', 'sheet1.xml');
+    const stream = createReadStream(sheetPath, { encoding: 'utf8', highWaterMark: 1024 * 512 });
+
+    let buffer = '';
+    let rowCount = 0;
+    const colMap = new Map<string, number>();
+
+    for await (const chunk of stream) {
+      buffer += chunk;
+      let startIdx = 0;
+      while (true) {
+        const rowStart = buffer.indexOf('<row ', startIdx);
+        if (rowStart === -1) break;
+        const rowEnd = buffer.indexOf('</row>', rowStart);
+        if (rowEnd === -1) break;
+        const rowXml = buffer.slice(rowStart, rowEnd + 6);
+        startIdx = rowEnd + 6;
+        rowCount++;
+        const c = parseRow(rowXml);
+        if (rowCount === 1) {
+          c.forEach((name, idx) => {
+            if (name) colMap.set(name.trim(), idx);
+          });
+          continue;
+        }
+        const get = (colName: string) => {
+          const idx = colMap.get(colName);
+          return idx !== undefined ? c[idx] : undefined;
+        };
+        const txLon = parseDMS(get('Dl_geo_Tx'));
+        const txLat = parseDMS(get('Sz_geo_Tx'));
+        const rxLon = parseDMS(get('Dl_geo_Rx'));
+        const rxLat = parseDMS(get('Sz_geo_Rx'));
+        if (txLat === null || txLon === null || rxLat === null || rxLon === null) continue;
+
+        const freqGHz = parseFloat(get('f [GHz]') || '0') || 0;
+        const freqKey = Math.round(freqGHz * 1000);
+        const pol = String(get('Polaryzacja') || 'H').trim().toUpperCase();
+        const permitId = String(get('Nr_pozw/dec') || '').trim();
+
+        const entry: HardwareRefEntry = {
+          modulation: parseOptStr(get('Rodz_modu-lacji')),
+          rawMbps: parseOptStr(get('Przepływność [Mb/s]')),
+          rxAttenuationDb: parseOptNum(get('Tłum_ant_odb_Rx [dB]'), 1),
+          txTransmitterType: parseOptStr(get('Typ_nad')),
+          txManufacturer: parseOptStr(get('Prod_nad')),
+          rxNoiseFigureDb: parseOptNum(get('Liczba_szum_Rx [dB]'), 1),
+          txAntType: parseOptStr(get('Typ_ant_Tx')),
+          txAntManufacturer: parseOptStr(get('Prod_ant_Tx')),
+          txAntGainDbi: parseOptNum(get('Zysk_ant_Tx [dBi]'), 1),
+          rxAntType: parseOptStr(get('Typ_ant_Rx')),
+          rxAntManufacturer: parseOptStr(get('Prod_ant_Rx')),
+          rxAntGainDbi: parseOptNum(get('Zysk_ant_Rx [dBi]'), 1),
+        };
+
+        const coordKey = `${txLat.toFixed(4)},${txLon.toFixed(4)}|${rxLat.toFixed(4)},${rxLon.toFixed(4)}|${freqKey}|${pol}`;
+        hwMap.set(coordKey, entry);
+        if (permitId) {
+          hwMap.set(`P:${permitId}|${freqKey}|${pol}|${txLat.toFixed(3)}`, entry);
+        }
+      }
+      buffer = buffer.slice(startIdx);
+    }
+    console.log(`[Radiolines Sync] Załadowano słownik sprzętowy dla ${hwMap.size} kluczy kanałów.`);
+  } catch (err) {
+    console.warn('[Radiolines Sync] Nie udało się załadować słownika sprzętowego:', err);
+  }
+  return hwMap;
+}
+
 export async function syncRadiolinesFromUke(
   db: DatabaseSync,
   options: { localZipPath?: string } = {}
@@ -211,7 +365,6 @@ export async function syncRadiolinesFromUke(
     let zipPath = options.localZipPath ? resolve(options.localZipPath) : '';
 
     if (!zipPath || !existsSync(zipPath)) {
-      // Check if temp_rl.zip already exists locally to save bandwidth if valid
       const cachedZip = resolve(process.cwd(), 'data', 'temp_rl.zip');
       if (existsSync(cachedZip)) {
         console.log(`[Radiolines Sync] Korzystanie z pobranego archiwum UKE: ${cachedZip}`);
@@ -248,47 +401,8 @@ export async function syncRadiolinesFromUke(
     execSync(`tar -xf "${xlsxPath}" -C "${extractXlsxDir}"`);
 
     // 1. Parse sharedStrings.xml
-    const sstPath = resolve(extractXlsxDir, 'xl', 'sharedStrings.xml');
-    const sharedStrings: string[] = [];
-    if (existsSync(sstPath)) {
-      const sstXml = readFileSync(sstPath, 'utf8');
-      const siRegex = /<si>([\s\S]*?)<\/si>/g;
-      let m: RegExpExecArray | null;
-      while ((m = siRegex.exec(sstXml)) !== null) {
-        const inner = m[1];
-        const tRegex = /<t[^>]*>([\s\S]*?)<\/t>/g;
-        let text = '';
-        let tm: RegExpExecArray | null;
-        while ((tm = tRegex.exec(inner)) !== null) {
-          text += tm[1];
-        }
-        sharedStrings.push(
-          text
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-        );
-      }
-    }
-
-    const parseRowXml = (rowXml: string): string[] => {
-      const cells: string[] = [];
-      const cRegex = /<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
-      let cm: RegExpExecArray | null;
-      while ((cm = cRegex.exec(rowXml)) !== null) {
-        const colIdx = colLettersToIndex(cm[1]);
-        const body = cm[3];
-        if (!body) continue;
-        const vMatch = body.match(/<v>([\s\S]*?)<\/v>/);
-        if (!vMatch) continue;
-        cells[colIdx] = cm[2].includes('t="s"')
-          ? (sharedStrings[parseInt(vMatch[1], 10)] ?? '')
-          : vMatch[1];
-      }
-      return cells;
-    };
+    const sharedStrings = parseSharedStrings(extractXlsxDir);
+    const parseRowXml = makeRowParser(sharedStrings);
 
     // 2. Stream sheet1.xml
     const sheetPath = resolve(extractXlsxDir, 'xl', 'worksheets', 'sheet1.xml');
@@ -313,6 +427,8 @@ export async function syncRadiolinesFromUke(
     let buffer = '';
     let rowCount = 0;
     let totalChannels = 0;
+    const colMap = new Map<string, number>();
+    let hwMap: Map<string, HardwareRefEntry> | null = null;
 
     for await (const chunk of stream) {
       buffer += chunk;
@@ -326,28 +442,50 @@ export async function syncRadiolinesFromUke(
         const rowXml = buffer.slice(rowStart, rowEnd + 6);
         startIdx = rowEnd + 6;
         rowCount++;
-        if (rowCount === 1) continue; // Skip header row
 
         const c = parseRowXml(rowXml);
-        const txLon = parseDMS(c[1]);
-        const txLat = parseDMS(c[2]);
-        const rxLon = parseDMS(c[8]);
-        const rxLat = parseDMS(c[9]);
+        if (rowCount === 1) {
+          c.forEach((name, idx) => {
+            if (name) colMap.set(name.trim(), idx);
+          });
+          if (!colMap.has('Typ_ant_Tx')) {
+            hwMap = await loadHardwareReferenceMap(workDir);
+          }
+          continue;
+        }
+
+        const get = (colName: string): string | undefined => {
+          const idx = colMap.get(colName);
+          return idx !== undefined ? c[idx] : undefined;
+        };
+
+        const txLon = parseDMS(get('Dl_geo_Tx'));
+        const txLat = parseDMS(get('Sz_geo_Tx'));
+        const rxLon = parseDMS(get('Dl_geo_Rx'));
+        const rxLat = parseDMS(get('Sz_geo_Rx'));
         if (txLat === null || txLon === null || rxLat === null || rxLon === null) continue;
 
-        const permitId = String(c[37] || '').trim();
-        const rawOp = String(c[36] || '').trim();
-        const freqGHz = parseFloat(c[15] || '0') || 0;
-        const pol = String(c[19] || 'H').trim().toUpperCase();
-        const mbps = calcChannelMbps(c[18], c[20], c[21]);
+        const permitId = String(get('Nr_pozw/dec') || '').trim();
+        const rawOp = String(get('Operator') || '').trim();
+        const freqGHz = parseFloat(get('f [GHz]') || '0') || 0;
+        const freqMHz = freqGHz > 0 ? Math.round(freqGHz * 1000) : undefined;
+        const pol = String(get('Polaryzacja') || 'H').trim().toUpperCase();
+
+        const coordKey = `${txLat.toFixed(4)},${txLon.toFixed(4)}|${rxLat.toFixed(4)},${rxLon.toFixed(4)}|${freqMHz ?? 0}|${pol}`;
+        const permitKey = permitId ? `P:${permitId}|${freqMHz ?? 0}|${pol}|${txLat.toFixed(3)}` : '';
+        const hw = hwMap ? (hwMap.get(permitKey) || hwMap.get(coordKey)) : undefined;
+
+        const rawModulation = get('Rodz_modu-lacji') ?? hw?.modulation;
+        const rawMbps = get('Przepływność [Mb/s]') ?? hw?.rawMbps;
+        const mbps = calcChannelMbps(get('Szer_kan [MHz]'), rawModulation, rawMbps);
 
         const isTxA = txLat < rxLat || (txLat === rxLat && txLon <= rxLon);
         const latA = isTxA ? txLat : rxLat;
         const lngA = isTxA ? txLon : rxLon;
         const latB = isTxA ? rxLat : txLat;
         const lngB = isTxA ? rxLon : txLon;
-        const cityA = isTxA ? String(c[4] || '') : String(c[11] || '');
-        const cityB = isTxA ? String(c[11] || '') : String(c[4] || '');
+        const cityA = isTxA ? String(get('Miejscowość Tx') || '') : String(get('Miejscowość Rx') || '');
+        const cityB = isTxA ? String(get('Miejscowość Rx') || '') : String(get('Miejscowość Tx') || '');
         const dir: 'A → B' | 'B → A' = isTxA ? 'A → B' : 'B → A';
 
         const key = `${latA.toFixed(5)},${lngA.toFixed(5)}|${latB.toFixed(5)},${lngB.toFixed(5)}|${permitId}`;
@@ -373,42 +511,42 @@ export async function syncRadiolinesFromUke(
         link.channels.push({
           dir,
           freqGHz: Math.round(freqGHz * 10) / 10,
-          freqMHz: freqGHz > 0 ? Math.round(freqGHz * 1000) : undefined,
+          freqMHz,
           pol,
           mbps,
-          rowId: parseOptStr(c[0]),
-          channelNum: parseOptStr(c[16]),
-          planSymbol: parseOptStr(c[17]),
-          widthMHz: parseOptNum(c[18], 1),
-          modulation: parseOptStr(c[20]),
-          eirpDbm: parseOptNum(c[22], 1),
+          rowId: parseOptStr(get('L.p.') ?? c[0]),
+          channelNum: parseOptStr(get('Nr_kan')),
+          planSymbol: parseOptStr(get('Symbol_planu')),
+          widthMHz: parseOptNum(get('Szer_kan [MHz]'), 1),
+          modulation: parseOptStr(rawModulation),
+          eirpDbm: parseOptNum(get('EIRP [dBm]'), 1),
           txLat,
           txLng: txLon,
-          txHeightM: parseOptNum(c[3], 1),
-          txCity: parseOptStr(c[4]),
-          txProvince: parseOptStr(c[5]),
-          txStreet: parseOptStr(c[6]),
-          txAntType: parseOptStr(c[28]),
-          txAntManufacturer: parseOptStr(c[29]),
-          txAntGainDbi: parseOptNum(c[30], 1),
-          txAntHeightM: parseOptNum(c[31], 1),
-          txTransmitterType: parseOptStr(c[24]),
-          txManufacturer: parseOptStr(c[25]),
+          txHeightM: parseOptNum(get('H_t_Tx [m npm]'), 1),
+          txCity: parseOptStr(get('Miejscowość Tx')),
+          txProvince: parseOptStr(get('Województwo Tx')),
+          txStreet: parseOptStr(get('Ulica Tx')),
+          txAntType: parseOptStr(get('Typ_ant_Tx')) ?? hw?.txAntType,
+          txAntManufacturer: parseOptStr(get('Prod_ant_Tx')) ?? hw?.txAntManufacturer,
+          txAntGainDbi: parseOptNum(get('Zysk_ant_Tx [dBi]'), 1) ?? hw?.txAntGainDbi,
+          txAntHeightM: parseOptNum(get('H_ant_Tx [m npt]'), 1),
+          txTransmitterType: parseOptStr(get('Typ_nad')) ?? hw?.txTransmitterType,
+          txManufacturer: parseOptStr(get('Prod_nad')) ?? hw?.txManufacturer,
           rxLat,
           rxLng: rxLon,
-          rxHeightM: parseOptNum(c[10], 1),
-          rxCity: parseOptStr(c[11]),
-          rxProvince: parseOptStr(c[12]),
-          rxStreet: parseOptStr(c[13]),
-          rxAntType: parseOptStr(c[32]),
-          rxAntManufacturer: parseOptStr(c[33]),
-          rxAntGainDbi: parseOptNum(c[34], 1),
-          rxAntHeightM: parseOptNum(c[35], 1),
-          rxNoiseFigureDb: parseOptNum(c[26], 1),
-          rxAttenuationDb: parseOptNum(c[23], 1),
-          permitType: parseOptStr(c[38]),
-          issueDate: excelSerialToDateStr(c[39]),
-          expiryDate: excelSerialToDateStr(c[40]),
+          rxHeightM: parseOptNum(get('H_t_Rx [m npm]'), 1),
+          rxCity: parseOptStr(get('Miejscowość Rx')),
+          rxProvince: parseOptStr(get('Województwo Rx')),
+          rxStreet: parseOptStr(get('Ulica Rx')),
+          rxAntType: parseOptStr(get('Typ_ant_Rx')) ?? hw?.rxAntType,
+          rxAntManufacturer: parseOptStr(get('Prod_ant_Rx')) ?? hw?.rxAntManufacturer,
+          rxAntGainDbi: parseOptNum(get('Zysk_ant_Rx [dBi]'), 1) ?? hw?.rxAntGainDbi,
+          rxAntHeightM: parseOptNum(get('H_ant_Rx [m npt]'), 1),
+          rxNoiseFigureDb: parseOptNum(get('Liczba_szum_Rx [dB]'), 1) ?? hw?.rxNoiseFigureDb,
+          rxAttenuationDb: parseOptNum(get('Tłum_ant_odb_Rx [dB]'), 1) ?? hw?.rxAttenuationDb,
+          permitType: parseOptStr(get('Rodz_dec')),
+          issueDate: excelSerialToDateStr(get('Data_wydania')),
+          expiryDate: excelSerialToDateStr(get('Data_ważn_pozw/dec')),
           snapshotDate,
         });
         totalChannels++;
