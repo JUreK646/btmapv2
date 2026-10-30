@@ -39,7 +39,23 @@ export function openDatabase(
     CREATE INDEX IF NOT EXISTS tower_history_createdAt ON tower_history(createdAt);
     CREATE TABLE IF NOT EXISTS queue (id TEXT PRIMARY KEY, type TEXT, data TEXT, userNick TEXT, status TEXT DEFAULT 'PENDING', createdAt TEXT);
     CREATE TABLE IF NOT EXISTS logs (id TEXT PRIMARY KEY, userNick TEXT, action TEXT, target TEXT, status TEXT, createdAt TEXT);
-    CREATE TABLE IF NOT EXISTS radiolines (id TEXT PRIMARY KEY, latA REAL, lngA REAL, latB REAL, lngB REAL, frequency REAL, operator TEXT, stationA TEXT, stationB TEXT);
+    CREATE TABLE IF NOT EXISTS radiolines (
+      id TEXT PRIMARY KEY,
+      latA REAL,
+      lngA REAL,
+      latB REAL,
+      lngB REAL,
+      frequency REAL,
+      operator TEXT,
+      stationA TEXT,
+      stationB TEXT,
+      operatorRaw TEXT,
+      permitId TEXT,
+      distanceKm REAL,
+      mode TEXT,
+      capacityText TEXT,
+      channelsJson TEXT
+    );
     CREATE INDEX IF NOT EXISTS radiolines_coordsA ON radiolines(latA, lngA);
     CREATE INDEX IF NOT EXISTS radiolines_coordsB ON radiolines(latB, lngB);
     CREATE INDEX IF NOT EXISTS radiolines_operator ON radiolines(operator);
@@ -56,6 +72,19 @@ export function openDatabase(
     db.exec('ALTER TABLE comments ADD COLUMN photoUrl TEXT');
   } catch {
     // Column already exists
+  }
+  const rlColumns = db.prepare('PRAGMA table_info(radiolines)').all() as Array<{ name: string }>;
+  for (const col of [
+    ['operatorRaw', 'TEXT'],
+    ['permitId', 'TEXT'],
+    ['distanceKm', 'REAL'],
+    ['mode', 'TEXT'],
+    ['capacityText', 'TEXT'],
+    ['channelsJson', 'TEXT'],
+  ]) {
+    if (!rlColumns.some(c => c.name === col[0])) {
+      db.exec(`ALTER TABLE radiolines ADD COLUMN ${col[0]} ${col[1]}`);
+    }
   }
   if (!db.prepare("SELECT value FROM metadata WHERE key='pemReportCatalogV2'").get()) {
     db.exec(

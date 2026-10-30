@@ -5,6 +5,7 @@ import {
   CircleMarker,
   Circle,
   Tooltip,
+  Popup,
   Polyline,
   Polygon,
   Marker,
@@ -12,10 +13,11 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
+import { Check, ClipboardList, Copy, MapPin, Share2, X } from 'lucide-react';
 import BaseLayer from './BaseLayer';
 import type { BasemapId } from '../lib/basemaps';
 import 'leaflet/dist/leaflet.css';
-import type { Bounds, Radioline, Theme, Tower } from '../types';
+import type { Bounds, Radioline, RadiolineChannel, Theme, Tower } from '../types';
 import { operatorColor, readStored, saveStored } from '../lib/constants';
 import { MAP_STATION_LIMIT } from '../../shared/mapLimits';
 import PemPlanMarkers from './PemPlanMarkers';
@@ -473,6 +475,297 @@ function AzimuthBeams({
   );
 }
 
+function computeHaversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371.0;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
+}
+
+function getRadiolineBrand(line: Radioline): { displayName: string; badgeText: string; badgeBg: string; badgeClass: string } {
+  const op = line.operator;
+  if (op === 'Orange') {
+    return { displayName: 'Orange Polska', badgeText: 'orange', badgeBg: '#ff7900', badgeClass: 'is-orange' };
+  }
+  if (op === 'Play') {
+    return { displayName: 'Play (P4)', badgeText: 'PLAY', badgeBg: '#6c43bf', badgeClass: 'is-play' };
+  }
+  if (op === 'T-Mobile') {
+    return { displayName: 'T-Mobile Polska', badgeText: 'T', badgeBg: '#e20074', badgeClass: 'is-tmobile' };
+  }
+  if (op === 'Plus') {
+    return { displayName: 'Plus (Polkomtel)', badgeText: 'plus', badgeBg: '#16a34a', badgeClass: 'is-plus' };
+  }
+  const cleaned = (line.operatorRaw || line.operator || 'Operator')
+    .replace(/\b(S\.?A\.?|SP\.?\s*Z\s*O\.?O\.?|SPÓŁKA AKCYJNA)\b/gi, '')
+    .trim();
+  const displayName =
+    cleaned.length > 2
+      ? cleaned
+          .toLowerCase()
+          .replace(/(^|\s|-)\S/g, m => m.toUpperCase())
+      : line.operatorRaw || 'Inny operator';
+  return {
+    displayName,
+    badgeText: displayName.slice(0, 2).toUpperCase(),
+    badgeBg: '#475569',
+    badgeClass: 'is-other',
+  };
+}
+
+function RadiolineCard({
+  line,
+  onClose,
+}: {
+  line: Radioline;
+  onClose: () => void;
+}) {
+  const [copiedDetails, setCopiedDetails] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
+  const [copiedCoords, setCopiedCoords] = useState(false);
+
+  const brand = getRadiolineBrand(line);
+  const distanceKm = line.distanceKm ?? computeHaversineKm(line.latA, line.lngA, line.latB, line.lngB);
+  const mode = line.mode || '1+0';
+  const capacityText = line.capacityText || '150 Mbps';
+
+  const channels = useMemo<RadiolineChannel[]>(() => {
+    if (line.channelsJson) {
+      try {
+        const parsed = JSON.parse(line.channelsJson);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // Fallback below
+      }
+    }
+    const freqGHz = Number(((line.frequency || 15000) / 1000).toFixed(1));
+    return [{ dir: 'A → B', freqGHz, pol: 'H', mbps: 150 }];
+  }, [line.channelsJson, line.frequency]);
+
+  const midLat = ((line.latA + line.latB) / 2).toFixed(5);
+  const midLng = ((line.lngA + line.lngB) / 2).toFixed(5);
+  const coordsStr = `${midLat}, ${midLng}`;
+
+  const handleCopyDetails = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const lines = [
+      `${brand.displayName}${line.permitId ? ` ${line.permitId}` : ''}`,
+      `${distanceKm.toFixed(2)} km / ${mode} / ⇅ ${capacityText}`,
+      ...channels.map(ch => `${ch.dir} ${ch.freqGHz} GHz ${ch.pol} ${ch.mbps} Mbps`),
+      coordsStr,
+    ];
+    navigator.clipboard?.writeText(lines.join('\n'));
+    setCopiedDetails(true);
+    setTimeout(() => setCopiedDetails(false), 1600);
+  };
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}${window.location.pathname}?lat=${midLat}&lng=${midLng}&zoom=13`;
+    if (navigator.share) {
+      navigator.share({
+        title: `Radiolinia ${brand.displayName} ${line.permitId || ''}`,
+        text: `${brand.displayName} (${distanceKm.toFixed(2)} km / ${mode} / ${capacityText})`,
+        url: shareUrl,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(shareUrl);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 1600);
+    }
+  };
+
+  const handleCopyCoords = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(coordsStr);
+    setCopiedCoords(true);
+    setTimeout(() => setCopiedCoords(false), 1600);
+  };
+
+  return (
+    <div className="rl-popup-card" onClick={e => e.stopPropagation()}>
+      <div className="rl-popup-header">
+        <div className="rl-popup-brand">
+          <span className={`rl-op-logo ${brand.badgeClass}`} style={{ backgroundColor: brand.badgeBg }}>
+            <span>{brand.badgeText}</span>
+          </span>
+          <span className="rl-op-name">{brand.displayName}</span>
+          {line.permitId && <span className="rl-permit-id">{line.permitId}</span>}
+        </div>
+        <div className="rl-popup-actions">
+          <button
+            type="button"
+            className="rl-icon-btn"
+            onClick={handleCopyDetails}
+            title="Skopiuj parametry radiolinii"
+          >
+            {copiedDetails ? <Check size={14} className="rl-copied-icon" /> : <ClipboardList size={14} />}
+          </button>
+          <button
+            type="button"
+            className="rl-icon-btn"
+            onClick={handleShare}
+            title="Udostępnij lokalizację radiolinii"
+          >
+            {copiedShare ? <Check size={14} className="rl-copied-icon" /> : <Share2 size={14} />}
+          </button>
+          <button
+            type="button"
+            className="rl-icon-btn"
+            onClick={e => {
+              e.stopPropagation();
+              onClose();
+            }}
+            title="Zamknij"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+
+      <div className="rl-popup-summary">
+        <span className="rl-dist">{distanceKm.toFixed(2)} km</span>
+        <span className="rl-sep">/</span>
+        <span className={`rl-mode ${mode === 'XPIC' ? 'is-xpic' : ''}`}>{mode}</span>
+        <span className="rl-sep">/</span>
+        <span className="rl-cap">
+          <span className="rl-cap-arrows">⇅</span> {capacityText}
+        </span>
+      </div>
+
+      <div className="rl-popup-channels">
+        {channels.map((ch, idx) => (
+          <div key={idx} className="rl-channel-row">
+            <span className="rl-ch-dir">{ch.dir}</span>
+            <span className="rl-ch-freq">{ch.freqGHz} GHz</span>
+            <span className="rl-ch-pol">{ch.pol}</span>
+            <span className="rl-ch-speed">{ch.mbps} Mbps</span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        className="rl-popup-footer"
+        title={line.stationA && line.stationB ? `${line.stationA} ↔ ${line.stationB}` : undefined}
+      >
+        <div className="rl-footer-coords">
+          <MapPin size={13.5} className="rl-pin-icon" />
+          <span>{coordsStr}</span>
+        </div>
+        <button
+          type="button"
+          className="rl-icon-btn rl-copy-coords-btn"
+          onClick={handleCopyCoords}
+          title="Skopiuj współrzędne"
+        >
+          {copiedCoords ? <Check size={13.5} className="rl-copied-icon" /> : <Copy size={13.5} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RadiolinesLayer({
+  radiolines,
+  renderer,
+}: {
+  radiolines: Radioline[];
+  renderer: L.Canvas;
+}) {
+  const [selectedRl, setSelectedRl] = useState<{ line: Radioline; pos: [number, number] } | null>(null);
+
+  useMapEvents({
+    click: () => {
+      if (selectedRl) setSelectedRl(null);
+    },
+  });
+
+  useEffect(() => {
+    if (selectedRl && !radiolines.some(r => r.id === selectedRl.line.id)) {
+      setSelectedRl(null);
+    }
+  }, [radiolines, selectedRl]);
+
+  if (!radiolines.length) return null;
+
+  return (
+    <>
+      {radiolines.map(line => {
+        const isSelected = selectedRl?.line.id === line.id;
+        const color = operatorColor(line.operator);
+        return (
+          <Polyline
+            key={line.id}
+            positions={[
+              [line.latA, line.lngA],
+              [line.latB, line.lngB],
+            ]}
+            renderer={renderer}
+            pathOptions={{
+              color,
+              weight: isSelected ? 3.6 : 2.1,
+              opacity: isSelected ? 1 : 0.88,
+            }}
+            eventHandlers={{
+              click: e => {
+                L.DomEvent.stopPropagation(e);
+                const clickedPos: [number, number] = e.latlng
+                  ? [e.latlng.lat, e.latlng.lng]
+                  : [(line.latA + line.latB) / 2, (line.lngA + line.lngB) / 2];
+                setSelectedRl({ line, pos: clickedPos });
+              },
+            }}
+          />
+        );
+      })}
+
+      {selectedRl && (
+        <>
+          <CircleMarker
+            center={[selectedRl.line.latA, selectedRl.line.lngA]}
+            radius={4}
+            renderer={renderer}
+            pathOptions={{
+              color: '#ffffff',
+              weight: 1.5,
+              fillColor: operatorColor(selectedRl.line.operator),
+              fillOpacity: 1,
+            }}
+            interactive={false}
+          />
+          <CircleMarker
+            center={[selectedRl.line.latB, selectedRl.line.lngB]}
+            radius={4}
+            renderer={renderer}
+            pathOptions={{
+              color: '#ffffff',
+              weight: 1.5,
+              fillColor: operatorColor(selectedRl.line.operator),
+              fillOpacity: 1,
+            }}
+            interactive={false}
+          />
+          <Popup
+            position={selectedRl.pos}
+            closeButton={false}
+            autoPan={true}
+            className="radioline-leaflet-popup"
+            offset={[0, -4]}
+            eventHandlers={{
+              remove: () => setSelectedRl(null),
+            }}
+          >
+            <RadiolineCard line={selectedRl.line} onClose={() => setSelectedRl(null)} />
+          </Popup>
+        </>
+      )}
+    </>
+  );
+}
+
 export default function MapView({
   theme,
   basemap,
@@ -537,7 +830,7 @@ export default function MapView({
     return list;
   }, [markers, selected, highlightedSector, items]);
 
-  const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
+  const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5, tolerance: 8 }), []);
   const terrainStation = terrainTower;
 
   const handleMapClick = (lat: number, lng: number) => {
@@ -611,21 +904,7 @@ export default function MapView({
       <PemPlanMarkers items={pemPlans} />
 
       {/* Radiolines */}
-      {radiolines.map(line => (
-        <Polyline
-          key={line.id}
-          positions={[
-            [line.latA, line.lngA],
-            [line.latB, line.lngB],
-          ]}
-          renderer={canvasRenderer}
-          pathOptions={{ color: operatorColor(line.operator), weight: 2, dashArray: '6 6' }}
-        >
-          <Tooltip>
-            {line.operator} · {line.frequency} MHz
-          </Tooltip>
-        </Polyline>
-      ))}
+      <RadiolinesLayer radiolines={radiolines} renderer={canvasRenderer} />
 
       {/* User GPS location */}
       {position && (

@@ -13,7 +13,29 @@ export interface Photo { id:string; towerId:string; userNick:string; url:string;
 export interface Count { name:string; count:number; }
 export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
 export interface Submission { id:string; type:string; status:string; createdAt:string; userNick?:string; data?:any; }
-export interface Radioline { id:string; latA:number; lngA:number; latB:number; lngB:number; frequency:number; operator:string; }
+export interface RadiolineChannel {
+  dir: string;
+  freqGHz: number;
+  pol: string;
+  mbps: number;
+}
+export interface Radioline {
+  id: string;
+  latA: number;
+  lngA: number;
+  latB: number;
+  lngB: number;
+  frequency: number;
+  operator: string;
+  stationA?: string;
+  stationB?: string;
+  operatorRaw?: string;
+  permitId?: string;
+  distanceKm?: number;
+  mode?: string;
+  capacityText?: string;
+  channelsJson?: string;
+}
 
 export interface StatsOperatorItem {
   name: string;

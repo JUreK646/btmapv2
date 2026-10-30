@@ -33,6 +33,7 @@
     "typecheck": "node --max-old-space-size=2048 ./node_modules/typescript/bin/tsc --noEmit && node --max-old-space-size=2048 ./node_modules/typescript/bin/tsc -p tsconfig.server.json",
     "sync:uke": "node --experimental-strip-types scripts/sync_uke.ts",
     "sync:si2pem": "node --experimental-strip-types scripts/sync_si2pem.ts",
+    "sync:radiolines": "node --experimental-strip-types scripts/sync_radiolines.ts",
     "import:kml": "python scripts/import_kml.py"
   },
   "dependencies": {

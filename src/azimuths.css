@@ -134,3 +134,225 @@
     max-width: min(320px, calc(100vw - 80px));
   }
 }
+
+/* ============================================================
+   Radioline Microwave Link Popup Card (UKE Punkt-Punkt)
+   ============================================================ */
+
+.radioline-leaflet-popup .leaflet-popup-content-wrapper {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 10px !important;
+}
+
+.radioline-leaflet-popup .leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+  min-width: 285px;
+  line-height: 1.4;
+}
+
+.radioline-leaflet-popup .leaflet-popup-tip-container {
+  display: none !important;
+}
+
+.rl-popup-card {
+  background: rgba(20, 22, 26, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.68), 0 2px 8px rgba(0, 0, 0, 0.45);
+  color: #f8fafc;
+  overflow: hidden;
+  user-select: text;
+}
+
+.rl-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 13px 7px 14px;
+}
+
+.rl-popup-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rl-op-logo {
+  width: 19px;
+  height: 19px;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 1.5px 2px;
+  color: #ffffff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 5px;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  user-select: none;
+}
+
+.rl-op-logo.is-play,
+.rl-op-logo.is-tmobile,
+.rl-op-logo.is-other {
+  align-items: center;
+  justify-content: center;
+  font-size: 6.5px;
+}
+
+.rl-op-name {
+  font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.rl-permit-id {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8b95a5;
+  white-space: nowrap;
+}
+
+.rl-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.rl-icon-btn {
+  background: transparent;
+  border: none;
+  color: #8b95a5;
+  padding: 4px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.14s ease, background-color 0.14s ease;
+}
+
+.rl-icon-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rl-copied-icon {
+  color: #10b981;
+}
+
+.rl-popup-summary {
+  padding: 2px 14px 10px 14px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.rl-sep {
+  color: #64748b;
+}
+
+.rl-mode {
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.rl-mode.is-xpic {
+  color: #ff7900;
+}
+
+.rl-cap {
+  font-weight: 700;
+  color: #10b981;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rl-cap-arrows {
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.rl-popup-channels {
+  padding: 0 14px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.rl-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.rl-ch-dir {
+  color: #94a3b8;
+}
+
+.rl-ch-freq {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.rl-ch-pol {
+  color: #94a3b8;
+}
+
+.rl-ch-speed {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.rl-popup-footer {
+  padding: 8px 13px 8px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.rl-footer-coords {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rl-pin-icon {
+  color: #8b95a5;
+  flex-shrink: 0;
+}
