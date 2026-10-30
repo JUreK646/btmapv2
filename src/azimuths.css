@@ -645,7 +645,8 @@
   color: var(--rlm-muted);
 }
 
-.rl-tab-id {
+.rl-tab-id,
+.rl-tab-rowid {
   color: var(--rlm-subtle);
   font-size: 11.5px;
 }
@@ -677,7 +678,8 @@
   gap: 12px;
 }
 
-.rl-section-heading > span {
+.rl-section-heading > h3 {
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -694,6 +696,9 @@
   border: 1px solid var(--rlm-border);
   background: var(--rlm-pill-bg);
   font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--rlm-muted);
 }
 

@@ -845,10 +845,15 @@ function RadiolineDetailsDialog({
           <section className="rl-details-section">
             <div className="rl-section-heading">
               <h3>PARAMETRY ŁĄCZA</h3>
-              <span className="rl-snapshot-pill">
-                <Calendar size={12} />
-                <span>stan na {ch?.snapshotDate || '27.07.2026'}</span>
-              </span>
+              {(ch?.snapshotDate || ch?.issueDate) && (
+                <span
+                  className="rl-snapshot-pill"
+                  title="Data stanu oficjalnego wykazu pozwoleń radioliniowych UKE"
+                >
+                  <Calendar size={12} />
+                  <span>stan na {ch?.snapshotDate || ch?.issueDate}</span>
+                </span>
+              )}
             </div>
 
             <div className="rl-params-grid">

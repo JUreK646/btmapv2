@@ -627,6 +627,11 @@ export async function syncRadiolinesFromUke(
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('radiolinesCount', ?)").run(
         String(linksMap.size)
       );
+      if (snapshotDate) {
+        db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('radiolinesSnapshotDate', ?)").run(
+          snapshotDate
+        );
+      }
       db.exec('COMMIT');
     } catch (err) {
       db.exec('ROLLBACK');
