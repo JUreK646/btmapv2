@@ -35,17 +35,35 @@ export function createPemPlansService(db:DatabaseSync,fetcher:typeof fetch=fetch
     const readPage=async(page:number)=>{
       const url=`${ORIGIN}/api/planned_measurements/?page=${page}&page_size=${PAGE_SIZE}`;
       const response=await fetcher(url,{signal:AbortSignal.timeout(30000),headers:{Accept:'application/json'}});
-      if(!response.ok)throw new Error('Serwer SI2PEM nie udostępnił harmonogramu.');
+      if(!response.ok)throw new Error(`Serwer SI2PEM nie udostępnił harmonogramu (HTTP ${response.status}).`);
       const text=await response.text();if(text.length>2_000_000)throw new Error('Zbyt duża odpowiedź SI2PEM.');
       const data=JSON.parse(text) as {count:unknown;results:unknown[]};
       if(!Number.isSafeInteger(data.count)||Number(data.count)<0||!Array.isArray(data.results)||data.results.length>PAGE_SIZE)throw new Error('Nieprawidłowy harmonogram SI2PEM.');
-      for(const row of data.results){const item=parsePlan(row,cutoff);if(item)items.set(item.id,item);}
-      return Number(data.count);
+      let validCount=0;
+      for(const row of data.results){
+        const item=parsePlan(row,cutoff);
+        if(item){
+          items.set(item.id,item);
+          validCount++;
+        }
+      }
+      return {total:Number(data.count),validCount,resultsLen:data.results.length};
     };
-    const count=await readPage(1),pages=Math.ceil(count/PAGE_SIZE);
-    if(pages>MAX_PAGES)throw new Error('Harmonogram SI2PEM przekracza limit synchronizacji.');
-    let page=2;
-    await Promise.all(Array.from({length:Math.min(4,pages-1)},async()=>{while(page<=pages){const current=page++;await readPage(current);}}));
+
+    const first=await readPage(1);
+    const count=first.total;
+    const pages=Math.min(Math.ceil(count/PAGE_SIZE),MAX_PAGES);
+
+    let emptyStreak=first.validCount===0?1:0;
+    for(let p=2;p<=pages&&emptyStreak<2;p++){
+      const res=await readPage(p);
+      if(res.resultsLen===0||res.validCount===0){
+        emptyStreak++;
+      }else{
+        emptyStreak=0;
+      }
+    }
+
     db.exec('BEGIN');
     try{
       db.exec('DELETE FROM pem_plans');

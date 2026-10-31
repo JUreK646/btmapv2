@@ -1,4 +1,4 @@
-import { mkdirSync, existsSync, rmSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
@@ -7,6 +7,63 @@ import { operatorColor, operatorName as canonicalOperatorName } from '../shared/
 
 const BIP_UKE_URL = 'https://bip.uke.gov.pl/pozwolenia-radiowe/wykaz-pozwolen-radiowych-tresci/stacje-gsm-umts-lte-5gnr-oraz-cdma,12,0.html';
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+const TERYT_PROVINCE_MAP: Record<string, string> = {
+  '02': 'Dolnośląskie',
+  '04': 'Kujawsko-pomorskie',
+  '06': 'Lubelskie',
+  '08': 'Lubuskie',
+  '10': 'Łódzkie',
+  '12': 'Małopolskie',
+  '14': 'Mazowieckie',
+  '16': 'Opolskie',
+  '18': 'Podkarpackie',
+  '20': 'Podlaskie',
+  '22': 'Pomorskie',
+  '24': 'Śląskie',
+  '26': 'Świętokrzyskie',
+  '28': 'Warmińsko-mazurskie',
+  '30': 'Wielkopolskie',
+  '32': 'Zachodniopomorskie',
+};
+
+const PROVINCE_CENTROIDS: Array<{ province: string; lat: number; lng: number }> = [
+  { province: 'Dolnośląskie', lat: 51.0511, lng: 16.4876 },
+  { province: 'Kujawsko-pomorskie', lat: 53.0767, lng: 18.4478 },
+  { province: 'Lubelskie', lat: 51.2339, lng: 22.7937 },
+  { province: 'Lubuskie', lat: 52.1863, lng: 15.3319 },
+  { province: 'Mazowieckie', lat: 52.2314, lng: 21.0260 },
+  { province: 'Małopolskie', lat: 49.9182, lng: 20.1218 },
+  { province: 'Opolskie', lat: 50.6308, lng: 17.9006 },
+  { province: 'Podkarpackie', lat: 49.9773, lng: 22.1049 },
+  { province: 'Podlaskie', lat: 53.2591, lng: 22.9192 },
+  { province: 'Pomorskie', lat: 54.2923, lng: 18.2587 },
+  { province: 'Warmińsko-mazurskie', lat: 53.8420, lng: 20.7159 },
+  { province: 'Wielkopolskie', lat: 52.2989, lng: 17.1791 },
+  { province: 'Zachodniopomorskie', lat: 53.6394, lng: 15.3183 },
+  { province: 'Łódzkie', lat: 51.6632, lng: 19.4642 },
+  { province: 'Śląskie', lat: 50.2560, lng: 18.9569 },
+  { province: 'Świętokrzyskie', lat: 50.8143, lng: 20.7825 },
+];
+
+export function inferProvinceFromTerytOrCoords(teryt: string, lat: number, lng: number): string {
+  const cleanTeryt = teryt.replace(/\D/g, '').padStart(7, '0');
+  const code = cleanTeryt.slice(0, 2);
+  if (TERYT_PROVINCE_MAP[code]) return TERYT_PROVINCE_MAP[code];
+
+  let best = 'Mazowieckie';
+  let bestDist = Infinity;
+  for (const c of PROVINCE_CENTROIDS) {
+    const dLat = lat - c.lat;
+    const dLng = (lng - c.lng) * 0.62;
+    const dist = dLat * dLat + dLng * dLng;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = c.province;
+    }
+  }
+  return best;
+}
 
 export function parseDmsCoord(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
@@ -31,11 +88,12 @@ export function parseDmsCoord(raw: unknown): number | null {
 
 export function parseTechAndBand(filename: string): { tech: string; band: string } {
   const name = basename(filename).toLowerCase();
-  const m = name.match(/^(5g|lte|gsm-r|gsm|umts|cdma)(\d+)?/);
+  const m = name.match(/^(5g|lte|gsm-r|gsm|umts|cdma|iot)(\d+)?/);
   if (!m) return { tech: 'Inne', band: '0' };
   let tech = m[1].toUpperCase();
   if (tech === 'GSM-R') tech = 'GSM-R';
-  const band = m[2] || (tech === 'GSM-R' ? '900' : '0');
+  if (tech === 'IOT') tech = 'IOT';
+  const band = m[2] || (tech === 'GSM-R' || tech === 'IOT' ? '900' : '0');
   return { tech, band };
 }
 
@@ -62,10 +120,11 @@ export async function fetchBipUkeLinks(): Promise<{ date: string; links: string[
   const html = await res.text();
 
   const links: string[] = [];
-  const linkRegex = /href="(\/download\/gfx\/bip\/pl\/defaultaktualnosci\/140\/12\/99\/[^"]+\.xlsx)"/gi;
+  const linkRegex = /href="(\/download\/[^"]+?\.xlsx)"/gi;
   let match: RegExpExecArray | null;
   while ((match = linkRegex.exec(html)) !== null) {
-    links.push('https://bip.uke.gov.pl' + match[1]);
+    const fullUrl = match[1].startsWith('http') ? match[1] : 'https://bip.uke.gov.pl' + match[1];
+    if (!links.includes(fullUrl)) links.push(fullUrl);
   }
 
   let latestDate = '';
@@ -100,9 +159,20 @@ type StationEntry = {
 
 export async function parseUkeXlsx(filePath: string, defaultTech: string, defaultBand: string, stations: Map<string, StationEntry>) {
   const rawResult = await readXlsxFile(filePath);
-  const rows = (Array.isArray(rawResult)
-    ? (Array.isArray(rawResult[0]) ? rawResult : ((rawResult[0] as unknown as { data?: unknown[][] })?.data || rawResult))
-    : ((rawResult as unknown as { data?: unknown[][] })?.data || rawResult)) as unknown[][];
+  let rows: unknown[][];
+  if (Array.isArray(rawResult)) {
+    if (rawResult.length > 0 && typeof rawResult[0] === 'object' && rawResult[0] !== null && 'data' in rawResult[0]) {
+      rows = (rawResult[0] as { data: unknown[][] }).data;
+    } else if (Array.isArray(rawResult[0])) {
+      rows = (rawResult as unknown) as unknown[][];
+    } else {
+      rows = [];
+    }
+  } else if (typeof rawResult === 'object' && rawResult !== null && 'data' in rawResult) {
+    rows = (rawResult as { data: unknown[][] }).data;
+  } else {
+    rows = [];
+  }
   if (!rows || rows.length < 2) return;
 
   const headers = rows[0].map(h => String(h || '').trim().toLowerCase());
@@ -135,6 +205,7 @@ export async function parseUkeXlsx(filePath: string, defaultTech: string, defaul
     const loc = String(row[locCol] || '').trim();
     const address = [city, loc].filter(Boolean).join(', ');
     const teryt = String(row[terytCol] || '').trim();
+    const province = inferProvinceFromTerytOrCoords(teryt, lat, lng);
     const decNo = String(row[decCol] || '').trim();
     const decType = String(row[typeCol] || '').trim();
     const expVal = row[expCol];
@@ -149,7 +220,7 @@ export async function parseUkeXlsx(filePath: string, defaultTech: string, defaul
         lat,
         lng,
         address,
-        province: '',
+        province,
         stationId,
         teryt,
         operators: [],
@@ -159,6 +230,9 @@ export async function parseUkeXlsx(filePath: string, defaultTech: string, defaul
 
     if (address && (!station.address || station.address.length < address.length)) {
       station.address = address;
+    }
+    if (province && !station.province) {
+      station.province = province;
     }
     if (stationId && !station.stationId) {
       station.stationId = stationId;
@@ -258,7 +332,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
     console.log(`[UKE Sync] Zapisywanie ${stations.size} stacji do bazy danych...`);
     const now = new Date().toISOString();
 
-    // Offset stations that share identical rounded DMS coordinates so their map pins do not overlap
+    // Offset stations that share identical coordinates so map pins do not overlap
     const coordGroups = new Map<string, StationEntry[]>();
     for (const st of stations.values()) {
       const ck = `${st.lat.toFixed(6)},${st.lng.toFixed(6)}`;
@@ -283,10 +357,11 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
     try {
       const insertOrUpdate = db.prepare(`
         INSERT INTO towers (id, stationId, address, province, lat, lng, operators, source, addedBy, status, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'BTMAP', 'AutoSync BIP UKE', 'APPROVED', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'UKE', 'AutoSync BIP UKE', 'APPROVED', ?)
         ON CONFLICT(id) DO UPDATE SET
-          stationId = excluded.stationId,
+          stationId = CASE WHEN excluded.stationId != '' THEN excluded.stationId ELSE towers.stationId END,
           address = CASE WHEN excluded.address != '' THEN excluded.address ELSE towers.address END,
+          province = CASE WHEN excluded.province != '' THEN excluded.province ELSE towers.province END,
           operators = excluded.operators
       `);
 
@@ -305,7 +380,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
 
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazDate', ?)").run(date);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('importedAt', ?)").run(now);
-      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('sourceDescription', ?)").run(`Automatyczny wykaz stacji BTMap (stan na ${date})`);
+      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('sourceDescription', ?)").run(`Automatyczny wykaz stacji UKE (stan na ${date})`);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncCheckedAt', ?)").run(now);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncError', '')").run();
 
@@ -316,7 +391,6 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
       throw dbErr;
     }
 
-    // Usuwanie pobranych plików i katalogu tymczasowego po poprawnym wgraniu
     if (existsSync(tempDir)) {
       rmSync(tempDir, { recursive: true, force: true });
       console.log(`[UKE Sync] Pliki tymczasowe zostały usunięte.`);
@@ -355,13 +429,11 @@ export function createUkeSync(db: DatabaseSync) {
 
   return {
     start() {
-      // Pierwsze sprawdzenie po 20 sekundach od startu serwera
       timer = setTimeout(() => {
         void runSync();
       }, 20000);
       timer.unref();
 
-      // Sprawdzanie co 2 godziny (7 200 000 ms)
       interval = setInterval(() => {
         console.log('[UKE Sync] Cykliczne sprawdzanie nowego wykazu UKE (co 2h)...');
         void runSync();
