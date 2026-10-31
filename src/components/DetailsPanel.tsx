@@ -31,7 +31,6 @@ import StationHistoryDialog from './StationHistoryDialog';
 import type { PemReportsResult } from '../../shared/pem';
 import { operatorColor, towerTechs } from '../lib/constants';
 import { useI18n } from '../lib/i18n';
-import { extractEnodeBId, getStationSectorsInfo } from '../../shared/cellSearch';
 
 const technologyNames: Record<string, string> = {
   '5G': '5G NR',
@@ -54,6 +53,31 @@ type Props = {
   onRequireAuth?: () => void;
   onSelectTower?: (towerId: string) => void;
 };
+
+function formatRelativeTime(dateStr?: string | null, isPl = true): string {
+  if (!dateStr) return isPl ? 'Brak daty' : 'No date';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - d.getTime());
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 1) return isPl ? 'dzisiaj' : 'today';
+  if (diffDays === 1) return isPl ? 'wczoraj' : 'yesterday';
+  if (diffDays < 30) return isPl ? `${diffDays} dni temu` : `${diffDays} days ago`;
+
+  const diffMonths = Math.floor(diffDays / 30.44);
+  if (diffMonths < 12) {
+    if (diffMonths <= 1) return isPl ? '1 miesiąc temu' : '1 month ago';
+    if (diffMonths >= 2 && diffMonths <= 4) return isPl ? `${diffMonths} miesiące temu` : `${diffMonths} months ago`;
+    return isPl ? `${diffMonths} miesięcy temu` : `${diffMonths} months ago`;
+  }
+
+  const diffYears = Math.floor(diffDays / 365.25);
+  if (diffYears <= 1) return isPl ? '1 rok temu' : '1 year ago';
+  if (diffYears >= 2 && diffYears <= 4) return isPl ? `${diffYears} lata temu` : `${diffYears} years ago`;
+  return isPl ? `${diffYears} lat temu` : `${diffYears} years ago`;
+}
 
 function extractFreq(bandStr: string): number {
   const m = String(bandStr || '').replace(/^[2345]g\b/i, '').match(/\d{3,4}/) || String(bandStr || '').match(/\d+/);
@@ -349,8 +373,12 @@ export default function DetailsPanel({
   };
 
   const hasAnyBands = tower.operators.some(op => op.bands && op.bands.length > 0);
-  const enbId = extractEnodeBId(tower.stationId || tower.operators[0]?.stationIds?.[0]);
-  const sectorsInfo = enbId ? getStationSectorsInfo(tower.stationId || tower.operators[0]?.stationIds?.[0], tower.azimuths) : [];
+  const latestPermitYear = tower.operators
+    .flatMap(op => op.bands?.map(b => {
+      const m = b.permit?.match(/\/(\d{2})\b/);
+      return m ? 2000 + parseInt(m[1], 10) : 0;
+    }) || [])
+    .reduce((max, y) => Math.max(max, y), 0);
 
   return (
     <aside className="details-panel station-sheet" aria-labelledby="station-sheet-title">
@@ -496,9 +524,17 @@ export default function DetailsPanel({
           onClick={() => setHistoryOpen(true)}
         >
           <span className="sh-meta-bar-dates">
-            {isPl ? 'Utworzono: 1 rok temu' : 'Created: 1 year ago'}
-            <i className="sh-meta-dot">·</i>
-            {isPl ? 'Zaktualizowano: 2 miesiące temu' : 'Updated: 2 months ago'}
+            {isPl
+              ? `Utworzono: ${formatRelativeTime(tower.createdAt, true)}`
+              : `Created: ${formatRelativeTime(tower.createdAt, false)}`}
+            {latestPermitYear > 0 && (
+              <>
+                <i className="sh-meta-dot">·</i>
+                {isPl
+                  ? `Ostatnia zmiana UKE: ${latestPermitYear} r.`
+                  : `Latest UKE permit: ${latestPermitYear}`}
+              </>
+            )}
           </span>
           <span className="sh-meta-bar-action">
             <span>{isPl ? 'Oś czasu zmian' : 'Change history'}</span>
@@ -591,37 +627,6 @@ export default function DetailsPanel({
             </div>
           )}
         </dl>
-
-        {/* Cellular IDs (eNodeB / NetMonster / ECI calculator) */}
-        {sectorsInfo.length > 0 && enbId && (
-          <section className="station-cell-calc-section" aria-label="Numery sieci komórkowej (eNodeB / CID / ECI)">
-            <div className="station-cell-calc-header">
-              <Radio size={14} aria-hidden="true" />
-              <span>{isPl ? 'Identyfikatory komórkowe (NetMonster / *#0011#)' : 'Cellular IDs (NetMonster / FieldTest)'}</span>
-              <span className="station-cell-enb-tag">eNodeB <strong>{enbId}</strong></span>
-            </div>
-            <div className="station-cell-sectors-grid">
-              {sectorsInfo.map(sec => (
-                <button
-                  key={sec.sectorNum}
-                  type="button"
-                  className="station-cell-sector-card"
-                  onClick={() => sec.azimuth != null && onSelectSector?.(sec.azimuth, sec.sectorNum)}
-                  title={isPl ? `Podświetl Sektor ${sec.sectorNum} (${sec.azimuth ?? '—'}°) na mapie` : `Highlight Sector ${sec.sectorNum} on map`}
-                >
-                  <div className="station-cell-sec-top">
-                    <span className="station-cell-sec-badge">Sektor {sec.sectorNum}</span>
-                    {sec.azimuth != null && <span className="station-cell-sec-az">{sec.azimuth}°</span>}
-                  </div>
-                  <div className="station-cell-sec-ids">
-                    <span title="Local Cell ID">CID: <strong>{sec.cid}</strong></span>
-                    <span title="E-UTRAN Cell Identifier">ECI: <strong>{sec.eci}</strong></span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* Szczegóły komórek i pasm UKE */}
         {hasAnyBands && (

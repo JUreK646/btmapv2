@@ -86,8 +86,8 @@ export interface PemTimelineItem {
 
 export interface StationTimelineCellItem {
   label: string;
-  paramLabel: string;
-  paramValue: string;
+  paramLabel?: string;
+  paramValue?: string;
 }
 
 export interface StationTimelineCellGroup {
@@ -105,10 +105,11 @@ export interface StationTimelineDiffItem {
 export interface StationTimelineEvent {
   id: string;
   dateGroup: string;
-  time: string;
+  time?: string;
   createdAt: string;
-  kind: 'location' | 'cells_updated' | 'cells_added' | 'property' | 'comment' | 'photo';
+  kind: 'location' | 'cells_updated' | 'cells_added' | 'permit' | 'pem' | 'created' | 'property' | 'comment' | 'photo';
   title: string;
+  subtitle?: string;
   diffs?: StationTimelineDiffItem[];
   totalCells?: number;
   techCounts?: Array<{ tech: string; count: number }>;
@@ -116,213 +117,7 @@ export interface StationTimelineEvent {
   description?: string | null;
   photoUrl?: string | null;
   userNick?: string;
-}
-
-interface CarrierSpec {
-  techLabel: 'LTE' | 'NR' | 'UMTS' | 'GSM' | 'CDMA';
-  bandMHz: number;
-  duplex: 'FDD' | 'TDD';
-  paramLabel: 'EARFCN' | 'NR-ARFCN' | 'UARFCN' | 'ARFCN';
-  paramValue: string;
-  clids: number[];
-}
-
-function getCarrierSpec(operator: string, techRaw: string, bandStr: string): CarrierSpec {
-  const op = operator.toLowerCase();
-  const tech = techRaw.toUpperCase();
-  const freq = parseInt(bandStr.replace(/\D/g, ''), 10) || 1800;
-
-  const isPlay = op.includes('play') || op.includes('p4');
-  const isOrange = op.includes('orange');
-  const isTmobile = op.includes('t-mobile') || op.includes('tmobile');
-  const isPlus = op.includes('plus') || op.includes('polkomtel') || op.includes('aero');
-
-  if (tech === '5G' || tech === 'NR') {
-    if (freq === 3500 || freq === 3600) {
-      return {
-        techLabel: 'NR',
-        bandMHz: freq,
-        duplex: 'TDD',
-        paramLabel: 'NR-ARFCN',
-        paramValue: isPlay ? '636666' : isOrange ? '643332' : isTmobile ? '649998' : '630000',
-        clids: [101, 102, 103]
-      };
-    }
-    if (freq === 2600) {
-      return {
-        techLabel: 'NR',
-        bandMHz: 2600,
-        duplex: 'TDD',
-        paramLabel: 'NR-ARFCN',
-        paramValue: '520000',
-        clids: [61, 62, 63]
-      };
-    }
-    if (freq === 700) {
-      return {
-        techLabel: 'NR',
-        bandMHz: 700,
-        duplex: 'FDD',
-        paramLabel: 'NR-ARFCN',
-        paramValue: '154570',
-        clids: [71, 72, 73]
-      };
-    }
-    return {
-      techLabel: 'NR',
-      bandMHz: freq || 2100,
-      duplex: 'FDD',
-      paramLabel: 'NR-ARFCN',
-      paramValue: isPlay ? '428000' : isOrange ? '425300' : isTmobile ? '426900' : '424200',
-      clids: isPlay ? [11, 21, 31] : [71, 72, 73]
-    };
-  }
-
-  if (tech === 'LTE') {
-    if (freq === 900) {
-      return {
-        techLabel: 'LTE',
-        bandMHz: 900,
-        duplex: 'FDD',
-        paramLabel: 'EARFCN',
-        paramValue: isPlay ? '3476' : isOrange ? '3700' : isTmobile ? '3624' : '3775',
-        clids: isPlay ? [62, 72, 82] : [61, 62, 63]
-      };
-    }
-    if (freq === 800) {
-      return {
-        techLabel: 'LTE',
-        bandMHz: 800,
-        duplex: 'FDD',
-        paramLabel: 'EARFCN',
-        paramValue: isPlay ? '6200' : isOrange ? '6300' : isTmobile ? '6400' : '6175',
-        clids: isPlay ? [61, 71, 81] : [11, 12, 13]
-      };
-    }
-    if (freq === 1800) {
-      return {
-        techLabel: 'LTE',
-        bandMHz: 1800,
-        duplex: 'FDD',
-        paramLabel: 'EARFCN',
-        paramValue: isPlay ? '1650' : isPlus ? '1300' : '1825',
-        clids: isPlay ? [32, 42, 52] : [21, 22, 23]
-      };
-    }
-    if (freq === 2100) {
-      return {
-        techLabel: 'LTE',
-        bandMHz: 2100,
-        duplex: 'FDD',
-        paramLabel: 'EARFCN',
-        paramValue: isPlay ? '400' : isPlus ? '100' : '226',
-        clids: isPlay ? [31, 41, 51] : [31, 32, 33]
-      };
-    }
-    if (freq === 2600) {
-      return {
-        techLabel: 'LTE',
-        bandMHz: 2600,
-        duplex: 'FDD',
-        paramLabel: 'EARFCN',
-        paramValue: isPlay ? '3350' : isOrange ? '3025' : isTmobile ? '3175' : '2850',
-        clids: isPlay ? [33, 43, 53] : [51, 52, 53]
-      };
-    }
-    return {
-      techLabel: 'LTE',
-      bandMHz: freq || 1800,
-      duplex: 'FDD',
-      paramLabel: 'EARFCN',
-      paramValue: '1650',
-      clids: [11, 21, 31]
-    };
-  }
-
-  if (tech === 'UMTS') {
-    if (freq === 900) {
-      return {
-        techLabel: 'UMTS',
-        bandMHz: 900,
-        duplex: 'FDD',
-        paramLabel: 'UARFCN',
-        paramValue: isPlay ? '2938' : isOrange ? '3012' : '3063',
-        clids: [1, 2, 3]
-      };
-    }
-    return {
-      techLabel: 'UMTS',
-      bandMHz: freq || 2100,
-      duplex: 'FDD',
-      paramLabel: 'UARFCN',
-      paramValue: isPlay ? '10787' : '10713',
-      clids: [4, 5, 6]
-    };
-  }
-
-  if (tech === 'GSM' || tech === 'GSM-R') {
-    return {
-      techLabel: 'GSM',
-      bandMHz: freq || 900,
-      duplex: 'FDD',
-      paramLabel: 'ARFCN',
-      paramValue: freq === 1800 ? '650' : '35',
-      clids: freq === 1800 ? [4, 5, 6] : [1, 2, 3]
-    };
-  }
-
-  return {
-    techLabel: 'CDMA',
-    bandMHz: freq || 420,
-    duplex: 'FDD',
-    paramLabel: 'ARFCN',
-    paramValue: '240',
-    clids: [1, 2, 3]
-  };
-}
-
-function buildCellGroupFromSpecs(
-  specs: Array<{ spec: CarrierSpec; sectorsCount?: number }>
-): {
-  totalCells: number;
-  techCounts: Array<{ tech: string; count: number }>;
-  cellGroups: StationTimelineCellGroup[];
-} {
-  const byTech = new Map<string, StationTimelineCellItem[]>();
-
-  for (const { spec, sectorsCount } of specs) {
-    const clids = sectorsCount ? spec.clids.slice(0, sectorsCount) : spec.clids;
-    const list = byTech.get(spec.techLabel) || [];
-    for (const clid of clids) {
-      list.push({
-        label: `${spec.techLabel} ${spec.bandMHz} (${spec.duplex}) · CLID ${clid}`,
-        paramLabel: spec.paramLabel,
-        paramValue: spec.paramValue
-      });
-    }
-    byTech.set(spec.techLabel, list);
-  }
-
-  const techOrder = ['LTE', 'NR', 'UMTS', 'GSM', 'CDMA'];
-  const sortedTechs = [...byTech.keys()].sort((a, b) => techOrder.indexOf(a) - techOrder.indexOf(b));
-
-  const cellGroups: StationTimelineCellGroup[] = [];
-  const techCounts: Array<{ tech: string; count: number }> = [];
-  let totalCells = 0;
-
-  for (const tech of sortedTechs) {
-    const cells = byTech.get(tech) || [];
-    if (!cells.length) continue;
-    cellGroups.push({
-      tech,
-      count: cells.length,
-      cells
-    });
-    techCounts.push({ tech, count: cells.length });
-    totalCells += cells.length;
-  }
-
-  return { totalCells, techCounts, cellGroups };
+  downloadUrl?: string;
 }
 
 export function parseUkeHistory(operatorsJson: string) {
@@ -451,7 +246,7 @@ export function parseUkeHistory(operatorsJson: string) {
   };
 }
 
-function buildStructuredEvents(
+function buildRealTimelineEvents(
   tower: Record<string, unknown>,
   btmapTimeline: Array<{
     id: string;
@@ -462,24 +257,15 @@ function buildStructuredEvents(
     diff: TowerHistoryDiff | null;
     photoUrl?: string | null;
     createdAt: string;
-  }>
+  }>,
+  ukeAnalysis: ReturnType<typeof parseUkeHistory>,
+  pemTimeline: PemTimelineItem[]
 ): StationTimelineEvent[] {
   const events: StationTimelineEvent[] = [];
   const towerId = String(tower.id || '');
-  const addressRaw = String(tower.address || '');
-  const streetPart = addressRaw.includes(',') ? addressRaw.split(',').slice(1).join(',').trim() : addressRaw;
+  const isBtmap = tower.source === 'BTMAP' || tower.source === 'User';
 
-  let ops: Array<{ name: string; bands?: Array<{ tech: string; band: string; permit?: string }> }> = [];
-  try {
-    ops = JSON.parse(String(tower.operators || '[]'));
-  } catch {
-    ops = [];
-  }
-
-  const primaryOp = ops[0]?.name || 'Play';
-  const opLower = primaryOp.toLowerCase();
-
-  // 1. Real user / admin events from tower_history & comments
+  // 1. Real Community / User / Admin Edits (from tower_history & comments)
   for (const item of btmapTimeline) {
     if (item.id.startsWith('initial-create-')) continue;
     const d = new Date(item.createdAt);
@@ -498,7 +284,8 @@ function buildStructuredEvents(
           notes: 'Uwagi',
           stationId: 'ID stacji',
           lat: 'Szerokość geogr.',
-          lng: 'Długość geogr.'
+          lng: 'Długość geogr.',
+          owner: 'Właściciel / operator wieży'
         };
         diffs.push({
           label: labelMap[k] || k,
@@ -515,6 +302,7 @@ function buildStructuredEvents(
       createdAt: validDate.toISOString(),
       kind: item.changeType === 'PHOTO' ? 'photo' : item.changeType === 'COMMENT' ? 'comment' : 'location',
       title: item.title,
+      subtitle: item.userNick ? `Użytkownik: ${item.userNick}` : undefined,
       diffs: diffs.length > 0 ? diffs : undefined,
       description: item.description,
       photoUrl: item.photoUrl,
@@ -522,130 +310,95 @@ function buildStructuredEvents(
     });
   }
 
-  // 2. Collect unique bands on the station
-  const allBands = ops.flatMap(o => (o.bands || []).map(b => ({ op: o.name, tech: b.tech, band: b.band, permit: b.permit })));
-  const uniqueSpecs = new Map<string, CarrierSpec>();
-  for (const b of allBands) {
-    const spec = getCarrierSpec(b.op, b.tech, b.band);
-    const key = `${spec.techLabel}-${spec.bandMHz}`;
-    if (!uniqueSpecs.has(key)) {
-      uniqueSpecs.set(key, spec);
+  // 2. Real Official UKE Permits & Revisions
+  for (const p of ukeAnalysis.permits) {
+    const byTech = new Map<string, string[]>();
+    for (const b of p.bands) {
+      const tech = (b.tech || 'LTE').toUpperCase();
+      const list = byTech.get(tech) || [];
+      list.push(b.band);
+      byTech.set(tech, list);
     }
+
+    const techOrder = ['5G', 'NR', 'LTE', 'UMTS', 'GSM', 'CDMA', 'IOT'];
+    const sortedTechs = [...byTech.keys()].sort((a, b) => techOrder.indexOf(a) - techOrder.indexOf(b));
+
+    const cellGroups: StationTimelineCellGroup[] = [];
+    const techCounts: Array<{ tech: string; count: number }> = [];
+
+    for (const tech of sortedTechs) {
+      const bands = byTech.get(tech) || [];
+      const sortedBands = [...bands].sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+      cellGroups.push({
+        tech,
+        count: sortedBands.length,
+        cells: sortedBands.map(band => ({
+          label: `${tech} ${band} MHz`,
+          paramLabel: 'Status',
+          paramValue: 'Pozwolenie UKE'
+        }))
+      });
+      techCounts.push({ tech, count: sortedBands.length });
+    }
+
+    const diffs: StationTimelineDiffItem[] = [];
+    if (p.expires) {
+      diffs.push({
+        label: 'Ważność pozwolenia',
+        newValue: p.expires.startsWith('2099') ? 'Bezterminowo' : p.expires
+      });
+    }
+
+    const decisionYear = p.decisionYear || 2026;
+    const createdAt = `${decisionYear}-01-01T12:00:00.000Z`;
+
+    events.push({
+      id: `uke-permit-${p.permitId}`,
+      dateGroup: `${decisionYear}`,
+      time: `UKE ${decisionYear} r.`,
+      createdAt,
+      kind: 'permit',
+      title: p.kind || 'Decyzja radiowa UKE',
+      subtitle: `Pozwolenie: ${p.permitId}${p.revision != null ? ` · Rewizja: nr ${p.revision}` : ''}`,
+      totalCells: p.bands.length,
+      techCounts,
+      cellGroups,
+      diffs: diffs.length > 0 ? diffs : undefined
+    });
   }
 
-  const specsList = Array.from(uniqueSpecs.values());
+  // 3. Real SI2PEM Environmental Measurement Reports
+  for (const pem of pemTimeline) {
+    const pemDate = pem.date || '2024-01-01';
+    events.push({
+      id: `pem-report-${pem.id || pem.number}`,
+      dateGroup: pemDate,
+      time: 'SI2PEM',
+      createdAt: `${pemDate}T12:00:00.000Z`,
+      kind: 'pem',
+      title: 'Urzędowy pomiar PEM (SI2PEM)',
+      subtitle: `Sprawozdanie nr: ${pem.number || 'Brak numeru'}${pem.laboratory ? ` · ${pem.laboratory}` : ''}`,
+      downloadUrl: pem.downloadUrl
+    });
+  }
 
-  // Infrastructure / Location update entry
-  const towerOwnerLabel = opLower.includes('play')
-    ? 'wieża Cellnex / Play'
-    : opLower.includes('orange')
-    ? 'wieża NetWorkS! / Orange'
-    : opLower.includes('t-mobile')
-    ? 'wieża NetWorkS! / T-Mobile'
-    : opLower.includes('plus')
-    ? 'wieża Towerlink / Plus'
-    : 'konstrukcja operatora';
+  // 4. Real Station Registration
+  const rawCreatedAt = String(tower.createdAt || '');
+  const regDate = rawCreatedAt ? rawCreatedAt.slice(0, 10) : '2026-10-10';
+  const regTime = rawCreatedAt && rawCreatedAt.includes('T') ? rawCreatedAt.split('T')[1].slice(0, 5) : '00:00';
 
-  const baseAddr = streetPart || addressRaw || 'Lokalizacja stacji';
   events.push({
-    id: `loc-update-${towerId}`,
-    dateGroup: '2026-08-23',
-    time: '11:54',
-    createdAt: '2026-08-23T11:54:00.000Z',
-    kind: 'location',
-    title: 'Zaktualizowano lokalizację',
-    diffs: [
-      {
-        label: 'Adres',
-        oldValue: `${baseAddr} - własna wieża`,
-        newValue: `${baseAddr} - ${towerOwnerLabel}`
-      }
-    ]
+    id: `reg-${towerId}`,
+    dateGroup: regDate,
+    time: regTime,
+    createdAt: rawCreatedAt || '2026-10-10T00:00:00.000Z',
+    kind: 'created',
+    title: isBtmap ? 'Zarejestrowano w społecznościowej bazie BTMap' : 'Rejestracja stacji w urzędowym wykazie UKE',
+    subtitle: `Źródło: ${tower.source || 'UKE'}${tower.addedBy ? ` · ${tower.addedBy}` : ''}`
   });
 
-  if (specsList.length > 0) {
-    // Event A: Primary latest band update (prefer LTE 900 or NR 3600 or first band)
-    const primarySpec =
-      specsList.find(s => s.techLabel === 'LTE' && s.bandMHz === 900) ||
-      specsList.find(s => s.techLabel === 'NR' && (s.bandMHz === 3600 || s.bandMHz === 3500)) ||
-      specsList[0];
-
-    const eventAGroup = buildCellGroupFromSpecs([{ spec: primarySpec, sectorsCount: 3 }]);
-    events.push({
-      id: `cells-update-primary-${towerId}`,
-      dateGroup: '2026-05-20',
-      time: '01:32',
-      createdAt: '2026-05-20T01:32:00.000Z',
-      kind: 'cells_updated',
-      title: 'Zaktualizowano komórki',
-      totalCells: eventAGroup.totalCells,
-      techCounts: eventAGroup.techCounts,
-      cellGroups: eventAGroup.cellGroups
-    });
-
-    // Event B: Multi-carrier update (all LTE + NR specs)
-    const lteSpecs = specsList.filter(s => s.techLabel === 'LTE');
-    const nrSpecs = specsList.filter(s => s.techLabel === 'NR');
-
-    if (lteSpecs.length > 1 || nrSpecs.length > 0) {
-      const eventBSpecs: Array<{ spec: CarrierSpec; sectorsCount?: number }> = [];
-      for (const s of lteSpecs.slice(0, 4)) {
-        eventBSpecs.push({ spec: s, sectorsCount: 3 });
-      }
-      if (nrSpecs.length > 0) {
-        eventBSpecs.push({ spec: nrSpecs[0], sectorsCount: 1 });
-      } else if (lteSpecs.length > 4) {
-        eventBSpecs.push({ spec: lteSpecs[4], sectorsCount: 1 });
-      }
-
-      const eventBGroup = buildCellGroupFromSpecs(eventBSpecs);
-      if (eventBGroup.totalCells > 0) {
-        events.push({
-          id: `cells-update-multi-${towerId}`,
-          dateGroup: '2026-05-20',
-          time: '01:31',
-          createdAt: '2026-05-20T01:31:30.000Z',
-          kind: 'cells_updated',
-          title: 'Zaktualizowano komórki',
-          totalCells: eventBGroup.totalCells,
-          techCounts: eventBGroup.techCounts,
-          cellGroups: eventBGroup.cellGroups
-        });
-      }
-    }
-
-    // Event C: Initial cells added (Dodano komórki)
-    const initialSpecs: Array<{ spec: CarrierSpec; sectorsCount?: number }> = [];
-    if (nrSpecs.length > 0) {
-      initialSpecs.push({ spec: nrSpecs[0], sectorsCount: 2 });
-    }
-    const baseLteSpec =
-      lteSpecs.find(s => s.bandMHz === 1800) ||
-      lteSpecs.find(s => s.bandMHz === 2100) ||
-      lteSpecs[0] ||
-      specsList[0];
-    if (baseLteSpec) {
-      initialSpecs.push({ spec: baseLteSpec, sectorsCount: 3 });
-    }
-
-    const eventCGroup = buildCellGroupFromSpecs(initialSpecs);
-    // Order techCounts so NR comes first if present (matching "NR 2  LTE 3")
-    const sortedEventCTechCounts = [...eventCGroup.techCounts].sort((a, b) =>
-      a.tech === 'NR' ? -1 : b.tech === 'NR' ? 1 : 0
-    );
-
-    events.push({
-      id: `cells-added-initial-${towerId}`,
-      dateGroup: '2026-05-20',
-      time: '01:31',
-      createdAt: '2026-05-20T01:31:00.000Z',
-      kind: 'cells_added',
-      title: 'Dodano komórki',
-      totalCells: eventCGroup.totalCells,
-      techCounts: sortedEventCTechCounts,
-      cellGroups: eventCGroup.cellGroups
-    });
-  }
+  // Sort chronologically descending
+  events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return events;
 }
@@ -724,7 +477,7 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
         ? `Zarejestrowano stację bazową w społecznościowej bazie BTMap. Uwagi: ${tower.notes}`
         : 'Zarejestrowano stację bazową w społecznościowej bazie BTMap.',
       diff: null,
-      createdAt: String(tower.createdAt || '2025-05-20T00:00:00.000Z')
+      createdAt: String(tower.createdAt || '2026-10-10T00:00:00.000Z')
     });
   }
 
@@ -795,7 +548,8 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
     // Ignore cache parse error
   }
 
-  const events = buildStructuredEvents(tower, btmapTimeline);
+  const events = buildRealTimelineEvents(tower, btmapTimeline, ukeAnalysis, pemTimeline);
+  const updatedAt = events[0]?.createdAt || String(tower.createdAt || '2026-10-10T00:00:00.000Z');
 
   return {
     towerId,
@@ -803,8 +557,8 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
     address: String(tower.address || ''),
     source,
     isBtmap,
-    createdAt: String(tower.createdAt || '2025-05-20T01:31:00.000Z'),
-    updatedAt: events[0]?.createdAt || '2026-08-23T11:54:00.000Z',
+    createdAt: String(tower.createdAt || '2026-10-10T00:00:00.000Z'),
+    updatedAt,
     addedBy: String(tower.addedBy || ''),
     mastType: tower.mastType ? String(tower.mastType) : null,
     height: typeof tower.height === 'number' ? tower.height : null,

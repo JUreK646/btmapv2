@@ -6,7 +6,12 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  Activity,
+  CheckCircle2,
+  Camera,
+  ExternalLink
 } from 'lucide-react';
 import type { Tower, TowerHistoryData, StationTimelineEvent } from '../types';
 import { useI18n } from '../lib/i18n';
@@ -79,7 +84,35 @@ function formatCellsCount(count: number, isPl: boolean): string {
   return `${count} komórek`;
 }
 
+function formatRelativeTime(dateStr?: string | null, isPl = true): string {
+  if (!dateStr) return isPl ? 'Brak daty' : 'No date';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - d.getTime());
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 1) return isPl ? 'dzisiaj' : 'today';
+  if (diffDays === 1) return isPl ? 'wczoraj' : 'yesterday';
+  if (diffDays < 30) return isPl ? `${diffDays} dni temu` : `${diffDays} days ago`;
+
+  const diffMonths = Math.floor(diffDays / 30.44);
+  if (diffMonths < 12) {
+    if (diffMonths <= 1) return isPl ? '1 miesiąc temu' : '1 month ago';
+    if (diffMonths >= 2 && diffMonths <= 4) return isPl ? `${diffMonths} miesiące temu` : `${diffMonths} months ago`;
+    return isPl ? `${diffMonths} miesięcy temu` : `${diffMonths} months ago`;
+  }
+
+  const diffYears = Math.floor(diffDays / 365.25);
+  if (diffYears <= 1) return isPl ? '1 rok temu' : '1 year ago';
+  if (diffYears >= 2 && diffYears <= 4) return isPl ? `${diffYears} lata temu` : `${diffYears} years ago`;
+  return isPl ? `${diffYears} lat temu` : `${diffYears} years ago`;
+}
+
 function formatDateGroupHeader(dateStr: string, isPl: boolean): string {
+  if (/^\d{4}$/.test(dateStr)) {
+    return isPl ? `Decyzje UKE – ${dateStr} r.` : `UKE Decisions – ${dateStr}`;
+  }
   try {
     const d = new Date(`${dateStr}T12:00:00Z`);
     if (isNaN(d.getTime())) return dateStr;
@@ -117,11 +150,11 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
       .then((history: TowerHistoryData) => {
         if (!active) return;
         setData(history);
-        const firstCellEvent = history.events?.find(
-          e => e.kind === 'cells_updated' || e.kind === 'cells_added'
+        const firstExpandable = history.events?.find(
+          e => (e.kind === 'cells_updated' || e.kind === 'cells_added' || e.kind === 'permit') && (e.cellGroups?.length || 0) > 0
         );
-        if (firstCellEvent) {
-          setExpandedIds({ [firstCellEvent.id]: true });
+        if (firstExpandable) {
+          setExpandedIds({ [firstExpandable.id]: true });
         }
       })
       .catch(err => {
@@ -157,7 +190,6 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
   const primaryOp = tower.operators[0]?.name || 'Play';
   const stationCode = tower.stationId || tower.operators[0]?.stationIds?.[0] || tower.id;
 
-  // Group events by dateGroup
   const groupedEvents: Array<{ dateGroup: string; items: StationTimelineEvent[] }> = [];
   if (data?.events) {
     for (const ev of data.events) {
@@ -175,6 +207,17 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
       <div className="modal-window station-history-window" onClick={e => e.stopPropagation()}>
         <header className="sh-header">
           <div className="sh-header-left">
+            {data && (
+              <div className="sh-header-meta">
+                <span>{isPl ? 'Utworzono:' : 'Created:'} <strong>{formatRelativeTime(data.createdAt, isPl)}</strong></span>
+                {data.updatedAt && (
+                  <>
+                    <i className="sh-meta-dot">·</i>
+                    <span>{isPl ? 'Zaktualizowano:' : 'Updated:'} <strong>{formatRelativeTime(data.updatedAt, isPl)}</strong></span>
+                  </>
+                )}
+              </div>
+            )}
             <h2 className="sh-title">
               {isPl ? 'Historia zmian stacji' : 'Station change history'}
             </h2>
@@ -219,17 +262,25 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
 
                   <div className="sh-date-events">
                     {group.items.map(event => {
-                      const isCellEvent = event.kind === 'cells_updated' || event.kind === 'cells_added';
+                      const hasCells = Boolean(event.cellGroups && event.cellGroups.length > 0);
                       const isExpanded = Boolean(expandedIds[event.id]);
 
-                      if (isCellEvent) {
-                        return (
-                          <div key={event.id} className="sh-event-row is-cells">
-                            <div className="sh-event-icon">
-                              <SignalBarsIcon variant={event.kind === 'cells_added' ? 'green' : 'blue'} />
-                            </div>
+                      return (
+                        <div key={event.id} className={`sh-event-row is-${event.kind}`}>
+                          <div className="sh-event-icon">
+                            {event.kind === 'cells_added' && <SignalBarsIcon variant="green" />}
+                            {event.kind === 'cells_updated' && <SignalBarsIcon variant="blue" />}
+                            {event.kind === 'permit' && <Radio size={15} />}
+                            {event.kind === 'pem' && <Activity size={15} />}
+                            {event.kind === 'created' && <CheckCircle2 size={15} />}
+                            {event.kind === 'photo' && <Camera size={15} />}
+                            {event.kind === 'location' && <MapPin size={15} />}
+                            {event.kind === 'property' && <MapPin size={15} />}
+                            {event.kind === 'comment' && <Activity size={15} />}
+                          </div>
 
-                            <div className="sh-event-content">
+                          <div className="sh-event-content">
+                            {hasCells ? (
                               <button
                                 type="button"
                                 className="sh-cell-trigger"
@@ -238,8 +289,12 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
                               >
                                 <div className="sh-event-top">
                                   <span className="sh-event-title">{event.title}</span>
-                                  <span className="sh-event-time">{event.time}</span>
+                                  {event.time && <span className="sh-event-time">{event.time}</span>}
                                 </div>
+
+                                {event.subtitle && (
+                                  <div className="sh-event-subtitle">{event.subtitle}</div>
+                                )}
 
                                 <div className="sh-cell-summary">
                                   <div className="sh-cell-summary-left">
@@ -257,45 +312,43 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
                                   </span>
                                 </div>
                               </button>
-
-                              {isExpanded && event.cellGroups && event.cellGroups.length > 0 && (
-                                <div className="sh-cells-card">
-                                  {event.cellGroups.map(cg => (
-                                    <div key={cg.tech} className="sh-cells-group">
-                                      <div className="sh-cells-group-header">
-                                        <span>{cg.tech}</span>
-                                        <span>{formatCellsCount(cg.count, isPl)}</span>
-                                      </div>
-                                      <div className="sh-cells-rows">
-                                        {cg.cells.map((cell, cIdx) => (
-                                          <div key={`${cell.label}-${cIdx}`} className="sh-cell-row">
-                                            <span className="sh-cell-name">{cell.label}</span>
-                                            <span className="sh-cell-param">
-                                              {cell.paramLabel}: <strong>{cell.paramValue}</strong>
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
+                            ) : (
+                              <>
+                                <div className="sh-event-top">
+                                  <span className="sh-event-title">{event.title}</span>
+                                  {event.time && <span className="sh-event-time">{event.time}</span>}
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
+                                {event.subtitle && (
+                                  <div className="sh-event-subtitle">{event.subtitle}</div>
+                                )}
+                              </>
+                            )}
 
-                      return (
-                        <div key={event.id} className="sh-event-row is-location">
-                          <div className="sh-event-icon">
-                            <MapPin size={15} />
-                          </div>
-
-                          <div className="sh-event-content">
-                            <div className="sh-event-top">
-                              <span className="sh-event-title">{event.title}</span>
-                              <span className="sh-event-time">{event.time}</span>
-                            </div>
+                            {isExpanded && hasCells && event.cellGroups && (
+                              <div className="sh-cells-card">
+                                {event.cellGroups.map(cg => (
+                                  <div key={cg.tech} className="sh-cells-group">
+                                    <div className="sh-cells-group-header">
+                                      <span>{cg.tech}</span>
+                                      <span>{formatCellsCount(cg.count, isPl)}</span>
+                                    </div>
+                                    <div className="sh-cells-rows">
+                                      {cg.cells.map((cell, cIdx) => (
+                                        <div key={`${cell.label}-${cIdx}`} className="sh-cell-row">
+                                          <span className="sh-cell-name">{cell.label}</span>
+                                          {cell.paramValue && (
+                                            <span className="sh-cell-param">
+                                              {cell.paramLabel ? `${cell.paramLabel}: ` : ''}
+                                              <strong>{cell.paramValue}</strong>
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
 
                             {event.diffs && event.diffs.length > 0 && (
                               <div className="sh-diffs-list">
@@ -316,6 +369,20 @@ export default function StationHistoryDialog({ tower, onClose }: Props) {
 
                             {event.description && !event.diffs?.length && (
                               <p className="sh-event-desc">{event.description}</p>
+                            )}
+
+                            {event.downloadUrl && (
+                              <div className="sh-event-action-row">
+                                <a
+                                  href={event.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="sh-pdf-link"
+                                >
+                                  <ExternalLink size={13} />
+                                  <span>{isPl ? 'Otwórz sprawozdanie PDF' : 'Open PDF report'}</span>
+                                </a>
+                              </div>
                             )}
 
                             {event.photoUrl && (

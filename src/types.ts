@@ -163,8 +163,8 @@ export interface PemTimelineItem {
 
 export interface StationTimelineCellItem {
   label: string;
-  paramLabel: string;
-  paramValue: string;
+  paramLabel?: string;
+  paramValue?: string;
 }
 
 export interface StationTimelineCellGroup {
@@ -182,10 +182,11 @@ export interface StationTimelineDiffItem {
 export interface StationTimelineEvent {
   id: string;
   dateGroup: string;
-  time: string;
+  time?: string;
   createdAt: string;
-  kind: 'location' | 'cells_updated' | 'cells_added' | 'property' | 'comment' | 'photo';
+  kind: 'location' | 'cells_updated' | 'cells_added' | 'permit' | 'pem' | 'created' | 'property' | 'comment' | 'photo';
   title: string;
+  subtitle?: string;
   diffs?: StationTimelineDiffItem[];
   totalCells?: number;
   techCounts?: Array<{ tech: string; count: number }>;
@@ -193,6 +194,7 @@ export interface StationTimelineEvent {
   description?: string | null;
   photoUrl?: string | null;
   userNick?: string;
+  downloadUrl?: string;
 }
 
 export interface TowerHistoryData {
