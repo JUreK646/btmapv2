@@ -19,6 +19,7 @@ import {calculateTerrainProfile} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
 import {getTelecomStats, invalidateStatsCache} from './stats.ts';
 import {getTowerHistory, recordTowerChange} from './towerHistory.ts';
+import {getKmzCatalog, generateKmzArchive} from './kmzExport.ts';
 
 type User = { id: string; email: string; nick: string; role: string; points: number; level: number };
 const publicUser = (user: Record<string, unknown>) => ({ id:user.id, email:user.email, nick:user.nick, role:user.role, points:user.points, level:user.level });
@@ -102,6 +103,30 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
       res.json(stats);
     } catch (e) {
       res.status(500).json({ error: (e as Error).message || 'Błąd pobierania statystyk.' });
+    }
+  });
+  app.get('/api/kmz/catalog', (req, res) => {
+    try {
+      const type = typeof req.query.type === 'string' ? req.query.type : 'stations';
+      const source = typeof req.query.source === 'string' ? req.query.source : 'ALL';
+      res.json(getKmzCatalog(db, { type, source }));
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message || 'Błąd generowania katalogu KMZ.' });
+    }
+  });
+  app.get('/api/kmz/download', (req, res) => {
+    try {
+      const type = typeof req.query.type === 'string' ? req.query.type : 'stations';
+      const source = typeof req.query.source === 'string' ? req.query.source : 'ALL';
+      const scope = typeof req.query.scope === 'string' ? req.query.scope : 'all';
+      const province = typeof req.query.province === 'string' ? req.query.province : '';
+      const { buffer, filename } = generateKmzArchive(db, { type, source, scope, province });
+      res.setHeader('Content-Type', 'application/vnd.google-earth.kmz');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', String(buffer.length));
+      res.send(buffer);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message || 'Błąd generowania pliku KMZ.' });
     }
   });
   app.get('/api/towers',(req,res)=>{try{res.json(getTowers(db,req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});

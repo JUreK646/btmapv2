@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {Map as MapIcon,Database,ChartNoAxesCombined,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages,Settings as SettingsIcon} from 'lucide-react';
+import {Map as MapIcon,Database,ChartNoAxesCombined,FolderDown,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages,Settings as SettingsIcon} from 'lucide-react';
 import type L from 'leaflet';
 import MapView, { type HighlightedSector } from './components/MapView';
 import BasemapPicker from './components/BasemapPicker';
@@ -8,6 +8,7 @@ import Search, { type SectorSelection } from './components/Search';
 import TowerList from './components/TowerList';
 import DetailsPanel from './components/DetailsPanel';
 import ChangelogView from './components/ChangelogView';
+import KmzView from './components/KmzView';
 import {AuthDialog,ProfileDialog,SubmitDialog} from './components/Forms';
 import {AdminView,DatabaseView,GuidesView,StatsView} from './components/Views';
 import StationSubmissionDialog from './components/StationSubmissionDialog';
@@ -29,7 +30,7 @@ import {AppSettings, DEFAULT_SETTINGS, formatCoordinates, readSettings, saveSett
 const readView=():View=>{
   if(window.location.pathname.replace(/\/+$/,'')==='/btmap/changelog')return 'changelog';
   const saved=window.history.state?.btmapView;
-  return ['map','database','stats','guides','admin'].includes(saved)?saved:'map';
+  return ['map','database','stats','kmz','guides','admin'].includes(saved)?saved:'map';
 };
 
 export default function App(){
@@ -45,11 +46,13 @@ export default function App(){
     {id:'map' as const,label:t.map,icon:MapIcon},
     {id:'database' as const,label:t.database,icon:Database},
     {id:'stats' as const,label:t.stats,icon:ChartNoAxesCombined},
+    {id:'kmz' as const,label:t.kmz,icon:FolderDown},
   ],[t]);
   const viewNames:Record<View,string>=useMemo(()=>({
     map:t.mapViewTitle,
     database:t.databaseViewTitle,
     stats:t.statsViewTitle,
+    kmz:t.kmzViewTitle,
     guides:t.guides,
     admin:t.admin,
     changelog:t.changelog,
@@ -472,7 +475,7 @@ export default function App(){
               }
             }
           }}/>}
-        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>{t.filters}{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
+        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>{t.filters}{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='kmz'?<KmzView/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
       </main>
     </section>
     {notice&&<div className="toast" role="status"><Info size={19}/><span>{notice}</span><button className="icon-button" aria-label={t.close} onClick={()=>setNotice('')}><X size={17}/></button></div>}
