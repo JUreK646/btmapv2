@@ -290,14 +290,14 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   const btmapTowersTotal = allCounts.find(r => r.source === 'BTMAP')?.c || 0;
 
   const sql = source === 'ALL'
-    ? "SELECT id, lat, lng, location, address, province, operators, source FROM towers WHERE status='APPROVED'"
-    : "SELECT id, lat, lng, location, address, province, operators, source FROM towers WHERE status='APPROVED' AND source=?";
+    ? "SELECT id, lat, lng, stationId, address, province, operators, source FROM towers WHERE status='APPROVED'"
+    : "SELECT id, lat, lng, stationId, address, province, operators, source FROM towers WHERE status='APPROVED' AND source=?";
 
   type TowerRow = {
     id: string;
     lat: number;
     lng: number;
-    location: string | null;
+    stationId: string | null;
     address: string | null;
     province: string | null;
     operators: string;
@@ -338,7 +338,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
       inferredProvince++;
     }
 
-    if ((row.address || '').trim() && (row.location || '').trim()) {
+    if ((row.address || '').trim()) {
       withFullAddress++;
     }
 
