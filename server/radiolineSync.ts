@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import { ensureKmzSchemaAndColumns, normalizeProvinceName, rebuildKmzFiles } from './kmzExport.ts';
 
 const DANE_GOV_DATASET_URL = 'https://api.dane.gov.pl/1.4/datasets/1066/resources';
 const FALLBACK_ZIP_URL = 'https://api.dane.gov.pl/media/resources/20260430/wykaz_pozwolen_linie_radiowe.zip';
@@ -557,14 +558,19 @@ export async function syncRadiolinesFromUke(
     // 3. Write aggregated radiolines to SQLite
     console.log(`[Radiolines Sync] Zapisywanie ${linksMap.size} unikalnych przęseł radioliniowych (${totalChannels} kanałów) do bazy...`);
 
+    ensureKmzSchemaAndColumns(db);
+    const existingRows = db.prepare('SELECT id FROM radiolines').all() as Array<{ id: string }>;
+    const existingIds = new Set(existingRows.map(r => r.id));
+    const snapshotYm = snapshotDate ? snapshotDate.slice(3, 10) : '';
+
     db.exec('BEGIN');
     try {
       db.exec('DELETE FROM radiolines');
       const insertStmt = db.prepare(`
         INSERT INTO radiolines (
           id, latA, lngA, latB, lngB, frequency, operator, stationA, stationB,
-          operatorRaw, permitId, distanceKm, mode, capacityText, channelsJson
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          operatorRaw, permitId, distanceKm, mode, capacityText, channelsJson, province, isNew
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const link of linksMap.values()) {
@@ -601,6 +607,12 @@ export async function syncRadiolinesFromUke(
         const distanceKm = haversineKm(link.latA, link.lngA, link.latB, link.lngB);
         const primaryFreqGHz = link.channels[0]?.freqGHz || 18.0;
         const id = 'RL_' + createHash('sha256').update(link.key).digest('hex').slice(0, 18);
+        const province = normalizeProvinceName(link.channels[0]?.txProvince);
+        const issueYm = link.channels[0]?.issueDate ? link.channels[0].issueDate.slice(3, 10) : '';
+        const isNew =
+          (existingIds.size > 0 && !existingIds.has(id)) || (snapshotYm && issueYm === snapshotYm)
+            ? 1
+            : 0;
 
         insertStmt.run(
           id,
@@ -617,7 +629,9 @@ export async function syncRadiolinesFromUke(
           distanceKm,
           mode,
           capacityText,
-          JSON.stringify(link.channels)
+          JSON.stringify(link.channels),
+          province,
+          isNew
         );
       }
 
@@ -638,6 +652,8 @@ export async function syncRadiolinesFromUke(
       throw err;
     }
 
+    console.log('[Radiolines Sync] Generowanie zaktualizowanych archiwów KMZ dla radiolinii...');
+    rebuildKmzFiles(db, { type: 'radiolines' });
     console.log(`[Radiolines Sync] Zakończono pomyślnie! Zaimportowano ${linksMap.size} linii radiowych UKE.`);
     return { importedLinks: linksMap.size, totalChannels };
   } finally {
@@ -647,4 +663,52 @@ export async function syncRadiolinesFromUke(
       // Ignore cleanup error
     }
   }
+}
+
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
+export function createRadiolineSync(db: DatabaseSync) {
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let running = false;
+
+  async function checkAndSyncMonthlyRadiolines() {
+    if (running) return;
+    running = true;
+    try {
+      const { url } = await resolveLatestUkeZipUrl();
+      const lastUrlRow = db
+        .prepare("SELECT value FROM metadata WHERE key = 'radiolinesSourceUrl'")
+        .get() as { value?: string } | undefined;
+      const countRow = db.prepare('SELECT COUNT(*) as cnt FROM radiolines').get() as { cnt: number };
+
+      if (countRow.cnt === 0 || (url && lastUrlRow?.value && lastUrlRow.value !== url)) {
+        console.log(`[Radiolines AutoSync] Wykryto nowy miesięczny wykaz radiolinii UKE (${url}) — synchronizacja i generowanie plików KMZ...`);
+        await syncRadiolinesFromUke(db);
+        db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('radiolinesSourceUrl', ?)").run(url);
+      } else if (!lastUrlRow?.value && url) {
+        db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('radiolinesSourceUrl', ?)").run(url);
+      }
+    } catch (err) {
+      console.warn('[Radiolines AutoSync] Błąd sprawdzania miesięcznego wykazu radiolinii UKE:', (err as Error).message);
+    } finally {
+      running = false;
+    }
+  }
+
+  return {
+    start() {
+      if (timer) return;
+      console.log('[Radiolines Sync] Usługa automatycznego miesięcznego sprawdzania radiolinii UKE i generowania KMZ została uruchomiona.');
+      void checkAndSyncMonthlyRadiolines();
+      timer = setInterval(() => {
+        void checkAndSyncMonthlyRadiolines();
+      }, TWELVE_HOURS_MS);
+    },
+    async stop() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    },
+  };
 }

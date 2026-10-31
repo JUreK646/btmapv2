@@ -218,10 +218,10 @@ export default function KmzView() {
               <select
                 id="kmz-date-select"
                 className="kmz-select"
-                value={catalog?.snapshotDate || '26.10.2026'}
+                value={catalog?.snapshotDate || ''}
                 onChange={() => {}}
               >
-                {(catalog?.availableDates || [catalog?.snapshotDate || '26.10.2026']).map(dt => (
+                {(catalog?.availableDates?.length ? catalog.availableDates : [catalog?.snapshotDate || '']).map(dt => (
                   <option key={dt} value={dt}>
                     {dt}
                   </option>

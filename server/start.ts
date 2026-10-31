@@ -2,19 +2,23 @@ import { createApp } from './app.ts';
 import { openDatabase } from './database.ts';
 import { createSi2pemSync } from './si2pemSync.ts';
 import { createUkeSync } from './ukeSync.ts';
+import { createRadiolineSync } from './radiolineSync.ts';
 
 const db = openDatabase();
 const si2pem = createSi2pemSync(db);
 const ukeSync = createUkeSync(db);
+const radiolineSync = createRadiolineSync(db);
 const port = Number(process.env.PORT || 3001);
 
 const server = createApp(db, si2pem).listen(port, process.env.HOST || '127.0.0.1', () => {
   console.log(`BTMap v2 API: http://127.0.0.1:${port}`);
   si2pem.start();
   ukeSync.start();
+  radiolineSync.start();
 });
 
 const stop = () => server.close(async () => {
+  await radiolineSync.stop();
   await ukeSync.stop();
   await si2pem.stop();
   db.close();
