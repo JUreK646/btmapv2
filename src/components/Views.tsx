@@ -103,7 +103,7 @@ export function DatabaseView({result,loading,error,query,onQuery,page,onPage,onS
   </section>;
 }
 
-export { StatsView } from './StatsView';
+export { StatsView, type StatsSection } from './StatsView';
 
 export function GuidesView(){
   const {t} = useI18n();

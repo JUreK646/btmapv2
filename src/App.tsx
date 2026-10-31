@@ -10,7 +10,7 @@ import DetailsPanel from './components/DetailsPanel';
 import ChangelogView from './components/ChangelogView';
 import KmzView from './components/KmzView';
 import {AuthDialog,ProfileDialog,SubmitDialog} from './components/Forms';
-import {AdminView,DatabaseView,GuidesView,StatsView} from './components/Views';
+import {AdminView,DatabaseView,GuidesView,StatsView,type StatsSection} from './components/Views';
 import StationSubmissionDialog from './components/StationSubmissionDialog';
 import TerrainProfileDialog from './components/TerrainProfileDialog';
 import AreaEvaluationDialog from './components/AreaEvaluationDialog';
@@ -58,6 +58,14 @@ export default function App(){
     changelog:t.changelog,
   }),[t]);
   const [view,setView]=useState<View>(readView);
+  const [statsSection,setStatsSection]=useState<StatsSection>('uke');
+  const [statsExpanded,setStatsExpanded]=useState<boolean>(()=>readView()==='stats');
+  const statsSubItems=useMemo(()=>[
+    {id:'uke' as const,label:lang==='pl'?'Rejestr UKE':'UKE Registry'},
+    {id:'radiolines' as const,label:lang==='pl'?'Radiolinie UKE':'UKE Microwave Links'},
+    {id:'btmap' as const,label:lang==='pl'?'Wewnętrzna baza':'Internal Database'},
+    {id:'quality' as const,label:lang==='pl'?'Jakość danych':'Data Quality'},
+  ],[lang]);
   const [filters,setFilters]=useState<Filters>(DEFAULT_FILTERS);
   const [showPem,setShowPem]=useState(false);
   const [showAzimuths,setShowAzimuths]=useState(false);
@@ -273,7 +281,7 @@ export default function App(){
     {mobileNav&&<button className="nav-scrim" aria-label={t.closeNav} onClick={()=>setMobileNav(false)}/>}
     <aside className="app-sidebar" aria-label={t.appMenu}>
       <button className="sidebar-brand" onClick={()=>changeView('map')} aria-label={t.brandAria}><span className="sidebar-brand-symbol"><Radio size={25}/></span><span className="sidebar-wordmark">btmap<span>.</span></span><span className="sidebar-version">v2</span></button>
-      <nav className="side-nav" aria-label={t.mainNav}>{navItems.map(item=><button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
+      <nav className="side-nav" aria-label={t.mainNav}>{navItems.map(item=>item.id==='stats'?<div key={item.id} className={`side-nav-group ${statsExpanded?'is-expanded':''}`}><button type="button" className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} aria-expanded={statsExpanded} title={item.label} onClick={()=>{if(view!=='stats'){changeView('stats');setStatsExpanded(true);}else{setStatsExpanded(prev=>!prev);}}}><item.icon size={19}/><span>{item.label}</span></button>{statsExpanded&&<div className="side-subnav" role="group" aria-label={item.label}>{statsSubItems.map(sub=>{const isSubActive=view==='stats'&&statsSection===sub.id;return <button key={sub.id} type="button" className={`side-subnav-item ${isSubActive?'active':''}`} onClick={()=>{setStatsSection(sub.id);if(view!=='stats')changeView('stats');else setMobileNav(false);}}><span>{sub.label}</span></button>;})}</div>}</div>:<button key={item.id} className={view===item.id?'active':''} aria-current={view===item.id?'page':undefined} title={item.label} onClick={()=>changeView(item.id)}><item.icon size={19}/><span>{item.label}</span>{view===item.id&&<span className="nav-active-dot"/>}</button>)}</nav>
       <div className="sidebar-bottom"><a className="sidebar-about" href="/btmap/changelog" title="Changelog" aria-current={view==='changelog'?'page':undefined} onClick={e=>{if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();changeView('changelog');}}}><History size={18}/><span>Changelog</span></a><button className="sidebar-about" title={t.guides} onClick={()=>changeView('guides')}><Info size={18}/><span>{t.guides}</span></button><button className="sidebar-about" title={t.settings} onClick={()=>setDialog('settings')}><SettingsIcon size={18}/><span>{t.settings}</span></button><div className="sidebar-lang-wrap"><button type="button" className="sidebar-about sidebar-lang-compact-btn" onClick={()=>setLang(lang==='pl'?'en':'pl')} title={t.switchLanguage} aria-label={t.switchLanguage}><Languages size={18}/><span className="sidebar-lang-compact-badge">{lang.toUpperCase()}</span></button><div className="sidebar-lang-toggle" title={t.switchLanguage}><Languages size={17} className="sidebar-lang-icon"/><span className="sidebar-lang-text">{t.language}</span><div className="lang-toggle-pills" role="group" aria-label={t.language}><button type="button" className={`lang-pill ${lang==='pl'?'is-active':''}`} onClick={()=>setLang('pl')} aria-pressed={lang==='pl'} title="Polski (PL)">PL</button><button type="button" className={`lang-pill ${lang==='en'?'is-active':''}`} onClick={()=>setLang('en')} aria-pressed={lang==='en'} title="English (ENG)">ENG</button></div></div></div><div className="sidebar-account"><button onClick={()=>setDialog(user?'profile':'auth')} title={user?t.account:t.signIn}><span className="sidebar-avatar">{user?user.nick.slice(0,1).toUpperCase():<UserRound size={19}/>}</span><span><strong>{user?user.nick:t.signIn}</strong><small>{user?t.account:t.accountDesc}</small></span><ArrowUpRight size={16}/></button></div></div>
     </aside>
     <section className="app-main">
@@ -475,7 +483,7 @@ export default function App(){
               }
             }
           }}/>}
-        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>{t.filters}{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth}/>:view==='kmz'?<KmzView/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
+        </div>:<div className="page-workspace">{view==='database'?<><div className="database-filter-action"><button className="secondary-button" aria-expanded={panel==='filters'} onClick={()=>togglePanel('filters')}><SlidersHorizontal size={16}/>{t.filters}{filterTotal?` (${filterTotal})`:''}</button></div><DatabaseView result={result} loading={loading} error={error} query={query} onQuery={q=>{setQuery(q);setPage(0);}} page={page} onPage={setPage} onSelect={openOnMap} onRetry={()=>setRefresh(r=>r+1)} onOpenCreateStation={()=>openCreateStation(null)} source={filters.source}/>{panel==='filters'&&filterPanel}</>:view==='changelog'?<ChangelogView/>:view==='stats'?<StatsView health={health} error={healthError} onRetry={loadHealth} section={statsSection} onSectionChange={setStatsSection}/>:view==='kmz'?<KmzView/>:view==='guides'?<GuidesView/>:user?.role==='ADMIN'?<AdminView user={user} onUpdate={()=>setRefresh(r=>r+1)}/>:<div className="empty-state"><h2>{t.adminRequired}</h2><button className="primary-button" onClick={()=>changeView('map')}>{t.backToMap}</button></div>}</div>}
       </main>
     </section>
     {notice&&<div className="toast" role="status"><Info size={19}/><span>{notice}</span><button className="icon-button" aria-label={t.close} onClick={()=>setNotice('')}><X size={17}/></button></div>}
