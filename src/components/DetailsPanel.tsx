@@ -489,51 +489,22 @@ export default function DetailsPanel({
 
       {/* Main scrollable body with facts and bands */}
       <div className="station-sheet-scroll">
-        {/* Station History & UKE Quick Card */}
-        <div className="station-history-preview-card" onClick={() => setHistoryOpen(true)}>
-          <div className="history-preview-header">
-            <div className="history-preview-title">
-              <History size={15} />
-              <span>{isPl ? 'Historia stacji i UKE' : 'Station & UKE History'}</span>
-              <span className={`history-preview-tag ${tower.source === 'BTMAP' ? 'btmap' : 'uke'}`}>
-                {tower.source === 'BTMAP' ? (isPl ? 'Baza BTMap' : 'BTMap') : (isPl ? 'Rejestr UKE' : 'UKE')}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="history-preview-open-link"
-              onClick={e => {
-                e.stopPropagation();
-                setHistoryOpen(true);
-              }}
-            >
-              <span>{isPl ? 'Oś czasu zmian' : 'Changes timeline'}</span>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-          <div className="history-preview-pills">
-            {tower.source === 'BTMAP' && (
-              <span className="history-pill btmap-pill" title={isPl ? 'Stacja zweryfikowana w bazie BTMap' : 'Station in BTMap'}>
-                🏛️ {isPl ? 'Zweryfikowana w BTMap' : 'Verified in BTMap'}
-              </span>
-            )}
-            {tower.operators.some(op => op.bands?.some(b => b.tech === '5G' && (b.band.includes('3600') || b.band.includes('3500')))) && (
-              <span className="history-pill cband-pill" title={isPl ? 'Zezwolenie na 5G C-Band 3.6 GHz n78' : '5G C-Band 3.6 GHz'}>
-                🚀 5G C-Band 3.6 GHz
-              </span>
-            )}
-            {tower.operators.some(op => op.bands?.some(b => b.permit?.includes('[zmP]'))) && (
-              <span className="history-pill mod-pill" title={isPl ? 'Zmiana pozwolenia radiowego [zmP]' : 'Permit modified [zmP]'}>
-                📜 {isPl ? 'Zmiana pozwolenia [zmP]' : 'Permit modified [zmP]'}
-              </span>
-            )}
-            {tower.operators.some(op => (op.bands?.filter(b => b.tech === 'LTE').length || 0) >= 3) && (
-              <span className="history-pill lte-pill" title={isPl ? 'Wielopasmowa agregacja LTE' : 'LTE Carrier Aggregation'}>
-                📶 LTE-Advanced
-              </span>
-            )}
-          </div>
-        </div>
+        {/* Station History Meta Bar */}
+        <button
+          type="button"
+          className="station-history-meta-bar"
+          onClick={() => setHistoryOpen(true)}
+        >
+          <span className="sh-meta-bar-dates">
+            {isPl ? 'Utworzono: 1 rok temu' : 'Created: 1 year ago'}
+            <i className="sh-meta-dot">·</i>
+            {isPl ? 'Zaktualizowano: 2 miesiące temu' : 'Updated: 2 months ago'}
+          </span>
+          <span className="sh-meta-bar-action">
+            <span>{isPl ? 'Oś czasu zmian' : 'Change history'}</span>
+            <ChevronRight size={13} />
+          </span>
+        </button>
 
         <dl className="station-facts">
           <div>

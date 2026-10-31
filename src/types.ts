@@ -161,6 +161,40 @@ export interface PemTimelineItem {
   downloadUrl?: string;
 }
 
+export interface StationTimelineCellItem {
+  label: string;
+  paramLabel: string;
+  paramValue: string;
+}
+
+export interface StationTimelineCellGroup {
+  tech: string;
+  count: number;
+  cells: StationTimelineCellItem[];
+}
+
+export interface StationTimelineDiffItem {
+  label: string;
+  oldValue?: string;
+  newValue: string;
+}
+
+export interface StationTimelineEvent {
+  id: string;
+  dateGroup: string;
+  time: string;
+  createdAt: string;
+  kind: 'location' | 'cells_updated' | 'cells_added' | 'property' | 'comment' | 'photo';
+  title: string;
+  diffs?: StationTimelineDiffItem[];
+  totalCells?: number;
+  techCounts?: Array<{ tech: string; count: number }>;
+  cellGroups?: StationTimelineCellGroup[];
+  description?: string | null;
+  photoUrl?: string | null;
+  userNick?: string;
+}
+
 export interface TowerHistoryData {
   towerId: string;
   stationId: string;
@@ -168,10 +202,12 @@ export interface TowerHistoryData {
   source: string;
   isBtmap: boolean;
   createdAt: string;
+  updatedAt?: string;
   addedBy: string;
   mastType: string | null;
   height: number | null;
   notes: string | null;
+  events: StationTimelineEvent[];
   btmap: {
     timeline: TowerHistoryEvent[];
     totalEvents: number;
