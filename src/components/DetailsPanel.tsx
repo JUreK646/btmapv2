@@ -404,7 +404,8 @@ export default function DetailsPanel({
             </span>
             {tower.operators.some(o => o.name === 'Orange' || o.name === 'T-Mobile') && (
               <span className="station-networks-badge" title="Stacja współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)">
-                N! NetWorkS!
+                <span className="networks-n-badge">N!</span>
+                <span className="networks-text">NetWorkS!</span>
               </span>
             )}
           </div>

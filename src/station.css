@@ -5,7 +5,46 @@
 .station-sheet-symbol { display:flex; align-items:center; color:var(--text); }
 .station-sheet-id { font-size:13px; font-weight:750; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; color:var(--text); }
 .station-sheet-source { display:inline-flex; align-items:center; gap:5px; color:var(--accent-text); font-size:10px; font-weight:650; white-space:nowrap; background:var(--surface-alt); border:1px solid var(--line); padding:2px 7px; border-radius:999px; line-height:1.2; }
-.station-networks-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:750; padding:2px 7px; border-radius:999px; background:linear-gradient(135deg, rgba(255, 121, 0, 0.22), rgba(226, 0, 116, 0.22)); border:1px solid rgba(255, 121, 0, 0.45); color:#f8fafc; white-space:nowrap; letter-spacing:0.02em; line-height:1.2; }
+.station-networks-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px 2px 3px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+}
+.station-networks-badge:hover {
+  border-color: rgba(226, 0, 116, 0.45);
+  background: var(--surface-hover);
+}
+.networks-n-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ff7900 0%, #e20074 100%);
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 850;
+  padding: 1px 5px;
+  border-radius: 999px;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 3px rgba(226, 0, 116, 0.25);
+}
+.networks-text {
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
 .station-sheet-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .station-sheet-header > .station-sheet-actions { position:absolute; top:20px; right:20px; }
 .station-sheet-header-top .station-sheet-actions { position:static; top:auto; right:auto; margin-left:auto; }
