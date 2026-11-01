@@ -1,20 +1,104 @@
 .sidebar-about[aria-current=page] { background:var(--surface-hover); color:var(--text); }
-.page-workspace .changelog-view { padding:42px 40px 60px; scroll-behavior:smooth; scroll-padding-top:24px; }
+.page-workspace .changelog-view { padding:42px 40px 60px; scroll-behavior:smooth; scroll-padding-top:24px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .changelog-content { max-width:850px; margin:0 auto; }
+
+.changelog-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.changelog-version-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-alt);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.changelog-version-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog-version-btn:hover:not(.active) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.changelog-version-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 750;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme='dark'] .changelog-version-btn.active {
+  background: #27272a;
+  color: #fafafa;
+}
+
+.changelog-latest-badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+[data-theme='light'] .changelog-latest-badge {
+  background: rgba(5, 150, 105, 0.12);
+  color: #059669;
+}
+
+.changelog-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+[data-theme='light'] .changelog-status-pill {
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+  border-color: rgba(2, 132, 199, 0.2);
+}
+
 .changelog-heading h2 { font-size:28px; line-height:1.25; font-weight:750; letter-spacing:-.025em; }
 .changelog-heading>p { margin-top:12px; max-width:66ch; font-size:14px; line-height:1.75; color:var(--muted); }
-.changelog-meta { display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; margin-top:22px; font-size:12px; color:var(--muted); }
+.changelog-meta { display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; margin-top:22px; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
 .changelog-meta strong { color:var(--text); font-size:13px; }
 .changelog-meta>span:first-of-type { padding:4px 8px; border-radius:6px; background:var(--surface-alt); color:var(--text); }
 .changelog-index { display:flex; flex-wrap:wrap; gap:4px 16px; margin:30px 0 0; padding:17px 0; border-block:1px solid var(--line); }
 .changelog-index a { display:inline-flex; align-items:center; min-height:32px; font-size:12px; color:var(--muted); text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:4px; }
 .changelog-index a:hover { color:var(--accent-text); text-decoration-color:currentColor; }
 .changelog-sections section { padding-top:32px; scroll-margin-top:24px; }
-.changelog-sections h3 { font-size:18px; line-height:1.4; letter-spacing:-.015em; font-weight:700; margin-bottom:14px; }
+.changelog-sections h3 { font-size:18px; line-height:1.4; letter-spacing:-.015em; font-weight:700; margin-bottom:14px; color:var(--text); }
 .changelog-sections ul { margin:0; padding-left:20px; max-width:74ch; }
 .changelog-sections li { padding-left:3px; margin:0 0 11px; font-size:14px; line-height:1.8; color:var(--muted); }
 .changelog-sections li::marker { color:var(--faint); font-size:10px; }
 .changelog-footer { margin-top:32px; padding-top:22px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; line-height:1.8; max-width:74ch; }
+
 @media(max-width:760px) {
   .page-workspace .changelog-view { padding:28px 22px 40px; }
   .changelog-heading h2 { font-size:25px; }
@@ -26,4 +110,5 @@
   .changelog-sections h3 { font-size:17px; }
   .changelog-sections li { font-size:13px; }
 }
+
 @media(prefers-reduced-motion:reduce) { .page-workspace .changelog-view { scroll-behavior:auto; } }
