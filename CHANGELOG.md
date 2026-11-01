@@ -1,53 +1,73 @@
 # Changelog BTMap
 
-## v2.1.0 (2026-10-23)
+## v2.0.2 (2026-11-01)
 
-Aktualizacja rozszerzająca BTMap o zaawansowane narzędzia analizy radiowej, audytu terenu oraz automatyzacji danych.
+Aktualizacja rejestru UKE (26.10.2026), warstwa 38,5 tys. linii radiowych, rozbudowane statystyki telekomunikacyjne i jakość danych, gotowe archiwa KMZ dla Google Earth oraz nowa oś czasu stacji.
+
+### Synchronizacja rejestru UKE i pomiarów SI2PEM
+- **Oficjalny wykaz UKE (26.10.2026)**: zaimportowano 61 321 stacji bazowych oraz 516 965 pozwoleń radiowych (GSM, UMTS, LTE, 5G).
+- **Dynamiczny parser BIP UKE**: automatyczne dopasowywanie zmieniających się ścieżek plików XLSX na stronach Biuletynu Informacji Publicznej UKE z wykluczeniem zbędnych archiwów tekstowych/CSV.
+- **Prawidłowe przypisanie województw**: dekodowanie 100% lokalizacji na podstawie prefiksów TERYT oraz koordynatów GPS.
+- **Optymalizacja synchronizacji SI2PEM**: pobieranie harmonogramu i planów pomiarów z inteligentnym filtrem dat i paginacją (`pageSize: 100`).
+- **Narzędzia CLI**: zoptymalizowane polecenia `pnpm sync:uke` oraz `pnpm sync:si2pem` z automatycznym inwalidowaniem pamięci podręcznej statystyk.
+
+### Radiolinie UKE (łącza mikrofalowe punkt–punkt)
+- **Warstwa radiolinii**: 38 518 oficjalnych linii radiowych UKE w pasmach od 7 GHz do 86 GHz (E-Band) z filtrowaniem według operatora.
+- **Szczegółowa karta techniczna przęsła**: częstotliwość, szerokość kanału, polaryzacja (V/H), moc nadajnika (TX), zysk anteny oraz dane decyzji UKE.
+- **Wektorowe logotypy i barwy operatorów**: Orange, Play, Plus / Towerlink, T-Mobile, EmiTel, Netia, EXATEL, PGE, Tauron.
+- **Automatyczna aktualizacja**: comiesięczna synchronizacja linii radiowych z portalu Dane.gov.pl.
+
+### Rozbudowane statystyki telekomunikacyjne i jakość danych
+- **Rozwijane podmenu w nawigacji bocznej**: Rejestr UKE, Radiolinie UKE, Wewnętrzna baza oraz Jakość danych.
+- **Matematyczna korekta wykresów udziału**: jednoznaczny podział 100% pozwoleń z równoległym wskaźnikiem penetracji stacji bazowych.
+- **Wskaźniki modernizacji sieci**: stacje z agregacją LTE-Advanced (≥3 oraz ≥4 pasma), wdrożenia 5G C-Band 3.6 GHz (n78) vs 5G DSS oraz kolokacje masztów w promieniu 60 m.
+- **Analityka radiolinii**: podział pasm ITU, średnie i maksymalne długości przęseł oraz rozkład geograficzny w 16 województwach.
+- **Dynamiczne podsumowania**: zasilane bezpośrednio z bazy danych SQLite bez zahardkodowanych wartości.
+
+### Gotowe archiwa KMZ dla Google Earth
+- **Dedykowany moduł pobieralni**: pregenerowane paczki stacji bazowych oraz radiolinii gotowe do importu do Google Earth.
+- **Podział regionalny**: 16 województw, nowo dodane obiekty oraz paczki ogólnopolskie z rzeczywistymi datami generowania i rozmiarem plików.
+- **Wysoka wydajność**: natychmiastowe pobieranie gotowych plików KMZ bez obciążania procesora i bazy serwera w czasie rzeczywistym.
+
+### Historia stacji bazowej i diagramy SI2PEM
+- **Oś czasu stacji**: chronologiczna prezentacja rzeczywistych zdarzeń dodania i modyfikacji stacji oraz komórek radiowych.
+- **Róża wiatrów SI2PEM**: wyeliminowanie nakładania się etykiet azymutów przy zbliżonych kątach wiązek antenowych.
+- **Identyfikator NetWorkS!**: odświeżona stylistyka i zoptymalizowany kontrast odznaki stacji współdzielonych w obu motywach (Dark i Light).
+- **Uporządkowanie panelu**: usunięcie zbędnego boksu identyfikatorów komórkowych na rzecz czytelniejszej karty technicznej.
+
+---
+
+## v2.0.1 (2026-10-25)
+
+Pełna lokalizacja w języku angielskim, audyt i ocena operatorów w terenie, stożki azymutów anten, profil terenu DEM ze strefami Fresnela oraz nowy interfejs Dark Modern.
 
 ### Dodawanie stacji i komórek dla 4 operatorów
 - Przebudowany interfejs formularza dodawania i edycji stacji bazowych zgodny ze standardem frontend-design (Dark Modern, typografia Manrope, precyzyjne tabelaryczne dane RF).
-- Dotykowy, bespoke selektor operatora z autentyczną kolorystyką marek: Orange (#ff7900), Play (#6c43bf), Plus (#13fb76) i T-Mobile (#e20074) z subtelnym podświetleniem glow i wskaźnikiem wyboru.
+- Dotykowy selektor operatora z autentyczną kolorystyką marek: Orange, Play, Plus i T-Mobile z subtelnym podświetleniem glow i wskaźnikiem wyboru.
 - Pełna weryfikacja parametrów komórek radiowych dla wszystkich 4 sieci (sprawdzanie wyłączności pasm np. B38 Plus, sugerowanie standardowych nośnych EARFCN/NR-ARFCN, walidacja PCI, CID i CLID w czasie rzeczywistym).
 - Wygodny przycisk „Dodaj stację” w pasku narzędzi i HUDzie mapy umożliwiający szybkie otwarcie kreatora z dowolnego miejsca.
-- Pełna kompatybilność z automatycznym uzupełnianiem danych z pozwoleń UKE oraz importem azymutów ze sprawozdań SI2PEM.
 
 ### Audyt i ocena operatorów w terenie
-- Nowe narzędzie oceny zasięgu i infrastruktury 4 głównych operatorów (Orange, Play, Plus, T-Mobile) w promieniu do 3 km².
+- Narzędzie oceny zasięgu i infrastruktury 4 głównych operatorów (Orange, Play, Plus, T-Mobile) w promieniu do 3 km².
 - Obiektywna punktacja oparta na rzeczywistych parametrach: odległość od stacji, pasma pojemnościowe i zasięgowe, 5G NR/C-band, wysokość zawieszenia anten oraz ukształtowanie terenu.
 - Pełne uwzględnienie współpracy NetworkS! – stacje i maszty współdzielone pomiędzy Orange a T-Mobile są poprawnie zaliczane dla obu sieci.
 - Szczegółowa, rozwijana lista plusów i minusów każdego operatora wraz z rekomendacją najlepszego wyboru w danej lokalizacji.
-- Wymóg weryfikacji pomiarami SI2PEM – stacje są punktowane na podstawie potwierdzonej, legalnej emisji.
-- Nowoczesne okno dialogowe w stylu Dark Modern z czytelnym podsumowaniem punktacji.
 
 ### Azymuty i sektory anten na mapie
 - Nowa warstwa „Azymuty” dostępna w panelu filtrów mapy.
 - Wizualizacja kierunków promieniowania anten w postaci eleganckich stożków sektorowych z centralną linią celowania.
 - Precyzyjne etykiety kątów w stopniach (np. 30°, 120°, 240°) umieszczone centralnie wewnątrz wiązki każdego sektora.
-- Priorytetyzacja rzeczywistych azymutów odczytanych z laboratoryjnych sprawozdań pomiarowych SI2PEM (PDF) oraz deterministyczne wyznaczanie 3 sektorów nominalnych dla pozostałych stacji.
-- Inteligentne renderowanie przy zbliżeniu (zoom 14+) dla najbliższych stacji bazowych, zapewniające pełną płynność mapy.
+- Priorytetyzacja rzeczywistych azymutów odczytanych z laboratoryjnych sprawozdań pomiarowych SI2PEM (PDF).
 
 ### Profil terenu i propagacja radiowa
 - Interaktywne narzędzie profilu wysokościowego (DEM) pomiędzy stacją bazową a dowolnie wybranym punktem na mapie.
 - Wizualizacja linii bezpośredniej widoczności (Line of Sight) oraz pierwszej strefy Fresnela (60% i 100%) dla wybranej częstotliwości.
 - Dokładne obliczenia tłumienia propagacyjnego w wolnej przestrzeni (FSPL) oraz tłumienia wstecznego listka anteny (28 dB Front-to-Back attenuation).
-- Automatyczna detekcja przeszkód terenowych i zacienienia sygnału radiowego.
 
-### Automatyczna synchronizacja UKE i SI2PEM
-- Usługa automatycznego sprawdzania i pobierania wykazów pozwoleń radiowych z BIP UKE co 2 godziny w tle.
-- Skrócenie cyklu synchronizacji harmonogramu i pomiarów SI2PEM z 48 godzin do 2 godzin.
-- Wygodne polecenia CLI: `pnpm sync:uke` oraz `pnpm sync:si2pem` umożliwiające natychmiastową synchronizację.
-- Wyeliminowanie z interfejsu technicznego żargonu o buforowaniu i cache – proste, czytelne liczniki stacji i pomiarów w obszarze.
-
-### Weryfikacja komórek radiowych
-- Rygorystyczny silnik reguł walidacji parametrów radiowych zgodny z polskim rynkiem telekomunikacyjnym.
-- Walidacja wyłączności pasm (m.in. dedykowane pasmo B38 dla sieci Plus).
-- Sprawdzanie identyfikatorów PCI (0–503 dla LTE, 0–1007 dla 5G NR), CLID (1–255), CID (1–65535) oraz automatyczne obliczanie ECI.
-
-### Poprawki interfejsu
-- Inteligentny pasek wyszukiwania miejscowości i stacji: podczas wpisywania lub skupienia na polu wyszukiwania przyciski „Audyt”, „Filtry” i „Dodaj stację” płynnie się chowają, dając pełną szerokość na wpisywanie adresu i wyniki autouzupełniania; po zakończeniu wyszukiwania lub wyczyszczeniu przyciski płynnie wracają.
-- Wyeliminowano ucinanie tekstu zastępczego (placeholder) w pasku wyszukiwania na desktopie i urządzeniach mobilnych.
-- Naprawiono błąd zwijania panelu bocznego filtrów do 0px na desktopie i telefonach – pełna widoczność wszystkich sekcji filtrów.
-- Usunięcie wewnętrznych komunikatów technicznych z dymków statusu pomiarów PEM.
+### Interfejs i lokalizacja
+- Przełącznik języka (PL / ENG) w dolnym panelu bocznym z pełnym tłumaczeniem wszystkich widoków, dialogów i narzędzi.
+- Inteligentny pasek wyszukiwania rozszerzający się płynnie podczas wpisywania adresu.
+- Neutralny czarny motyw ciemny oraz dopracowany jasny motyw z zapamiętywaniem wyboru.
 
 ---
 
