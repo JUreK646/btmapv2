@@ -9,7 +9,7 @@ export function openDatabase(
 ) {
   if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true });
   const db = new DatabaseSync(filename);
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;
+  db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY;
     CREATE TABLE IF NOT EXISTS towers (
       id TEXT PRIMARY KEY, stationId TEXT, address TEXT, province TEXT, lat REAL, lng REAL,
       operators TEXT NOT NULL DEFAULT '[]', mastType TEXT, owner TEXT, height REAL, notes TEXT,
