@@ -10,6 +10,7 @@ export function createSi2pemSync(db:DatabaseSync){
   async function run(){
     if(stopped||running)return running;
     running=(async()=>{
+      try {
       prunePlans(db);
       if(plans.due())try{
         console.log('[SI2PEM Sync] Rozpoczynanie cyklicznego odświeżania harmonogramu SI2PEM (co 2h)...');
@@ -21,6 +22,9 @@ export function createSi2pemSync(db:DatabaseSync){
       for(const row of due){
         if(stopped)break;
         try{await reports(JSON.parse(String(row.tower)) as Tower,true);}catch{console.error('SI2PEM: nie udało się odświeżyć zapisanego raportu stacji.');}
+      }
+      } catch (err) {
+        console.error('SI2PEM: błąd cyklu synchronizacji:', (err as Error).message);
       }
     })().finally(()=>{running=null;});
     return running;

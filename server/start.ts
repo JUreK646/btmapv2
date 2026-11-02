@@ -27,3 +27,10 @@ const stop = () => server.close(async () => {
 
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught Exception:', err);
+});
