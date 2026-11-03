@@ -120,7 +120,7 @@ Zbiorcze zestawienie zmian w premierowej wersji BTMap v2.
 ### Pomiary PEM na mapie
 - Opcjonalna warstwa „Pomiary PEM” w filtrach, oparta na oficjalnym harmonogramie SI2PEM.
 - Kwadratowe znaczniki w kolorze operatora. Po kliknięciu widoczne są wykonawca, planowany termin od–do, lokalizacja i dostępny odnośnik do źródła lub raportu.
-- Pomijanie anulowanych wpisów. Pomiary znikają z warstwy po 7 dniach kalendarzowych od daty zakończenia. Błąd źródła zachowuje ostatnie poprawne dane.
+- Pomijanie anulowanych wpisów. Pomiary znikają z warstwy po 2 dniach kalendarzowych od daty zakończenia. Błąd źródła zachowuje ostatnie poprawne dane.
 - Filtr operatora obejmuje także pomiary PEM. Pozostałe kryteria opisują stacje UKE.
 
 ### Baza, statystyki i konta

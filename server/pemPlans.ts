@@ -1,5 +1,5 @@
 import type {DatabaseSync} from 'node:sqlite';
-import {SI2PEM_REFRESH_MS,type PemPlan,type PemPlansResult} from '../shared/pemPlans.ts';
+import {PEM_RETENTION_DAYS,SI2PEM_REFRESH_MS,type PemPlan,type PemPlansResult} from '../shared/pemPlans.ts';
 import {operatorName} from '../shared/operators.ts';
 
 const ORIGIN='https://si2pem.gov.pl',PAGE_SIZE=100,MAX_PAGES=1000;
@@ -12,7 +12,7 @@ export function planDate(v:unknown){
 export function retentionCutoff(now=new Date()){
   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
   const value=(key:string)=>parts.find(p=>p.type===key)!.value;
-  return new Date(Date.parse(`${value('year')}-${value('month')}-${value('day')}T00:00:00Z`)-7*86400000).toISOString().slice(0,10);
+  return new Date(Date.parse(`${value('year')}-${value('month')}-${value('day')}T00:00:00Z`)-PEM_RETENTION_DAYS*86400000).toISOString().slice(0,10);
 }
 export const planOperator=operatorName;
 export function parsePlan(value:unknown,cutoff:string):PemPlan|null{
