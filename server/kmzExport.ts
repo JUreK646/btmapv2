@@ -247,6 +247,7 @@ const KML_OPERATOR_COLORS: Record<string, string> = {
   Play: 'ffc83771', // #7137c8
   Plus: 'ff40b100', // #00b140
   'T-Mobile': 'ff7400e2', // #e20074
+  'PKP PLK': 'ffcc6600', // #0066cc (blue, aabbggrr)
   Inne: 'ff8b7464', // #64748b
 };
 

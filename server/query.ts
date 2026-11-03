@@ -3,7 +3,7 @@ import { MAP_STATION_LIMIT } from '../shared/mapLimits.ts';
 import { withAzimuths } from './azimuths.ts';
 import { parseCellSearch, type ParsedCellId } from '../shared/cellSearch.ts';
 
-const majorOperators = ['Orange', 'T-Mobile', 'Play', 'Plus'];
+const majorOperators = ['Orange', 'T-Mobile', 'Play', 'Plus', 'PKP PLK'];
 
 export function towerWhere(query: Record<string, unknown>) {
   const clauses = ["t.status = 'APPROVED'", 't.lat BETWEEN -90 AND 90', 't.lng BETWEEN -180 AND 180'];

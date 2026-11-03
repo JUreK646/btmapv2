@@ -152,7 +152,7 @@ function getOperatorColor(name: string): string {
   if (n.includes('orange')) return '#f97316';
   if (n.includes('plus') || n.includes('towerlink')) return '#10b981';
   if (n.includes('t-mobile')) return '#ec4899';
-  if (n.includes('pkp')) return '#3b82f6';
+  if (n.includes('pkp') || n.includes('plk')) return '#0066cc';
   if (n.includes('emitel')) return '#06b6d4';
   if (n.includes('netia')) return '#14b8a6';
   if (n.includes('tauron')) return '#eab308';
