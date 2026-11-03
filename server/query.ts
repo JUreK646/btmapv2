@@ -51,7 +51,9 @@ export function towerWhere(query: Record<string, unknown>) {
   }
 
   const operators = list(query.operators), techs = list(query.techs || query.tech), bands = list(query.bands);
-  if (operators.length || techs.length || bands.length) {
+  const modes5g = (query.source === 'BTMAP' && (query.modes5g || query.mode5g)) ? list(query.modes5g || query.mode5g) : [];
+
+  if (operators.length || techs.length || bands.length || modes5g.length) {
     const opClauses: string[] = [];
     if (operators.length) {
       const known = operators.filter(x => x !== 'Inne');
@@ -67,6 +69,30 @@ export function towerWhere(query: Record<string, unknown>) {
     }
     if (bands.length) { bandClauses.push(`REPLACE(json_extract(b.value, '$.band'), 'MHz', '') IN (${bands.map(() => '?').join(',')})`); params.push(...bands); }
     if (bandClauses.length) opClauses.push(`EXISTS (SELECT 1 FROM json_each(op.value, '$.bands') b WHERE ${bandClauses.join(' AND ')})`);
+
+    if (modes5g.length) {
+      const hasNsa = modes5g.includes('NSA');
+      const hasSa = modes5g.includes('SA');
+      if (hasNsa && !hasSa) {
+        opClauses.push(`EXISTS (
+          SELECT 1 FROM json_each(op.value, '$.bands') b5g
+          WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
+            AND UPPER(COALESCE(json_extract(b5g.value, '$.mode'), 'NSA')) = 'NSA'
+        )`);
+      } else if (hasSa && !hasNsa) {
+        opClauses.push(`EXISTS (
+          SELECT 1 FROM json_each(op.value, '$.bands') b5g
+          WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
+            AND UPPER(json_extract(b5g.value, '$.mode')) = 'SA'
+        )`);
+      } else if (hasNsa && hasSa) {
+        opClauses.push(`EXISTS (
+          SELECT 1 FROM json_each(op.value, '$.bands') b5g
+          WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
+        )`);
+      }
+    }
+
     clauses.push(`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op WHERE ${opClauses.join(' AND ')})`);
   }
   return { sql: clauses.join(' AND '), params, cellSearch };

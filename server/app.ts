@@ -412,7 +412,10 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
             band: c.band,
             pci: c.pci,
             earfcn: c.earfcn,
-            azimuth: c.azimuth
+            azimuth: c.azimuth,
+            mode: c.mode || (c.tech === '5G' ? 'NSA' : undefined),
+            isIot: Boolean(c.isIot),
+            cellType: c.cellType || 'macro'
           })) : []
         }];
         db.prepare(`

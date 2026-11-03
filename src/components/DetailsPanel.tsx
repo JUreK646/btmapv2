@@ -242,7 +242,7 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       return (
                         <tr key={idx}>
                           <td className="cell-col-pasmo">
-                            <strong className="cell-pasmo-main">{b.band}</strong>
+                            <strong className="cell-pasmo-main">{b.band}</strong>{b.mode && <span className={`cell-mode-tag mode-${b.mode.toLowerCase()}`} title={`Tryb 5G ${b.mode}`}>{b.mode}</span>}
                             {b.azimuth != null && (
                               <span className="cell-azimuth-tag" title="Azymut sektora">{b.azimuth}°</span>
                             )}
