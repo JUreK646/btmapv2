@@ -64,6 +64,7 @@ export default function App(){
     {id:'uke' as const,label:lang==='pl'?'Rejestr UKE':'UKE Registry'},
     {id:'radiolines' as const,label:lang==='pl'?'Radiolinie UKE':'UKE Microwave Links'},
     {id:'btmap' as const,label:lang==='pl'?'Wewnętrzna baza':'Internal Database'},
+    {id:'growth' as const,label:lang==='pl'?'Nowe stacje i pasma':'New Sites & Bands'},
     {id:'quality' as const,label:lang==='pl'?'Jakość danych':'Data Quality'},
   ],[lang]);
   const [filters,setFilters]=useState<Filters>(DEFAULT_FILTERS);

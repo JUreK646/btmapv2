@@ -1187,3 +1187,419 @@
   background: #10b981;
   height: 100%;
 }
+
+/* ==========================================================================
+   MONTHLY GROWTH DASHBOARD (Nowe stacje i pasma wg operatora i pasma)
+   ========================================================================== */
+.stats-growth-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stats-growth-hero-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stats-growth-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.stats-growth-title-group h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-growth-title-group p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 500;
+}
+
+.stats-growth-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.stats-legend-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats-legend-box-all {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--text);
+}
+
+.stats-legend-box-new {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(45deg, #10b981, #10b981 3px, #047857 3px, #047857 6px);
+  border: 1px solid #10b981;
+}
+
+/* Period Navigator Carousel */
+.stats-period-navigator-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stats-period-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stats-period-nav-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.stats-period-nav-arrow:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.stats-period-nav-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.stats-growth-period-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 4px 2px;
+  flex: 1;
+  scrollbar-width: thin;
+}
+
+.stats-growth-period-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.stats-growth-period-pill:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-active, rgba(255, 255, 255, 0.2));
+}
+
+.stats-growth-period-pill.is-active {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: #10b981;
+  color: #10b981;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2);
+}
+
+.stats-growth-period-pill .pill-title {
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.stats-growth-period-pill .pill-dates {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-growth-period-pill.is-active .pill-dates {
+  color: rgba(16, 185, 129, 0.85);
+}
+
+.stats-period-hint {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Controls Bar */
+.stats-growth-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.stats-growth-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-growth-toolbar-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Section Header */
+.stats-growth-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 2px;
+}
+
+.stats-growth-section-head h3 {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.stats-growth-section-head span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Top Metric Cards: WG OPERATORA */
+.stats-growth-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.stats-growth-metric-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.stats-metric-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stats-metric-card-title {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.stats-metric-card-new-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Operator Bar Group (Vertical) */
+.stats-operator-bars-group {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 6px;
+  height: 150px;
+  padding-top: 10px;
+  width: 100%;
+}
+
+.stats-operator-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.stats-bar-total-num {
+  font-size: 10.5px;
+  font-weight: 750;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.stats-bar-pillar {
+  width: 100%;
+  max-width: 44px;
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: height 0.25s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.stats-bar-hatched-segment {
+  width: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(16, 185, 129, 0.95),
+    rgba(16, 185, 129, 0.95) 4px,
+    rgba(5, 150, 105, 0.95) 4px,
+    rgba(5, 150, 105, 0.95) 8px
+  );
+  border-top: 1.5px solid #34d399;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 1px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+.stats-bar-hatched-segment .num {
+  font-size: 9.5px;
+}
+
+.stats-bar-hatched-segment .pct {
+  font-size: 8px;
+  opacity: 0.95;
+}
+
+.stats-bar-op-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* Band Cards Grid: KOMÓRKI / STACJE WG PASMA */
+.stats-growth-band-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.stats-growth-band-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 180px;
+}
+
+.stats-band-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.stats-band-card-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.stats-band-card-tech-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--muted);
+}
+
+.stats-band-card-tech-tag.c-5g { background: #a855f7; }
+.stats-band-card-tech-tag.c-lte { background: #0ea5e9; }
+.stats-band-card-tech-tag.c-umts { background: #10b981; }
+.stats-band-card-tech-tag.c-gsm { background: #f59e0b; }
+
+.stats-growth-empty-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+}

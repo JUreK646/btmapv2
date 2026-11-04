@@ -53,6 +53,50 @@ export interface StatsRadiolineProvinceItem {
   operators: { operator: string; count: number }[];
 }
 
+export interface StatsGrowthOperatorBar {
+  operator: string;
+  total: number;
+  newCount: number;
+  newPercent: number;
+}
+
+export interface StatsGrowthMetricCard {
+  key: string;
+  label: string;
+  total: number;
+  newTotal: number;
+  operators: StatsGrowthOperatorBar[];
+}
+
+export interface StatsGrowthBandCard {
+  key: string;
+  tech: string;
+  band: string;
+  duplex: 'FDD' | 'TDD';
+  totalCells: number;
+  newCells: number;
+  totalStations: number;
+  newStations: number;
+  operatorCells: StatsGrowthOperatorBar[];
+  operatorStations: StatsGrowthOperatorBar[];
+}
+
+export interface StatsPeriodReport {
+  id: string;
+  title: string;
+  dateRange: string;
+  source: 'UKE' | 'BTMAP' | 'ALL';
+  metrics: {
+    stations: StatsGrowthMetricCard;
+    cells: StatsGrowthMetricCard;
+    permits: StatsGrowthMetricCard;
+    azimuths: StatsGrowthMetricCard;
+    radiolines: StatsGrowthMetricCard;
+    photos: StatsGrowthMetricCard;
+  };
+  bands: StatsGrowthBandCard[];
+}
+
 export interface StatsRadiolinesData {
   totalLinks: number;
   newLinks: number;
@@ -116,6 +160,7 @@ export interface TelecomStats {
   bands: StatsBandItem[];
   provinces: StatsProvinceItem[];
   timeline: StatsTimelineItem[];
+  monthlyReports: StatsPeriodReport[];
   comparison: {
     bands: StatsComparisonBandItem[];
   };
@@ -296,6 +341,393 @@ function computeRadiolinesStats(db: DatabaseSync): StatsRadiolinesData {
     bands,
     provinces,
   };
+}
+
+const STANDARD_GROWTH_BANDS: Array<{ key: string; tech: string; band: string; duplex: 'FDD' | 'TDD' }> = [
+  { key: 'GSM 900', tech: 'GSM', band: '900', duplex: 'FDD' },
+  { key: 'GSM 1800', tech: 'GSM', band: '1800', duplex: 'FDD' },
+  { key: 'UMTS 900 (FDD)', tech: 'UMTS', band: '900', duplex: 'FDD' },
+  { key: 'UMTS 2100 (FDD)', tech: 'UMTS', band: '2100', duplex: 'FDD' },
+  { key: 'LTE 700 (FDD)', tech: 'LTE', band: '700', duplex: 'FDD' },
+  { key: 'LTE 800 (FDD)', tech: 'LTE', band: '800', duplex: 'FDD' },
+  { key: 'LTE 900 (FDD)', tech: 'LTE', band: '900', duplex: 'FDD' },
+  { key: 'LTE 1800 (FDD)', tech: 'LTE', band: '1800', duplex: 'FDD' },
+  { key: 'LTE 2100 (FDD)', tech: 'LTE', band: '2100', duplex: 'FDD' },
+  { key: 'LTE 2600 (FDD)', tech: 'LTE', band: '2600', duplex: 'FDD' },
+  { key: 'LTE 2600 (TDD)', tech: 'LTE', band: '2600', duplex: 'TDD' },
+  { key: 'NR 700 (FDD)', tech: '5G', band: '700', duplex: 'FDD' },
+  { key: 'NR 2100 (FDD)', tech: '5G', band: '2100', duplex: 'FDD' },
+  { key: 'NR 2600 (TDD)', tech: '5G', band: '2600', duplex: 'TDD' },
+  { key: 'NR 3500 (TDD)', tech: '5G', band: '3500', duplex: 'TDD' },
+];
+
+function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'): StatsPeriodReport[] {
+  const whereClause =
+    source === 'UKE'
+      ? "WHERE status='APPROVED' AND source='UKE'"
+      : source === 'BTMAP'
+      ? "WHERE status='APPROVED' AND source!='UKE'"
+      : "WHERE status='APPROVED'";
+
+  const rows = db.prepare(
+    `SELECT id, operators, createdAt FROM towers ${whereClause}`
+  ).all() as Array<{ id: number; operators: string; createdAt?: string }>;
+
+  // Find distinct dates
+  const rawDates = Array.from(new Set(rows.map(r => r.createdAt ? r.createdAt.slice(0, 10) : '2026-10-10'))).sort();
+  const octDates = rawDates.filter(d => d.startsWith('2026-10'));
+  const minDate = rawDates[0] || '2026-10-10';
+
+  const periods: Array<{
+    id: string;
+    title: string;
+    dateRange: string;
+    filter: (d: string) => boolean;
+  }> = [];
+
+  // Monthly summary (e.g. October 2026)
+  if (octDates.length > 0) {
+    periods.push({
+      id: '2026-10',
+      title: 'Październik 2026 (cały miesiąc)',
+      dateRange: 'Dane od 2026-10-01 do 2026-10-31',
+      filter: (d: string) => d.startsWith('2026-10') && d !== minDate,
+    });
+  }
+
+  // Individual update batches (newest first)
+  const batchDatesDesc = [...rawDates].reverse();
+  for (const bDate of batchDatesDesc) {
+    const parts = bDate.split('-');
+    const label = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : bDate;
+    periods.push({
+      id: bDate,
+      title: `Wykaz z ${label}`,
+      dateRange: `Dane partii ${label}`,
+      filter: (d: string) => d === bDate,
+    });
+  }
+
+  if (periods.length === 0) {
+    periods.push({
+      id: 'all',
+      title: 'Wszystkie dane',
+      dateRange: 'Pełny zakres',
+      filter: () => true,
+    });
+  }
+
+  // Radiolines and photos for metric cards
+  let rlRows: Array<{ operator: string; isNew: number }> = [];
+  try {
+    rlRows = db.prepare('SELECT operator, isNew FROM radiolines').all() as any;
+  } catch {}
+
+  let photoRows: Array<{ userNick?: string; createdAt?: string }> = [];
+  try {
+    photoRows = db.prepare('SELECT userNick, createdAt FROM photos').all() as any;
+  } catch {}
+
+  return periods.map(p => {
+    const opStationMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+    const opCellMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+    const opPermitMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+    const opAzimuthMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+
+    const bandCardMap = new Map<string, {
+      key: string;
+      tech: string;
+      band: string;
+      duplex: 'FDD' | 'TDD';
+      totalCells: number;
+      newCells: number;
+      totalStations: number;
+      newStations: number;
+      opCells: Map<string, { operator: string; total: number; newCount: number; newPercent: number }>;
+      opStations: Map<string, { operator: string; total: number; newCount: number; newPercent: number }>;
+    }>();
+
+    for (const sb of STANDARD_GROWTH_BANDS) {
+      bandCardMap.set(sb.key, {
+        key: sb.key,
+        tech: sb.tech,
+        band: sb.band,
+        duplex: sb.duplex,
+        totalCells: 0,
+        newCells: 0,
+        totalStations: 0,
+        newStations: 0,
+        opCells: new Map(),
+        opStations: new Map(),
+      });
+    }
+
+    let totalStations = 0;
+    let newStations = 0;
+    let totalCells = 0;
+    let newCells = 0;
+    let totalPermits = 0;
+    let newPermits = 0;
+    let totalAzimuths = 0;
+    let newAzimuths = 0;
+
+    for (const r of rows) {
+      totalStations++;
+      const rDate = r.createdAt ? r.createdAt.slice(0, 10) : '';
+      const isNew = p.filter(rDate);
+      if (isNew) newStations++;
+
+      let ops: any[] = [];
+      try { ops = JSON.parse(r.operators); } catch {}
+      if (!Array.isArray(ops)) continue;
+
+      for (const op of ops) {
+        const opName = (op.name || 'Inne').trim();
+
+        // Operator station counts
+        let sData = opStationMap.get(opName);
+        if (!sData) {
+          sData = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+          opStationMap.set(opName, sData);
+        }
+        sData.total++;
+        if (isNew) sData.newCount++;
+
+        const bands = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
+        totalCells += bands.length;
+        totalPermits += bands.length;
+        if (isNew) {
+          newCells += bands.length;
+          newPermits += bands.length;
+        }
+
+        // Operator cell counts
+        let cData = opCellMap.get(opName);
+        if (!cData) {
+          cData = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+          opCellMap.set(opName, cData);
+        }
+        cData.total += bands.length;
+        if (isNew) cData.newCount += bands.length;
+
+        // Operator permit counts
+        let pmData = opPermitMap.get(opName);
+        if (!pmData) {
+          pmData = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+          opPermitMap.set(opName, pmData);
+        }
+        pmData.total += bands.length;
+        if (isNew) pmData.newCount += bands.length;
+
+        const stationBands = new Set<string>();
+
+        for (const b of bands) {
+          if (b.azimuth !== undefined && b.azimuth !== null && b.azimuth !== '') {
+            totalAzimuths++;
+            if (isNew) newAzimuths++;
+            let azData = opAzimuthMap.get(opName);
+            if (!azData) {
+              azData = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+              opAzimuthMap.set(opName, azData);
+            }
+            azData.total++;
+            if (isNew) azData.newCount++;
+          }
+
+          let tech = String(b.tech || 'Inne').toUpperCase();
+          if (tech === 'NR') tech = '5G';
+          const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
+          if (!bandNum) continue;
+
+          // Standard band key lookup
+          let card: any = null;
+          if (tech === '5G' && (bandNum === '3500' || bandNum === '3600')) {
+            card = bandCardMap.get('NR 3500 (TDD)');
+          } else if (tech === '5G' && bandNum === '2600') {
+            card = bandCardMap.get('NR 2600 (TDD)');
+          } else if (tech === '5G' && bandNum === '2100') {
+            card = bandCardMap.get('NR 2100 (FDD)');
+          } else if (tech === '5G' && bandNum === '700') {
+            card = bandCardMap.get('NR 700 (FDD)');
+          } else if (tech === 'LTE' && bandNum === '2600' && (b.duplex === 'TDD' || b.bandKey?.includes('TDD'))) {
+            card = bandCardMap.get('LTE 2600 (TDD)');
+          } else if (tech === 'LTE' && bandNum === '2600') {
+            card = bandCardMap.get('LTE 2600 (FDD)');
+          } else if (tech === 'LTE' && bandNum === '2100') {
+            card = bandCardMap.get('LTE 2100 (FDD)');
+          } else if (tech === 'LTE' && bandNum === '1800') {
+            card = bandCardMap.get('LTE 1800 (FDD)');
+          } else if (tech === 'LTE' && bandNum === '900') {
+            card = bandCardMap.get('LTE 900 (FDD)');
+          } else if (tech === 'LTE' && bandNum === '800') {
+            card = bandCardMap.get('LTE 800 (FDD)');
+          } else if (tech === 'LTE' && bandNum === '700') {
+            card = bandCardMap.get('LTE 700 (FDD)');
+          } else if (tech === 'UMTS' && bandNum === '2100') {
+            card = bandCardMap.get('UMTS 2100 (FDD)');
+          } else if (tech === 'UMTS' && bandNum === '900') {
+            card = bandCardMap.get('UMTS 900 (FDD)');
+          } else if (tech === 'GSM' && bandNum === '1800') {
+            card = bandCardMap.get('GSM 1800');
+          } else if (tech === 'GSM' && bandNum === '900') {
+            card = bandCardMap.get('GSM 900');
+          }
+
+          if (card) {
+            card.totalCells++;
+            if (isNew) card.newCells++;
+
+            let opC = card.opCells.get(opName);
+            if (!opC) {
+              opC = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+              card.opCells.set(opName, opC);
+            }
+            opC.total++;
+            if (isNew) opC.newCount++;
+
+            stationBands.add(card.key);
+          }
+        }
+
+        for (const bKey of stationBands) {
+          const card = bandCardMap.get(bKey);
+          if (card) {
+            card.totalStations++;
+            if (isNew) card.newStations++;
+
+            let opS = card.opStations.get(opName);
+            if (!opS) {
+              opS = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+              card.opStations.set(opName, opS);
+            }
+            opS.total++;
+            if (isNew) opS.newCount++;
+          }
+        }
+      }
+    }
+
+    const calcPercents = (map: Map<string, { operator: string; total: number; newCount: number; newPercent: number }>) => {
+      const arr = Array.from(map.values()).sort((a, b) => b.total - a.total);
+      for (const item of arr) {
+        item.newPercent = item.total > 0 ? Number(((item.newCount / item.total) * 100).toFixed(1)) : 0;
+      }
+      return arr;
+    };
+
+    const opStationsList = calcPercents(opStationMap);
+    const opCellsList = calcPercents(opCellMap);
+    const opPermitsList = calcPercents(opPermitMap);
+    const opAzimuthsList = calcPercents(opAzimuthMap);
+
+    // Radiolines
+    const rlOpMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+    let totalRl = 0;
+    let newRl = 0;
+    for (const rl of rlRows) {
+      totalRl++;
+      const op = rl.operator || 'Inne';
+      let entry = rlOpMap.get(op);
+      if (!entry) {
+        entry = { operator: op, total: 0, newCount: 0, newPercent: 0 };
+        rlOpMap.set(op, entry);
+      }
+      entry.total++;
+      if (rl.isNew) {
+        entry.newCount++;
+        newRl++;
+      }
+    }
+    const rlOpList = calcPercents(rlOpMap);
+
+    // Photos
+    const photoOpMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+    let totalPhotos = 0;
+    let newPhotos = 0;
+    for (const ph of photoRows) {
+      totalPhotos++;
+      const isNewPhoto = ph.createdAt && p.filter(ph.createdAt.slice(0, 10));
+      if (isNewPhoto) newPhotos++;
+      const op = 'Społeczność BTMap';
+      let entry = photoOpMap.get(op);
+      if (!entry) {
+        entry = { operator: op, total: 0, newCount: 0, newPercent: 0 };
+        photoOpMap.set(op, entry);
+      }
+      entry.total++;
+      if (isNewPhoto) entry.newCount++;
+    }
+    const photoOpList = calcPercents(photoOpMap);
+
+    const bandsList: StatsGrowthBandCard[] = Array.from(bandCardMap.values()).map(card => {
+      const opCells = calcPercents(card.opCells);
+      const opStations = calcPercents(card.opStations);
+      return {
+        key: card.key,
+        tech: card.tech,
+        band: card.band,
+        duplex: card.duplex,
+        totalCells: card.totalCells,
+        newCells: card.newCells,
+        totalStations: card.totalStations,
+        newStations: card.newStations,
+        operatorCells: opCells,
+        operatorStations: opStations,
+      };
+    });
+
+    return {
+      id: p.id,
+      title: p.title,
+      dateRange: p.dateRange,
+      source,
+      metrics: {
+        stations: {
+          key: 'stations',
+          label: 'Stacje',
+          total: totalStations,
+          newTotal: newStations,
+          operators: opStationsList,
+        },
+        cells: {
+          key: 'cells',
+          label: 'Komórki',
+          total: totalCells,
+          newTotal: newCells,
+          operators: opCellsList,
+        },
+        permits: {
+          key: 'permits',
+          label: 'Pozwolenia',
+          total: totalPermits,
+          newTotal: newPermits,
+          operators: opPermitsList,
+        },
+        azimuths: {
+          key: 'azimuths',
+          label: 'Azymuty',
+          total: totalAzimuths,
+          newTotal: newAzimuths,
+          operators: opAzimuthsList,
+        },
+        radiolines: {
+          key: 'radiolines',
+          label: 'Radiolinie',
+          total: totalRl,
+          newTotal: newRl,
+          operators: rlOpList,
+        },
+        photos: {
+          key: 'photos',
+          label: 'Zdjęcia',
+          total: totalPhotos,
+          newTotal: newPhotos,
+          operators: photoOpList,
+        },
+      },
+      bands: bandsList,
+    };
+  });
 }
 
 export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomStats {
@@ -661,6 +1093,8 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
     radiolinesUpdatedAt: radiolines.updatedAt,
   };
 
+  const monthlyReports = computeMonthlyReports(db, source);
+
   const result: TelecomStats = {
     source,
     summary: {
@@ -677,6 +1111,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
     bands,
     provinces,
     timeline,
+    monthlyReports,
     comparison: {
       bands: comparisonBands,
     },
