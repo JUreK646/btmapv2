@@ -65,6 +65,22 @@ export interface StatsRadiolinesData {
   provinces: StatsRadiolineProvinceItem[];
 }
 
+export interface StatsTimelineItem {
+  period: string;
+  label: string;
+  totalNew: number;
+  operators: { operator: string; count: number }[];
+  topBands: { band: string; count: number }[];
+}
+
+export interface StatsComparisonBandItem {
+  key: string;
+  tech: string;
+  band: string;
+  ukeTotal: number;
+  btmapTotal: number;
+}
+
 export interface StatsDataQuality {
   totalTowers: number;
   ukeTowers: number;
@@ -92,11 +108,17 @@ export interface TelecomStats {
     totalCells: number;
     ukeTowers: number;
     btmapTowers: number;
+    latestNewTowers: number;
+    latestNewDate: string | null;
   };
   technologies: StatsTechItem[];
   operators: StatsOperatorItem[];
   bands: StatsBandItem[];
   provinces: StatsProvinceItem[];
+  timeline: StatsTimelineItem[];
+  comparison: {
+    bands: StatsComparisonBandItem[];
+  };
   radiolines: StatsRadiolinesData;
   dataQuality: StatsDataQuality;
   updatedAt: string;
@@ -290,8 +312,8 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   const btmapTowersTotal = allCounts.find(r => r.source === 'BTMAP')?.c || 0;
 
   const sql = source === 'ALL'
-    ? "SELECT id, lat, lng, stationId, address, province, operators, source FROM towers WHERE status='APPROVED'"
-    : "SELECT id, lat, lng, stationId, address, province, operators, source FROM towers WHERE status='APPROVED' AND source=?";
+    ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED'"
+    : "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND source=?";
 
   type TowerRow = {
     id: string;
@@ -302,6 +324,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
     province: string | null;
     operators: string;
     source: string;
+    createdAt: string | null;
   };
 
   const rows = (source === 'ALL'
@@ -508,6 +531,117 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   ).get() as { withReports: number | null; sumReports: number | null } | undefined;
   const ukeDateRow = db.prepare("SELECT value FROM metadata WHERE key = 'ukeWykazDate'").get() as { value?: string } | undefined;
 
+  // Timeline of new stations added
+  const timelineMap = new Map<string, {
+    total: number;
+    ops: Map<string, number>;
+    bands: Map<string, number>;
+  }>();
+
+  for (const row of rows) {
+    const rawDate = row.createdAt ? row.createdAt.slice(0, 10) : 'Wcześniejsze';
+    let tEntry = timelineMap.get(rawDate);
+    if (!tEntry) {
+      tEntry = { total: 0, ops: new Map(), bands: new Map() };
+      timelineMap.set(rawDate, tEntry);
+    }
+    tEntry.total++;
+
+    let ops: any[] = [];
+    try { ops = JSON.parse(row.operators); } catch {}
+    if (Array.isArray(ops)) {
+      for (const op of ops) {
+        const opName = (op.name || 'Inne').trim();
+        tEntry.ops.set(opName, (tEntry.ops.get(opName) || 0) + 1);
+
+        const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
+        for (const b of bList) {
+          let tech = String(b.tech || 'Inne').toUpperCase();
+          if (tech === 'NR') tech = '5G';
+          const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
+          if (bandNum) {
+            const bKey = `${tech} ${bandNum}`;
+            tEntry.bands.set(bKey, (tEntry.bands.get(bKey) || 0) + 1);
+          }
+        }
+      }
+    }
+  }
+
+  const monthNamesPl = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
+  const formatTimelineLabel = (d: string) => {
+    if (d === 'Wcześniejsze') return 'Wcześniejsze';
+    const parts = d.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[2], 10);
+      const mIdx = parseInt(parts[1], 10) - 1;
+      const year = parts[0];
+      return `${day} ${monthNamesPl[mIdx] || parts[1]} ${year}`;
+    }
+    return d;
+  };
+
+  const timeline: StatsTimelineItem[] = Array.from(timelineMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([period, data]) => ({
+      period,
+      label: formatTimelineLabel(period),
+      totalNew: data.total,
+      operators: Array.from(data.ops.entries())
+        .map(([operator, count]) => ({ operator, count }))
+        .sort((a, b) => b.count - a.count),
+      topBands: Array.from(data.bands.entries())
+        .map(([band, count]) => ({ band, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6),
+    }));
+
+  const latestTimeline = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+  const latestNewTowers = latestTimeline?.totalNew || 0;
+  const latestNewDate = latestTimeline?.period || null;
+
+  // Comparison between UKE and BTMAP bands
+  const ukeBandCounts = new Map<string, number>();
+  const btmapBandCounts = new Map<string, number>();
+
+  const allTowersWithSource = db.prepare(
+    "SELECT source, operators FROM towers WHERE status='APPROVED'"
+  ).all() as Array<{ source: string; operators: string }>;
+
+  for (const t of allTowersWithSource) {
+    const isUke = t.source === 'UKE';
+    const targetMap = isUke ? ukeBandCounts : btmapBandCounts;
+    try {
+      const ops = JSON.parse(t.operators);
+      if (Array.isArray(ops)) {
+        for (const op of ops) {
+          const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
+          for (const b of bList) {
+            let tech = String(b.tech || 'Inne').toUpperCase();
+            if (tech === 'NR') tech = '5G';
+            const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
+            if (bandNum) {
+              const bKey = `${tech} ${bandNum}`;
+              targetMap.set(bKey, (targetMap.get(bKey) || 0) + 1);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const allBandKeys = new Set([...ukeBandCounts.keys(), ...btmapBandCounts.keys()]);
+  const comparisonBands: StatsComparisonBandItem[] = Array.from(allBandKeys).map(key => {
+    const [tech, ...rest] = key.split(' ');
+    return {
+      key,
+      tech,
+      band: rest.join(' '),
+      ukeTotal: ukeBandCounts.get(key) || 0,
+      btmapTotal: btmapBandCounts.get(key) || 0,
+    };
+  }).sort((a, b) => (techOrder[a.tech] || 99) - (techOrder[b.tech] || 99) || (parseInt(a.band, 10) || 0) - (parseInt(b.band, 10) || 0));
+
   const dataQuality: StatsDataQuality = {
     totalTowers,
     ukeTowers: ukeTowersTotal,
@@ -535,11 +669,17 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
       totalCells,
       ukeTowers: ukeTowersTotal,
       btmapTowers: btmapTowersTotal,
+      latestNewTowers,
+      latestNewDate,
     },
     technologies,
     operators,
     bands,
     provinces,
+    timeline,
+    comparison: {
+      bands: comparisonBands,
+    },
     radiolines,
     dataQuality,
     updatedAt: new Date().toISOString(),

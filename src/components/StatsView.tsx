@@ -13,6 +13,9 @@ import {
   ShieldCheck,
   Signal,
   Sparkles,
+  TrendingUp,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 import type { Health } from '../types';
 import { api, formatNumber } from '../lib/api';
@@ -21,6 +24,22 @@ import { useI18n } from '../lib/i18n';
 import '../stats.css';
 
 export type StatsSection = 'uke' | 'radiolines' | 'btmap' | 'quality';
+
+interface StatsTimelineItem {
+  period: string;
+  label: string;
+  totalNew: number;
+  operators: { operator: string; count: number }[];
+  topBands: { band: string; count: number }[];
+}
+
+interface StatsComparisonBandItem {
+  key: string;
+  tech: string;
+  band: string;
+  ukeTotal: number;
+  btmapTotal: number;
+}
 
 interface StatsOperatorItem {
   name: string;
@@ -114,11 +133,17 @@ interface TelecomStats {
     totalCells: number;
     ukeTowers: number;
     btmapTowers: number;
+    latestNewTowers?: number;
+    latestNewDate?: string | null;
   };
   technologies: StatsTechItem[];
   operators: StatsOperatorItem[];
   bands: StatsBandItem[];
   provinces: StatsProvinceItem[];
+  timeline?: StatsTimelineItem[];
+  comparison?: {
+    bands: StatsComparisonBandItem[];
+  };
   radiolines: StatsRadiolinesData;
   dataQuality: StatsDataQuality;
   updatedAt: string;
@@ -199,6 +224,8 @@ export function StatsView({
   const [hoveredProvKey, setHoveredProvKey] = useState<string | null>(null);
   const [hoveredTech, setHoveredTech] = useState<string | null>(null);
   const [hoveredOp, setHoveredOp] = useState<string | null>(null);
+  const [selectedTimelineIdx, setSelectedTimelineIdx] = useState<number | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
 
   const apiSource = activeSection === 'btmap' ? 'BTMAP' : 'UKE';
 
@@ -208,6 +235,9 @@ export function StatsView({
     api<TelecomStats>(`/stats?source=${src}`)
       .then((data) => {
         setStats(data);
+        if (data.timeline && data.timeline.length > 0) {
+          setSelectedTimelineIdx(data.timeline.length - 1);
+        }
         setLoading(false);
       })
       .catch((e) => {
@@ -628,6 +658,31 @@ export function StatsView({
                     </span>
                   </div>
                 </article>
+
+                <article className="stats-kpi-card">
+                  <div className="stats-kpi-top">
+                    <span className="stats-kpi-label">
+                      {isPl ? 'Nowe stacje w wykazie' : 'New Sites in Update'}
+                    </span>
+                    <span className="stats-kpi-icon emerald">
+                      <TrendingUp size={17} />
+                    </span>
+                  </div>
+                  <strong className="stats-kpi-value">
+                    +{formatNumber(stats.summary.latestNewTowers || (stats.timeline?.[stats.timeline.length - 1]?.totalNew ?? 0))}
+                  </strong>
+                  <div className="stats-kpi-foot">
+                    <span>
+                      {stats.timeline?.[stats.timeline.length - 1]
+                        ? isPl
+                          ? `Aktualizacja: ${stats.timeline[stats.timeline.length - 1].label}`
+                          : `Update: ${stats.timeline[stats.timeline.length - 1].label}`
+                        : isPl
+                        ? 'Brak danych o przyroście'
+                        : 'No growth data'}
+                    </span>
+                  </div>
+                </article>
               </div>
 
               {stats.summary.totalTowers === 0 ? (
@@ -655,6 +710,38 @@ export function StatsView({
                       </div>
                     </div>
                   </div>
+                  {stats.comparison && stats.comparison.bands.length > 0 && (
+                    <div style={{ marginTop: '24px', borderTop: '1px solid var(--line)', paddingTop: '20px' }}>
+                      <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>
+                        {isPl ? 'Zestawienie pasm częstotliwości: Baza wewnętrzna vs Rejestr UKE' : 'Band Comparison: Internal DB vs UKE Registry'}
+                      </h3>
+                      <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '14px' }}>
+                        {isPl
+                          ? 'Porównanie pasm częstotliwości zarejestrowanych w oficjalnym wykazie UKE oraz zweryfikowanych komórek w bazie BTMap.'
+                          : 'Comparison of frequency bands registered in the official UKE registry vs verified BTMap cells.'}
+                      </p>
+                      <div className="stats-comparison-table-wrap">
+                        <table className="stats-comparison-table">
+                          <thead>
+                            <tr>
+                              <th>{isPl ? 'Pasmo radiowe' : 'Radio Band'}</th>
+                              <th>{isPl ? 'Rejestr UKE (pozwolenia)' : 'UKE Registry (permits)'}</th>
+                              <th>{isPl ? 'Baza wewnętrzna BTMap' : 'BTMap Internal DB'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {stats.comparison.bands.slice(0, 12).map((cb) => (
+                              <tr key={cb.key}>
+                                <td><strong>{cb.tech} {cb.band} MHz</strong></td>
+                                <td><span style={{ color: '#38bdf8', fontWeight: 700 }}>{formatNumber(cb.ukeTotal)}</span></td>
+                                <td><span style={{ color: '#10b981', fontWeight: 700 }}>{formatNumber(cb.btmapTotal)}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </article>
               ) : (
                 <>
@@ -900,18 +987,191 @@ export function StatsView({
                     </div>
                   </div>
 
+                  {/* Row 1.5: Station Growth & Timeline (ile stacji nowych doszło) */}
+                  {stats.timeline && stats.timeline.length > 0 && (
+                    <article className="stats-panel stats-panel-wide">
+                      <div className="stats-panel-head">
+                        <div>
+                          <div className="stats-panel-title-row">
+                            <TrendingUp size={18} className="stats-panel-title-icon" />
+                            <h2>
+                              {isPl
+                                ? 'Przyrost stacji (ile stacji nowych doszło)'
+                                : 'Station Growth & New Additions Timeline'}
+                            </h2>
+                          </div>
+                          <p>
+                            {isPl
+                              ? activeSection === 'btmap'
+                                ? 'Liczba stacji dodanych do bazy wewnętrznej BTMap przez społeczność w kolejnych okresach z podziałem na operatorów i pasma.'
+                                : 'Liczba nowych stacji bazowych dodanych w kolejnych aktualizacjach rejestru UKE z podziałem na operatorów i pasma.'
+                              : 'Number of new base stations added across updates broken down by operator and technology.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="stats-timeline-wrap">
+                        {/* KPI Row */}
+                        <div className="stats-timeline-kpi-row">
+                          <div className="stats-timeline-kpi-box">
+                            <span className="label">
+                              {isPl ? 'Nowe stacje w ostatniej aktualizacji' : 'New stations in latest update'}
+                            </span>
+                            <span className="val">
+                              +{formatNumber(stats.summary.latestNewTowers || (stats.timeline[stats.timeline.length - 1]?.totalNew ?? 0))}
+                            </span>
+                            <span className="sub">
+                              {isPl
+                                ? `Data: ${stats.timeline[stats.timeline.length - 1]?.label || '—'}`
+                                : `Date: ${stats.timeline[stats.timeline.length - 1]?.period || '—'}`}
+                            </span>
+                          </div>
+                          <div className="stats-timeline-kpi-box">
+                            <span className="label">
+                              {isPl ? 'Średnio na aktualizację' : 'Average per update'}
+                            </span>
+                            <span className="val">
+                              +{formatNumber(
+                                Math.round(
+                                  stats.timeline.reduce((sum, t) => sum + t.totalNew, 0) / stats.timeline.length
+                                )
+                              )}
+                            </span>
+                            <span className="sub">
+                              {isPl
+                                ? `Łącznie ${stats.timeline.length} zarejestrowanych partii aktualizacji`
+                                : `${stats.timeline.length} recorded update batches`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Interactive Bar Chart */}
+                        <div className="stats-timeline-chart-box">
+                          <div className="stats-timeline-columns">
+                            {(() => {
+                              const maxNew = Math.max(...stats.timeline.map((t) => t.totalNew), 1);
+                              return stats.timeline.map((item, idx) => {
+                                const isSelected = (selectedTimelineIdx ?? (stats.timeline!.length - 1)) === idx;
+                                const barHeight = Math.max(26, Math.round((item.totalNew / maxNew) * 160));
+                                return (
+                                  <button
+                                    key={item.period}
+                                    type="button"
+                                    className={`stats-timeline-col ${isSelected ? 'is-active' : ''}`}
+                                    onClick={() => setSelectedTimelineIdx(idx)}
+                                    title={`${item.label}: +${formatNumber(item.totalNew)} stacji`}
+                                  >
+                                    <span className="stats-timeline-count-badge">
+                                      +{formatNumber(item.totalNew)}
+                                    </span>
+                                    <div
+                                      className="stats-timeline-bar-track"
+                                      style={{ height: `${barHeight}px` }}
+                                    >
+                                      {item.operators.map((op) => {
+                                        const pct = (op.count / item.totalNew) * 100;
+                                        return (
+                                          <div
+                                            key={op.operator}
+                                            className="stats-timeline-segment"
+                                            style={{
+                                              height: `${pct}%`,
+                                              background: getOperatorColor(op.operator),
+                                            }}
+                                            title={`${op.operator}: +${formatNumber(op.count)}`}
+                                          />
+                                        );
+                                      })}
+                                    </div>
+                                    <span className="stats-timeline-date-label">
+                                      {item.label}
+                                    </span>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+
+                          {/* Selected Period Details */}
+                          {(() => {
+                            const currentIdx = selectedTimelineIdx ?? (stats.timeline.length - 1);
+                            const current = stats.timeline[currentIdx];
+                            if (!current) return null;
+                            return (
+                              <div className="stats-timeline-details-panel">
+                                <div className="stats-timeline-detail-head">
+                                  <strong>
+                                    {isPl
+                                      ? `Szczegóły aktualizacji z dnia ${current.label}`
+                                      : `Update details: ${current.label}`}
+                                  </strong>
+                                  <span>
+                                    +{formatNumber(current.totalNew)} {isPl ? 'nowych stacji' : 'new stations'}
+                                  </span>
+                                </div>
+                                <div className="stats-timeline-ops-grid">
+                                  {current.operators.map((op) => (
+                                    <div key={op.operator} className="stats-timeline-op-chip">
+                                      <span className="stats-timeline-op-title">
+                                        <i style={{ background: getOperatorColor(op.operator) }} />
+                                        {op.operator}
+                                      </span>
+                                      <span className="stats-timeline-op-num">
+                                        +{formatNumber(op.count)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {current.topBands && current.topBands.length > 0 && (
+                                  <div className="stats-timeline-topbands">
+                                    <strong>{isPl ? 'Najważniejsze nowe pasma w tym wykazie:' : 'Top new bands in this update:'}</strong>
+                                    {current.topBands.map((b) => (
+                                      <span key={b.band} className="stats-timeline-band-pill">
+                                        {b.band} (+{formatNumber(b.count)})
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </article>
+                  )}
+
                   {/* Row 2: Unique Stations by Band */}
                   <article className="stats-panel stats-panel-wide">
                     <div className="stats-panel-head">
                       <div>
-                        <h2>{isPl ? 'Unikalne stacje według pasma (MHz)' : 'Unique Stations by Frequency Band (MHz)'}</h2>
+                        <h2>{isPl ? 'Unikalne stacje według pasma (ile danego pasma)' : 'Unique Stations by Frequency Band'}</h2>
                         <p>
                           {isPl
                             ? 'Liczba stacji bazowych wyposażonych w poszczególne pasma radiowe z podziałem na operatorów.'
                             : 'Number of base stations equipped with each frequency band broken down by operator.'}
                         </p>
                       </div>
-                      <div className="stats-tech-filter-pills">
+                      <div className="stats-panel-actions-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {stats.comparison && stats.comparison.bands.length > 0 && (
+                          <button
+                            type="button"
+                            className={`stats-compare-toggle-btn ${showComparison ? 'is-active' : ''}`}
+                            onClick={() => setShowComparison(!showComparison)}
+                            title={isPl ? 'Porównaj pasma pomiędzy Rejestrem UKE a Bazą wewnętrzną BTMap' : 'Compare bands between UKE Registry and BTMap Internal DB'}
+                          >
+                            <BarChart3 size={14} />
+                            <span>
+                              {isPl
+                                ? showComparison
+                                  ? 'Ukryj porównanie baz'
+                                  : 'Porównaj pasma: BTMap vs UKE'
+                                : showComparison
+                                ? 'Hide Comparison'
+                                : 'Compare Bands: BTMap vs UKE'}
+                            </span>
+                          </button>
+                        )}
+                        <div className="stats-tech-filter-pills">
                         {(['ALL', '5G', 'LTE', 'UMTS', 'GSM', 'OTHER'] as const).map((tf) => (
                           <button
                             key={tf}
@@ -932,6 +1192,62 @@ export function StatsView({
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                    {showComparison && stats.comparison && stats.comparison.bands.length > 0 && (
+                      <div className="stats-comparison-panel">
+                        <div className="stats-comparison-table-wrap">
+                          <table className="stats-comparison-table">
+                            <thead>
+                              <tr>
+                                <th>{isPl ? 'Pasmo radiowe' : 'Radio Band'}</th>
+                                <th>{isPl ? 'Rejestr UKE (pozwolenia)' : 'UKE Registry (permits)'}</th>
+                                <th>{isPl ? 'Baza wewnętrzna BTMap' : 'BTMap Internal DB'}</th>
+                                <th>{isPl ? 'Wizualizacja proporcji' : 'Ratio'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {stats.comparison.bands.map((cb) => {
+                                const maxVal = Math.max(cb.ukeTotal, cb.btmapTotal, 1);
+                                const ukeW = (cb.ukeTotal / maxVal) * 100;
+                                const btmapW = (cb.btmapTotal / maxVal) * 100;
+                                return (
+                                  <tr key={cb.key}>
+                                    <td>
+                                      <strong>{cb.tech} {cb.band} MHz</strong>
+                                    </td>
+                                    <td>
+                                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                                        {formatNumber(cb.ukeTotal)}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span style={{ color: '#10b981', fontWeight: 700 }}>
+                                        {formatNumber(cb.btmapTotal)}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div className="stats-comparison-bar-track">
+                                        <div
+                                          className="stats-comparison-bar-uke"
+                                          style={{ width: `${ukeW}%` }}
+                                          title={`UKE: ${formatNumber(cb.ukeTotal)}`}
+                                        />
+                                        <div
+                                          className="stats-comparison-bar-btmap"
+                                          style={{ width: `${btmapW}%` }}
+                                          title={`BTMap: ${formatNumber(cb.btmapTotal)}`}
+                                        />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="stats-stacked-bars">
                       {filteredBands.map((b) => {
