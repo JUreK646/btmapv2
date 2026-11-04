@@ -718,25 +718,11 @@ export function StatsView({
         {/* Modern Top Header with btmap.v2 Branding */}
         <header className="growth-header">
           <div className="growth-header-left">
-            <div className="growth-brand">
-              <div className="growth-brand-badge">
-                <RadioTower size={22} className="growth-brand-icon" />
-              </div>
-              <div className="growth-brand-meta">
-                <div className="growth-brand-title-row">
-                  <span className="growth-brand-name">btmap</span>
-                  <span className="growth-brand-tag">.v2</span>
-                </div>
-                <span className="growth-brand-sub">
-                  {isPl ? 'Wskaźniki przyrostu sieci' : 'Network Growth & Telemetry'}
-                </span>
-              </div>
-            </div>
-
-            <div className="growth-header-vdivider" />
-
             <div className="growth-title-box">
               <div className="growth-title-row">
+                <div className="growth-title-icon-badge">
+                  <TrendingUp size={20} />
+                </div>
                 <h1>
                   {isPl
                     ? `Raport miesięczny: ${activeReport?.title || 'Październik 2026'}`
@@ -749,8 +735,8 @@ export function StatsView({
               </div>
               <span className="growth-subtitle">
                 {growthSource === 'UKE'
-                  ? (isPl ? 'Oficjalny Rejestr Pozwoleń Radiowych UKE' : 'Official UKE Radio Permit Registry')
-                  : (isPl ? 'Wewnętrzna zweryfikowana baza stacji BTMap' : 'Internal Verified BTMap Station Database')}
+                  ? (isPl ? 'Oficjalny Rejestr Pozwoleń Radiowych UKE (stan na 26.10.2026)' : 'Official UKE Radio Permit Registry (as of 2026-10-26)')
+                  : (isPl ? 'Wewnętrzna zweryfikowana baza stacji BTMap (stan na październik 2026)' : 'Internal Verified BTMap Station Database (October 2026)')}
               </span>
             </div>
           </div>

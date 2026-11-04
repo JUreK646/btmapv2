@@ -246,6 +246,14 @@ export function openDatabase(
     COMMIT;`);
   }
 
+  if (!db.prepare("SELECT value FROM metadata WHERE key='btmapCommunitySourcesV3'").get()) {
+    db.exec(`BEGIN;
+      UPDATE towers SET source='BTMAP' WHERE addedBy = 'Import KML';
+      UPDATE towers SET source='UKE' WHERE addedBy = 'AutoSync BIP UKE';
+      INSERT OR REPLACE INTO metadata(key,value) VALUES('btmapCommunitySourcesV3','1');
+    COMMIT;`);
+  }
+
   db.function('fold', { deterministic: true }, value =>
     String(value ?? '')
       .normalize('NFD')
