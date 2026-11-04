@@ -21,6 +21,7 @@ import {
   Compass,
   History,
   ChevronRight,
+  Navigation,
 } from 'lucide-react';
 import type { Tower, Operator, Band, User } from '../types';
 import { cachedPemReports, freshPemReports, loadPemReports, pemSummary } from '../lib/pemCache';
@@ -28,6 +29,8 @@ import PemReportsDialog from './PemReportsDialog';
 import PemReportList from './PemReportList';
 import StationComments from './StationComments';
 import StationHistoryDialog from './StationHistoryDialog';
+import NavigationDialog from './NavigationDialog';
+import { formatDms } from '../lib/geoCoords';
 import type { PemReportsResult } from '../../shared/pem';
 import { operatorColor, towerTechs } from '../lib/constants';
 import { useI18n } from '../lib/i18n';
@@ -302,6 +305,7 @@ export default function DetailsPanel({
   const [reportOpen, setReportOpen] = useState<string | null>(null);
   const [copied, setCopied] = useState<'link' | 'gps' | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   const pemOperator = tower.operators[operator]?.name || '';
   const [reportData, setReportData] = useState<{ towerId: string; operator: string; result: PemReportsResult | null }>(
@@ -320,6 +324,7 @@ export default function DetailsPanel({
     setReportOpen(null);
     setCopied(null);
     setHistoryOpen(false);
+    setNavOpen(false);
   }, [tower.id]);
 
   useEffect(() => {
@@ -450,6 +455,16 @@ export default function DetailsPanel({
             )}
             <button
               type="button"
+              className="header-profile-btn header-nav-btn"
+              onClick={() => setNavOpen(true)}
+              title={isPl ? "Nawiguj do stacji (Google Maps, Waze, Apple Maps, GPX)" : "Navigate to station (Google Maps, Waze, Apple Maps, GPX)"}
+              aria-label={isPl ? "Nawiguj do stacji" : "Navigate to station"}
+            >
+              <Navigation size={14} />
+              <span>{t.detailsNavigate}</span>
+            </button>
+            <button
+              type="button"
               className="header-profile-btn"
               onClick={() => setHistoryOpen(true)}
               title={isPl ? "Historia stacji i zmian pozwoleń UKE" : "Station & UKE permit history"}
@@ -550,14 +565,30 @@ export default function DetailsPanel({
               {t.detailsCoordinates}
             </dt>
             <dd className="station-gps">
-              <span>{coordinates}</span>
-              <button
-                className="icon-button"
-                onClick={() => void copy('gps')}
-                aria-label={copied === 'gps' ? t.detailsGpsCopied : t.detailsCopyGps}
-              >
-                {copied === 'gps' ? <Check size={14} /> : <Copy size={14} />}
-              </button>
+              <div className="station-gps-data">
+                <span className="station-gps-dd">{coordinates}</span>
+                <span className="station-gps-dms" title="Format DMS (stopnie, minuty, sekundy)">{formatDms(tower.lat, tower.lng)}</span>
+              </div>
+              <div className="station-gps-actions">
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setNavOpen(true)}
+                  aria-label={isPl ? "Otwórz nawigację i formaty GPS" : "Open navigation & GPS formats"}
+                  title={isPl ? "Nawiguj do stacji / Formaty GPS" : "Navigate to station / GPS formats"}
+                >
+                  <Navigation size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => void copy('gps')}
+                  aria-label={copied === 'gps' ? t.detailsGpsCopied : t.detailsCopyGps}
+                  title={copied === 'gps' ? t.detailsGpsCopied : t.detailsCopyGps}
+                >
+                  {copied === 'gps' ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
             </dd>
           </div>
           <div>
@@ -675,6 +706,14 @@ export default function DetailsPanel({
           reports={reports.reports.filter(r => r.kind === 'pdf')}
           initialReportId={reportOpen}
           onClose={() => setReportOpen(null)}
+        />
+      )}
+
+      {navOpen && (
+        <NavigationDialog
+          tower={tower}
+          onClose={() => setNavOpen(false)}
+          onNotice={onNotice}
         />
       )}
 
