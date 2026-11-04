@@ -233,6 +233,18 @@ function getOperatorColor(name: string): string {
   return operatorColor(name);
 }
 
+function getBtsOperatorColor(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('plus') || n.includes('towerlink') || n.includes('polkomtel')) return '#13fb76';
+  if (n.includes('t-mobile') || n.includes('tmobile')) return '#e20074';
+  if (n.includes('orange')) return '#ff7900';
+  if (n.includes('play')) return '#6c43bf';
+  if (n.includes('pkp') || n.includes('plk')) return '#0066cc';
+  if (n.includes('pge')) return '#448aff';
+  if (n.includes('emitel')) return '#06b6d4';
+  return '#94a3b8';
+}
+
 function formatPct(value: number): string {
   if (value <= 0) return '0%';
   if (value < 0.1) return '<0.1%';
@@ -528,6 +540,444 @@ export function StatsView({
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
 
+  if (activeSection === 'growth') {
+    const reports = stats?.monthlyReports || [];
+    const safeIdx = Math.min(Math.max(0, growthPeriodIdx), Math.max(0, reports.length - 1));
+    const activeReport = reports[safeIdx];
+
+    const BTS_OPERATOR_ORDER: Record<string, number> = {
+      'Plus': 1,
+      'T-Mobile': 2,
+      'Orange': 3,
+      'Play': 4,
+      'PGE Systemy': 5,
+      'PKP PLK': 6,
+    };
+
+    const sortOps = (list: StatsGrowthOperatorBar[]) => {
+      return [...list].sort(
+        (a, b) => (BTS_OPERATOR_ORDER[a.operator] || 99) - (BTS_OPERATOR_ORDER[b.operator] || 99)
+      );
+    };
+
+    return (
+      <section className="stats-growth-fullview" onWheel={handlePeriodWheel}>
+        {/* Top BTSearch Header */}
+        <header className="bts-header">
+          <div className="bts-header-left">
+            <div className="bts-brand-logo">
+              <span className="bts-brand-icon">
+                <Radio size={26} color="#ffffff" />
+              </span>
+              <span className="bts-brand-name">BTSEARCH</span>
+            </div>
+            <div className="bts-header-vdivider" />
+            <div className="bts-title-box">
+              <h1>
+                {isPl
+                  ? `Baza danych w miesiącu ${activeReport?.title || 'październik 2026'}`
+                  : `Database in month ${activeReport?.title || 'October 2026'}`}
+              </h1>
+              <span className="bts-subtitle">
+                {activeReport?.dateRange || 'Dane od 2026-10-01 do 2026-10-31'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bts-header-right">
+            <div className="bts-legend">
+              <div className="bts-legend-item">
+                <span className="bts-box-all" />
+                <span>{isPl ? 'Wszystkie' : 'All'}</span>
+              </div>
+              <div className="bts-legend-item">
+                <span className="bts-box-new" />
+                <span>{isPl ? 'Nowe' : 'New'}</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Minimalist Controls & Period Switcher */}
+        <div className="bts-controls-bar">
+          <div className="bts-period-navigator">
+            <button
+              type="button"
+              className="bts-arrow-btn"
+              disabled={safeIdx <= 0}
+              onClick={() => setGrowthPeriodIdx((prev) => Math.max(0, prev - 1))}
+              title={isPl ? 'Poprzedni wykaz' : 'Previous batch'}
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <div ref={periodScrollRef} className="bts-period-track">
+              {reports.map((rep, idx) => (
+                <button
+                  key={rep.id}
+                  type="button"
+                  className={`bts-period-pill ${idx === safeIdx ? 'is-active' : ''}`}
+                  onClick={() => setGrowthPeriodIdx(idx)}
+                >
+                  {rep.title}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className="bts-arrow-btn"
+              disabled={safeIdx >= reports.length - 1}
+              onClick={() => setGrowthPeriodIdx((prev) => Math.min(reports.length - 1, prev + 1))}
+              title={isPl ? 'Następny wykaz' : 'Next batch'}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          <div className="bts-toolbar-filters">
+            <span className="bts-scroll-hint">
+              {isPl ? 'Przewijaj kółkiem myszy, aby zmieniać wykaz' : 'Scroll wheel over page to switch batches'}
+            </span>
+            <div className="bts-pills-group">
+              <button
+                type="button"
+                className={`bts-filter-pill ${growthSource === 'UKE' ? 'is-active' : ''}`}
+                onClick={() => {
+                  setGrowthSource('UKE');
+                  fetchStats('UKE');
+                }}
+              >
+                {isPl ? 'Rejestr UKE' : 'UKE Registry'}
+              </button>
+              <button
+                type="button"
+                className={`bts-filter-pill ${growthSource === 'BTMAP' ? 'is-active' : ''}`}
+                onClick={() => {
+                  setGrowthSource('BTMAP');
+                  fetchStats('BTMAP');
+                }}
+              >
+                {isPl ? 'Baza BTMap' : 'BTMap DB'}
+              </button>
+            </div>
+
+            <div className="bts-pills-group">
+              <button
+                type="button"
+                className={`bts-filter-pill ${growthBandMode === 'cells' ? 'is-active' : ''}`}
+                onClick={() => setGrowthBandMode('cells')}
+              >
+                {isPl ? 'Komórki' : 'Cells'}
+              </button>
+              <button
+                type="button"
+                className={`bts-filter-pill ${growthBandMode === 'stations' ? 'is-active' : ''}`}
+                onClick={() => setGrowthBandMode('stations')}
+              >
+                {isPl ? 'Stacje' : 'Sites'}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="bts-filter-pill"
+              onClick={() => setSection('uke')}
+              title={isPl ? 'Wróć do statystyk ogólnych' : 'Return to general stats'}
+            >
+              ✕ {isPl ? 'Zamknij' : 'Close'}
+            </button>
+          </div>
+        </div>
+
+        {loading && !stats ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', color: '#13fb76' }}>
+            <RefreshCw className="spin" size={32} />
+          </div>
+        ) : activeReport ? (
+          <>
+            {/* Section 1: WG OPERATORA (3 columns x 2 rows) */}
+            <div className="bts-section-title">{isPl ? 'WG OPERATORA' : 'BY OPERATOR'}</div>
+
+            <div className="bts-top-grid">
+              {/* Row 1, Card 1: Stacje */}
+              {(() => {
+                const m = activeReport.metrics.stations;
+                const sorted = sortOps(m.operators);
+                const maxVal = Math.max(...sorted.map((o) => o.total), 1);
+                return (
+                  <div className="bts-metric-box">
+                    <div className="bts-metric-header">
+                      <span className="bts-metric-label">{isPl ? 'Stacje' : 'Sites'}</span>
+                      <span className="bts-metric-new-sum">+{formatNumber(m.newTotal)}</span>
+                    </div>
+                    <div className="bts-bars-row">
+                      {sorted.map((op) => {
+                        const barH = Math.max(20, Math.round((op.total / maxVal) * 125));
+                        const hatchH = op.newCount > 0 ? Math.max(22, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                        const opC = getBtsOperatorColor(op.operator);
+                        return (
+                          <div key={op.operator} className="bts-bar-col" title={`${op.operator}: ${formatNumber(op.total)} stacji (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
+                            <span className="bts-bar-num-top">{formatNumber(op.total)}</span>
+                            <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
+                              {hatchH > 0 && (
+                                <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                  <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                  <span className="h-pct">{op.newPercent}%</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="bts-bar-op-label">{op.operator}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Row 1, Card 2: Komórki */}
+              {(() => {
+                const m = activeReport.metrics.cells;
+                const sorted = sortOps(m.operators);
+                const maxVal = Math.max(...sorted.map((o) => o.total), 1);
+                return (
+                  <div className="bts-metric-box">
+                    <div className="bts-metric-header">
+                      <span className="bts-metric-label">{isPl ? 'Komórki' : 'Cells'}</span>
+                      <span className="bts-metric-new-sum">+{formatNumber(m.newTotal)}</span>
+                    </div>
+                    <div className="bts-bars-row">
+                      {sorted.map((op) => {
+                        const barH = Math.max(20, Math.round((op.total / maxVal) * 125));
+                        const hatchH = op.newCount > 0 ? Math.max(22, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                        const opC = getBtsOperatorColor(op.operator);
+                        return (
+                          <div key={op.operator} className="bts-bar-col" title={`${op.operator}: ${formatNumber(op.total)} komórek (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
+                            <span className="bts-bar-num-top">{formatNumber(op.total)}</span>
+                            <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
+                              {hatchH > 0 && (
+                                <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                  <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                  <span className="h-pct">{op.newPercent}%</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="bts-bar-op-label">{op.operator}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Row 1, Card 3: PCI */}
+              {(() => {
+                const m = activeReport.metrics.permits;
+                const sorted = sortOps(m.operators);
+                const maxVal = Math.max(...sorted.map((o) => o.total), 1);
+                return (
+                  <div className="bts-metric-box">
+                    <div className="bts-metric-header">
+                      <span className="bts-metric-label">{isPl ? 'PCI' : 'PCI'}</span>
+                      <span className="bts-metric-new-sum">+{formatNumber(m.newTotal)}</span>
+                    </div>
+                    <div className="bts-bars-row">
+                      {sorted.map((op) => {
+                        const barH = Math.max(20, Math.round((op.total / maxVal) * 125));
+                        const hatchH = op.newCount > 0 ? Math.max(22, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                        const opC = getBtsOperatorColor(op.operator);
+                        return (
+                          <div key={op.operator} className="bts-bar-col" title={`${op.operator}: ${formatNumber(op.total)} (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
+                            <span className="bts-bar-num-top">{formatNumber(op.total)}</span>
+                            <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
+                              {hatchH > 0 && (
+                                <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                  <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                  <span className="h-pct">{op.newPercent}%</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="bts-bar-op-label">{op.operator}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Row 2, Card 1: Azymuty */}
+              {(() => {
+                const m = activeReport.metrics.azimuths;
+                const baseOps = ['Plus', 'T-Mobile', 'Orange', 'Play', 'PGE Systemy', 'PKP PLK'];
+                const opMap = new Map(m.operators.map((o) => [o.operator, o]));
+                const displayList = baseOps.map((name) => opMap.get(name) || { operator: name, total: 0, newCount: 0, newPercent: 0 });
+                const maxVal = Math.max(...displayList.map((o) => o.total), 1);
+                return (
+                  <div className="bts-metric-box">
+                    <div className="bts-metric-header">
+                      <span className="bts-metric-label">{isPl ? 'Azymuty' : 'Azimuths'}</span>
+                      <span className="bts-metric-new-sum">+{formatNumber(m.newTotal)}</span>
+                    </div>
+                    <div className="bts-bars-row">
+                      {displayList.map((op) => {
+                        const barH = op.total > 0 ? Math.max(16, Math.round((op.total / maxVal) * 125)) : 4;
+                        const hatchH = op.newCount > 0 ? Math.max(22, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                        const opC = getBtsOperatorColor(op.operator);
+                        return (
+                          <div key={op.operator} className="bts-bar-col" title={`${op.operator}: ${formatNumber(op.total)} azymutów (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
+                            <span className="bts-bar-num-top">{op.total > 0 ? formatNumber(op.total) : '—'}</span>
+                            <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: op.total > 0 ? opC : '#222' }}>
+                              {hatchH > 0 && (
+                                <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                  <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                  <span className="h-pct">{op.newPercent}%</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="bts-bar-op-label">{op.operator}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Row 2, Card 2: NetWorks ID */}
+              {(() => {
+                const m = activeReport.metrics.radiolines;
+                const sorted = sortOps(m.operators).filter((o) => ['T-Mobile', 'Orange', 'Plus', 'Play'].includes(o.operator));
+                const maxVal = Math.max(...sorted.map((o) => o.total), 1);
+                return (
+                  <div className="bts-metric-box">
+                    <div className="bts-metric-header">
+                      <span className="bts-metric-label">{isPl ? 'NetWorks ID' : 'NetWorks ID'}</span>
+                      <span className="bts-metric-new-sum">+{formatNumber(m.newTotal)}</span>
+                    </div>
+                    <div className="bts-bars-row">
+                      {sorted.map((op) => {
+                        const barH = Math.max(20, Math.round((op.total / maxVal) * 125));
+                        const hatchH = op.newCount > 0 ? Math.max(22, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                        const opC = getBtsOperatorColor(op.operator);
+                        return (
+                          <div key={op.operator} className="bts-bar-col" title={`${op.operator}: ${formatNumber(op.total)} (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
+                            <span className="bts-bar-num-top">{formatNumber(op.total)}</span>
+                            <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
+                              {hatchH > 0 && (
+                                <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                  <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                  <span className="h-pct">{op.newPercent}%</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="bts-bar-op-label">{op.operator}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Row 2, Card 3: Zdjęcia */}
+              {(() => {
+                const m = activeReport.metrics.photos;
+                const baseOps = ['Plus', 'T-Mobile', 'Orange', 'Play', 'PGE Systemy', 'PKP PLK'];
+                const opMap = new Map(m.operators.map((o) => [o.operator, o]));
+                const displayList = baseOps.map((name) => opMap.get(name) || { operator: name, total: 0, newCount: 0, newPercent: 0 });
+                const maxVal = Math.max(...displayList.map((o) => o.total), 1);
+                return (
+                  <div className="bts-metric-box">
+                    <div className="bts-metric-header">
+                      <span className="bts-metric-label">{isPl ? 'Zdjęcia' : 'Photos'}</span>
+                      <span className="bts-metric-new-sum">+{formatNumber(m.newTotal)}</span>
+                    </div>
+                    <div className="bts-bars-row">
+                      {displayList.map((op) => {
+                        const barH = op.total > 0 ? Math.max(16, Math.round((op.total / maxVal) * 125)) : 4;
+                        const hatchH = op.newCount > 0 ? Math.max(22, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                        const opC = getBtsOperatorColor(op.operator);
+                        return (
+                          <div key={op.operator} className="bts-bar-col" title={`${op.operator}: ${formatNumber(op.total)} zdjęć`}>
+                            <span className="bts-bar-num-top">{op.total > 0 ? formatNumber(op.total) : '—'}</span>
+                            <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: op.total > 0 ? opC : '#222' }}>
+                              {hatchH > 0 && (
+                                <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                  <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                  <span className="h-pct">{op.newPercent}%</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="bts-bar-op-label">{op.operator}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="bts-divider" />
+
+            {/* Section 2: KOMÓRKI WG PASMA (5 columns x 3 rows) */}
+            <div className="bts-section-title">
+              {growthBandMode === 'cells'
+                ? isPl ? 'KOMÓRKI WG PASMA' : 'CELLS BY BAND'
+                : isPl ? 'STACJE WG PASMA' : 'SITES BY BAND'}
+            </div>
+
+            <div className="bts-bands-grid">
+              {activeReport.bands.map((b) => {
+                const opList = growthBandMode === 'cells' ? b.operatorCells : b.operatorStations;
+                const presentOps = sortOps(opList.filter((o) => o.total > 0));
+                const maxVal = Math.max(...presentOps.map((o) => o.total), 1);
+
+                return (
+                  <div key={b.key} className="bts-band-cell">
+                    <div className="bts-band-title">{b.key}</div>
+                    {presentOps.length > 0 ? (
+                      <div className="bts-band-bars-row">
+                        {presentOps.map((op) => {
+                          const barH = Math.max(16, Math.round((op.total / maxVal) * 85));
+                          const hatchH = op.newCount > 0 ? Math.max(20, Math.min(barH, Math.round((op.newCount / Math.max(op.total, 1)) * barH * 2.2))) : 0;
+                          const opC = getBtsOperatorColor(op.operator);
+                          return (
+                            <div
+                              key={op.operator}
+                              className="bts-band-bar-col"
+                              title={`${b.key} - ${op.operator}: ${formatNumber(op.total)} (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}
+                            >
+                              <span className="bts-bar-num-top">{formatNumber(op.total)}</span>
+                              <div className="bts-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
+                                {hatchH > 0 && (
+                                  <div className="bts-bar-hatched" style={{ height: `${hatchH}px` }}>
+                                    <span className="h-num">+{formatNumber(op.newCount)}</span>
+                                    <span className="h-pct">{op.newPercent}%</span>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="bts-bar-op-label">{op.operator}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="bts-band-empty">{isPl ? 'Brak stacji' : 'No stations'}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <section className="content-view stats-dashboard">
       {/* Top Header */}
@@ -569,8 +1019,8 @@ export function StatsView({
               <button
                 type="button"
                 role="tab"
-                aria-selected={activeSection === 'growth'}
-                className={activeSection === 'growth' ? 'active' : ''}
+                aria-selected={(activeSection as string) === 'growth'}
+                className={(activeSection as string) === 'growth' ? 'active' : ''}
                 onClick={() => setSection('growth')}
               >
                 {isPl ? 'Nowe stacje i pasma' : 'New Sites & Bands'}
@@ -1767,405 +2217,6 @@ export function StatsView({
               </article>
             </>
           )}
-
-          {/* =========================================================
-              SECTION: NOWE STACJE I PASMA (MONTHLY GROWTH DASHBOARD)
-             ========================================================= */}
-          {activeSection === 'growth' && (() => {
-            const reports = stats.monthlyReports || [];
-            const safeIdx = Math.min(Math.max(0, growthPeriodIdx), Math.max(0, reports.length - 1));
-            const activeReport = reports[safeIdx];
-
-            return (
-              <div className="stats-growth-dashboard">
-                {/* Hero Header Card matching BTSearch layout */}
-                <article className="stats-growth-hero-card">
-                  <div className="stats-growth-header-top">
-                    <div className="stats-growth-title-group">
-                      <h2>
-                        <TrendingUp size={22} style={{ color: '#10b981' }} />
-                        <span>
-                          {isPl
-                            ? `Baza danych w okresie: ${activeReport?.title || 'Brak danych'}`
-                            : `Database Report: ${activeReport?.title || 'No data'}`}
-                        </span>
-                      </h2>
-                      <p>{activeReport?.dateRange || (isPl ? 'Brak zakresu dat' : 'No date range')}</p>
-                    </div>
-
-                    <div className="stats-growth-legend">
-                      <div className="stats-legend-box">
-                        <span className="stats-legend-box-all" />
-                        <span>{isPl ? 'Wszystkie' : 'All existing'}</span>
-                      </div>
-                      <div className="stats-legend-box">
-                        <span className="stats-legend-box-new" />
-                        <span>{isPl ? 'Nowe w wykazie' : 'New additions'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Period Switcher Carousel with Mouse Wheel & Arrow Nav */}
-                  <div className="stats-period-navigator-wrap">
-                    <div className="stats-period-nav-row">
-                      <button
-                        type="button"
-                        className="stats-period-nav-arrow"
-                        disabled={safeIdx <= 0}
-                        onClick={() => setGrowthPeriodIdx((prev) => Math.max(0, prev - 1))}
-                        title={isPl ? 'Poprzedni wykaz / okres' : 'Previous period'}
-                      >
-                        <ChevronLeft size={18} />
-                      </button>
-
-                      <div
-                        ref={periodScrollRef}
-                        className="stats-growth-period-track"
-                        onWheel={handlePeriodWheel}
-                      >
-                        {reports.map((rep, idx) => (
-                          <button
-                            key={rep.id}
-                            type="button"
-                            className={`stats-growth-period-pill ${idx === safeIdx ? 'is-active' : ''}`}
-                            onClick={() => setGrowthPeriodIdx(idx)}
-                          >
-                            <span className="pill-title">{rep.title}</span>
-                            <span className="pill-dates">{rep.dateRange}</span>
-                          </button>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        className="stats-period-nav-arrow"
-                        disabled={safeIdx >= reports.length - 1}
-                        onClick={() => setGrowthPeriodIdx((prev) => Math.min(reports.length - 1, prev + 1))}
-                        title={isPl ? 'Następny wykaz / okres' : 'Next period'}
-                      >
-                        <ChevronRight size={18} />
-                      </button>
-                    </div>
-
-                    <div className="stats-period-hint">
-                      <Sparkles size={13} style={{ color: '#10b981' }} />
-                      <span>
-                        {isPl
-                          ? 'Możesz przewijać kółkiem myszy nad osią czasu lub używać strzałek, aby płynnie przełączać wykazy.'
-                          : 'Scroll mouse wheel over timeline or use arrow buttons to switch update batches.'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Toolbar: Source & View Mode */}
-                  <div className="stats-growth-toolbar">
-                    <div className="stats-growth-toolbar-group">
-                      <span className="stats-growth-toolbar-label">{isPl ? 'Źródło danych:' : 'Data source:'}</span>
-                      <div className="stats-tech-filter-pills">
-                        <button
-                          type="button"
-                          className={`stats-tech-pill ${growthSource === 'UKE' ? 'is-active' : ''}`}
-                          onClick={() => {
-                            setGrowthSource('UKE');
-                            fetchStats('UKE');
-                          }}
-                        >
-                          {isPl ? 'Rejestr UKE' : 'UKE Registry'}
-                        </button>
-                        <button
-                          type="button"
-                          className={`stats-tech-pill ${growthSource === 'BTMAP' ? 'is-active' : ''}`}
-                          onClick={() => {
-                            setGrowthSource('BTMAP');
-                            fetchStats('BTMAP');
-                          }}
-                        >
-                          {isPl ? 'Wewnętrzna baza BTMap' : 'BTMap Community DB'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="stats-growth-toolbar-group">
-                      <span className="stats-growth-toolbar-label">{isPl ? 'Widok pasm:' : 'Band view:'}</span>
-                      <div className="stats-tech-filter-pills">
-                        <button
-                          type="button"
-                          className={`stats-tech-pill ${growthBandMode === 'cells' ? 'is-active' : ''}`}
-                          onClick={() => setGrowthBandMode('cells')}
-                        >
-                          {isPl ? 'Komórki wg pasma' : 'Cells by band'}
-                        </button>
-                        <button
-                          type="button"
-                          className={`stats-tech-pill ${growthBandMode === 'stations' ? 'is-active' : ''}`}
-                          onClick={() => setGrowthBandMode('stations')}
-                        >
-                          {isPl ? 'Stacje wg pasma' : 'Sites by band'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-
-                {/* Section 1: WG OPERATORA */}
-                <div className="stats-growth-section-head">
-                  <h3>{isPl ? 'WG OPERATORA' : 'BY OPERATOR'}</h3>
-                  <span>{isPl ? 'Stacje bazowe, sektory i parametry radiowe' : 'Sites, sectors and cellular params'}</span>
-                </div>
-
-                <div className="stats-growth-metrics-row">
-                  {/* Stacje */}
-                  {activeReport?.metrics.stations && (() => {
-                    const m = activeReport.metrics.stations;
-                    const maxVal = Math.max(...m.operators.map((o) => o.total), 1);
-                    return (
-                      <article className="stats-growth-metric-card">
-                        <div className="stats-metric-card-head">
-                          <span className="stats-metric-card-title">{isPl ? 'Stacje' : 'Base Sites'}</span>
-                          <span className="stats-metric-card-new-badge">+{formatNumber(m.newTotal)}</span>
-                        </div>
-                        <div className="stats-operator-bars-group">
-                          {m.operators.map((op) => {
-                            const barH = Math.max(34, Math.round((op.total / maxVal) * 110));
-                            const hatchH = op.total > 0 && op.newCount > 0 ? Math.max(16, Math.min(barH, Math.round((op.newCount / op.total) * barH))) : 0;
-                            const opC = getOperatorColor(op.operator);
-                            return (
-                              <div key={op.operator} className="stats-operator-bar-col" title={`${op.operator}: ${formatNumber(op.total)} stacji (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
-                                <span className="stats-bar-total-num">{formatNumber(op.total)}</span>
-                                <div className="stats-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
-                                  {hatchH > 0 && (
-                                    <div className="stats-bar-hatched-segment" style={{ height: `${hatchH}px` }}>
-                                      <span className="num">+{op.newCount}</span>
-                                      <span className="pct">{op.newPercent}%</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="stats-bar-op-label">{op.operator}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    );
-                  })()}
-
-                  {/* Komórki */}
-                  {activeReport?.metrics.cells && (() => {
-                    const m = activeReport.metrics.cells;
-                    const maxVal = Math.max(...m.operators.map((o) => o.total), 1);
-                    return (
-                      <article className="stats-growth-metric-card">
-                        <div className="stats-metric-card-head">
-                          <span className="stats-metric-card-title">{isPl ? 'Komórki' : 'Cells / Sectors'}</span>
-                          <span className="stats-metric-card-new-badge">+{formatNumber(m.newTotal)}</span>
-                        </div>
-                        <div className="stats-operator-bars-group">
-                          {m.operators.map((op) => {
-                            const barH = Math.max(34, Math.round((op.total / maxVal) * 110));
-                            const hatchH = op.total > 0 && op.newCount > 0 ? Math.max(16, Math.min(barH, Math.round((op.newCount / op.total) * barH))) : 0;
-                            const opC = getOperatorColor(op.operator);
-                            return (
-                              <div key={op.operator} className="stats-operator-bar-col" title={`${op.operator}: ${formatNumber(op.total)} komórek (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
-                                <span className="stats-bar-total-num">{formatNumber(op.total)}</span>
-                                <div className="stats-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
-                                  {hatchH > 0 && (
-                                    <div className="stats-bar-hatched-segment" style={{ height: `${hatchH}px` }}>
-                                      <span className="num">+{op.newCount}</span>
-                                      <span className="pct">{op.newPercent}%</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="stats-bar-op-label">{op.operator}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    );
-                  })()}
-
-                  {/* Pozwolenia */}
-                  {activeReport?.metrics.permits && (() => {
-                    const m = activeReport.metrics.permits;
-                    const maxVal = Math.max(...m.operators.map((o) => o.total), 1);
-                    return (
-                      <article className="stats-growth-metric-card">
-                        <div className="stats-metric-card-head">
-                          <span className="stats-metric-card-title">{isPl ? 'Pozwolenia radiowe' : 'Radio Permits'}</span>
-                          <span className="stats-metric-card-new-badge">+{formatNumber(m.newTotal)}</span>
-                        </div>
-                        <div className="stats-operator-bars-group">
-                          {m.operators.map((op) => {
-                            const barH = Math.max(34, Math.round((op.total / maxVal) * 110));
-                            const hatchH = op.total > 0 && op.newCount > 0 ? Math.max(16, Math.min(barH, Math.round((op.newCount / op.total) * barH))) : 0;
-                            const opC = getOperatorColor(op.operator);
-                            return (
-                              <div key={op.operator} className="stats-operator-bar-col" title={`${op.operator}: ${formatNumber(op.total)} pozwoleń (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
-                                <span className="stats-bar-total-num">{formatNumber(op.total)}</span>
-                                <div className="stats-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
-                                  {hatchH > 0 && (
-                                    <div className="stats-bar-hatched-segment" style={{ height: `${hatchH}px` }}>
-                                      <span className="num">+{op.newCount}</span>
-                                      <span className="pct">{op.newPercent}%</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="stats-bar-op-label">{op.operator}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    );
-                  })()}
-
-                  {/* Azymuty */}
-                  {activeReport?.metrics.azimuths && (() => {
-                    const m = activeReport.metrics.azimuths;
-                    const maxVal = Math.max(...m.operators.map((o) => o.total), 1);
-                    return (
-                      <article className="stats-growth-metric-card">
-                        <div className="stats-metric-card-head">
-                          <span className="stats-metric-card-title">{isPl ? 'Azymuty' : 'Azimuths'}</span>
-                          <span className="stats-metric-card-new-badge">+{formatNumber(m.newTotal)}</span>
-                        </div>
-                        <div className="stats-operator-bars-group">
-                          {m.operators.length > 0 ? (
-                            m.operators.map((op) => {
-                              const barH = Math.max(34, Math.round((op.total / maxVal) * 110));
-                              const hatchH = op.total > 0 && op.newCount > 0 ? Math.max(16, Math.min(barH, Math.round((op.newCount / op.total) * barH))) : 0;
-                              const opC = getOperatorColor(op.operator);
-                              return (
-                                <div key={op.operator} className="stats-operator-bar-col" title={`${op.operator}: ${formatNumber(op.total)} azymutów (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
-                                  <span className="stats-bar-total-num">{formatNumber(op.total)}</span>
-                                  <div className="stats-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
-                                    {hatchH > 0 && (
-                                      <div className="stats-bar-hatched-segment" style={{ height: `${hatchH}px` }}>
-                                        <span className="num">+{op.newCount}</span>
-                                        <span className="pct">{op.newPercent}%</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span className="stats-bar-op-label">{op.operator}</span>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="stats-growth-empty-card">{isPl ? 'Dane azymutów rejestrowane w bazie BTMap' : 'Azimuth data tracked in BTMap'}</div>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })()}
-
-                  {/* Radiolinie */}
-                  {activeReport?.metrics.radiolines && (() => {
-                    const m = activeReport.metrics.radiolines;
-                    const maxVal = Math.max(...m.operators.map((o) => o.total), 1);
-                    return (
-                      <article className="stats-growth-metric-card">
-                        <div className="stats-metric-card-head">
-                          <span className="stats-metric-card-title">{isPl ? 'Radiolinie' : 'Microwave Links'}</span>
-                          <span className="stats-metric-card-new-badge">+{formatNumber(m.newTotal)}</span>
-                        </div>
-                        <div className="stats-operator-bars-group">
-                          {m.operators.slice(0, 5).map((op) => {
-                            const barH = Math.max(34, Math.round((op.total / maxVal) * 110));
-                            const hatchH = op.total > 0 && op.newCount > 0 ? Math.max(16, Math.min(barH, Math.round((op.newCount / op.total) * barH))) : 0;
-                            const opC = getOperatorColor(op.operator);
-                            return (
-                              <div key={op.operator} className="stats-operator-bar-col" title={`${op.operator}: ${formatNumber(op.total)} radiolinii (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}>
-                                <span className="stats-bar-total-num">{formatNumber(op.total)}</span>
-                                <div className="stats-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
-                                  {hatchH > 0 && (
-                                    <div className="stats-bar-hatched-segment" style={{ height: `${hatchH}px` }}>
-                                      <span className="num">+{op.newCount}</span>
-                                      <span className="pct">{op.newPercent}%</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="stats-bar-op-label">{op.operator}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    );
-                  })()}
-                </div>
-
-                {/* Section 2: KOMÓRKI / STACJE WG PASMA */}
-                <div className="stats-growth-section-head">
-                  <h3>
-                    {growthBandMode === 'cells'
-                      ? isPl
-                        ? 'KOMÓRKI WG PASMA'
-                        : 'CELLS BY BAND'
-                      : isPl
-                      ? 'STACJE WG PASMA'
-                      : 'SITES BY BAND'}
-                  </h3>
-                  <span>
-                    {isPl
-                      ? 'Wykresy słupkowe z zaznaczonym przyrostem (wzorzec kreskowany na dole kolumny)'
-                      : 'Operator bar charts with hatched bottom segment representing period additions'}
-                  </span>
-                </div>
-
-                <div className="stats-growth-band-grid">
-                  {activeReport?.bands.map((b) => {
-                    const opList = growthBandMode === 'cells' ? b.operatorCells : b.operatorStations;
-                    const maxVal = Math.max(...opList.map((o) => o.total), 1);
-                    const techClass = b.tech.toLowerCase();
-
-                    return (
-                      <article key={b.key} className="stats-growth-band-card">
-                        <div className="stats-band-card-head">
-                          <span className="stats-band-card-title">{b.key}</span>
-                          <span className={`stats-band-card-tech-tag c-${techClass}`}>
-                            {b.tech} {b.duplex}
-                          </span>
-                        </div>
-
-                        {opList.length > 0 ? (
-                          <div className="stats-operator-bars-group">
-                            {opList.map((op) => {
-                              const barH = Math.max(30, Math.round((op.total / maxVal) * 95));
-                              const hatchH = op.total > 0 && op.newCount > 0 ? Math.max(14, Math.min(barH, Math.round((op.newCount / op.total) * barH))) : 0;
-                              const opC = getOperatorColor(op.operator);
-
-                              return (
-                                <div
-                                  key={op.operator}
-                                  className="stats-operator-bar-col"
-                                  title={`${b.key} - ${op.operator}: ${formatNumber(op.total)} ${growthBandMode === 'cells' ? 'komórek' : 'stacji'} (+${formatNumber(op.newCount)}, ${op.newPercent}%)`}
-                                >
-                                  <span className="stats-bar-total-num">{formatNumber(op.total)}</span>
-                                  <div className="stats-bar-pillar" style={{ height: `${barH}px`, background: opC }}>
-                                    {hatchH > 0 && (
-                                      <div className="stats-bar-hatched-segment" style={{ height: `${hatchH}px` }}>
-                                        <span className="num">+{op.newCount}</span>
-                                        <span className="pct">{op.newPercent}%</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span className="stats-bar-op-label">{op.operator}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="stats-growth-empty-card">
-                            {isPl ? 'Brak stacji w tym paśmie' : 'No stations in this band'}
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
 
           {/* =========================================================
               SECTION 4: JAKOŚĆ DANYCH
