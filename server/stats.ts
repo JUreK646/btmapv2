@@ -89,10 +89,10 @@ export interface StatsPeriodReport {
   metrics: {
     stations: StatsGrowthMetricCard;
     cells: StatsGrowthMetricCard;
-    permits: StatsGrowthMetricCard;
-    azimuths: StatsGrowthMetricCard;
+    cBand: StatsGrowthMetricCard;
+    fourBandLte: StatsGrowthMetricCard;
     radiolines: StatsGrowthMetricCard;
-    photos: StatsGrowthMetricCard;
+    permits: StatsGrowthMetricCard;
   };
   bands: StatsGrowthBandCard[];
 }
@@ -468,8 +468,13 @@ function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'
     let newCells = 0;
     let totalPermits = 0;
     let newPermits = 0;
-    let totalAzimuths = 0;
-    let newAzimuths = 0;
+    let totalCBand = 0;
+    let newCBand = 0;
+    let totalFourBandLte = 0;
+    let newFourBandLte = 0;
+
+    const opCBandMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
+    const opFourBandLteMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
 
     for (const r of rows) {
       totalStations++;
@@ -520,24 +525,21 @@ function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'
         if (isNew) pmData.newCount += bands.length;
 
         const stationBands = new Set<string>();
+        const opLteBands = new Set<string>();
+        let opHasCBand = false;
 
         for (const b of bands) {
-          if (b.azimuth !== undefined && b.azimuth !== null && b.azimuth !== '') {
-            totalAzimuths++;
-            if (isNew) newAzimuths++;
-            let azData = opAzimuthMap.get(opName);
-            if (!azData) {
-              azData = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
-              opAzimuthMap.set(opName, azData);
-            }
-            azData.total++;
-            if (isNew) azData.newCount++;
-          }
-
           let tech = String(b.tech || 'Inne').toUpperCase();
           if (tech === 'NR') tech = '5G';
           const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
           if (!bandNum) continue;
+
+          if (tech === '5G' && (bandNum === '3500' || bandNum === '3600')) {
+            opHasCBand = true;
+          }
+          if (tech === 'LTE' && ['800', '1800', '2100', '2600'].includes(bandNum)) {
+            opLteBands.add(bandNum);
+          }
 
           // Standard band key lookup
           let card: any = null;
@@ -589,6 +591,30 @@ function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'
           }
         }
 
+        if (opHasCBand) {
+          totalCBand++;
+          if (isNew) newCBand++;
+          let entry = opCBandMap.get(opName);
+          if (!entry) {
+            entry = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+            opCBandMap.set(opName, entry);
+          }
+          entry.total++;
+          if (isNew) entry.newCount++;
+        }
+
+        if (opLteBands.size >= 4) {
+          totalFourBandLte++;
+          if (isNew) newFourBandLte++;
+          let entry = opFourBandLteMap.get(opName);
+          if (!entry) {
+            entry = { operator: opName, total: 0, newCount: 0, newPercent: 0 };
+            opFourBandLteMap.set(opName, entry);
+          }
+          entry.total++;
+          if (isNew) entry.newCount++;
+        }
+
         for (const bKey of stationBands) {
           const card = bandCardMap.get(bKey);
           if (card) {
@@ -617,8 +643,9 @@ function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'
 
     const opStationsList = calcPercents(opStationMap);
     const opCellsList = calcPercents(opCellMap);
+    const opCBandList = calcPercents(opCBandMap);
+    const opFourBandLteList = calcPercents(opFourBandLteMap);
     const opPermitsList = calcPercents(opPermitMap);
-    const opAzimuthsList = calcPercents(opAzimuthMap);
 
     // Radiolines
     const rlOpMap = new Map<string, { operator: string; total: number; newCount: number; newPercent: number }>();
@@ -684,45 +711,45 @@ function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'
       metrics: {
         stations: {
           key: 'stations',
-          label: 'Stacje',
+          label: 'Stacje bazowe',
           total: totalStations,
           newTotal: newStations,
           operators: opStationsList,
         },
         cells: {
           key: 'cells',
-          label: 'Komórki',
+          label: 'Komórki / Sektory',
           total: totalCells,
           newTotal: newCells,
           operators: opCellsList,
         },
-        permits: {
-          key: 'permits',
-          label: 'Pozwolenia',
-          total: totalPermits,
-          newTotal: newPermits,
-          operators: opPermitsList,
+        cBand: {
+          key: 'cBand',
+          label: 'Stacje 5G C-Band (3.6 GHz)',
+          total: totalCBand,
+          newTotal: newCBand,
+          operators: opCBandList,
         },
-        azimuths: {
-          key: 'azimuths',
-          label: 'Azymuty',
-          total: totalAzimuths,
-          newTotal: newAzimuths,
-          operators: opAzimuthsList,
+        fourBandLte: {
+          key: 'fourBandLte',
+          label: 'Agregacja 4CA LTE',
+          total: totalFourBandLte,
+          newTotal: newFourBandLte,
+          operators: opFourBandLteList,
         },
         radiolines: {
           key: 'radiolines',
-          label: 'Radiolinie',
+          label: 'Linie radiowe',
           total: totalRl,
           newTotal: newRl,
           operators: rlOpList,
         },
-        photos: {
-          key: 'photos',
-          label: 'Zdjęcia',
-          total: totalPhotos,
-          newTotal: newPhotos,
-          operators: photoOpList,
+        permits: {
+          key: 'permits',
+          label: 'Pozwolenia radiowe',
+          total: totalPermits,
+          newTotal: newPermits,
+          operators: opPermitsList,
         },
       },
       bands: bandsList,
