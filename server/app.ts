@@ -17,7 +17,7 @@ import type {Tower} from '../src/types.ts';
 import {validateStationSubmission} from '../shared/cellValidation.ts';
 import {calculateTerrainProfile} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
-import {getTelecomStats, invalidateStatsCache} from './stats.ts';
+import {getTelecomStats, invalidateStatsCache, warmStatsCache} from './stats.ts';
 import {getTowerHistory, recordTowerChange} from './towerHistory.ts';
 import {getKmzCatalog, generateKmzArchive} from './kmzExport.ts';
 

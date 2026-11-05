@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   Activity,
   ArrowDownToLine,
@@ -370,26 +370,47 @@ export function StatsView({
 
   const apiSource = activeSection === 'growth' ? growthSource : (activeSection === 'btmap' ? 'BTMAP' : 'UKE');
 
-  const fetchStats = (src: 'UKE' | 'BTMAP') => {
-    setLoading(true);
-    setError('');
+  const statsCacheRef = useRef<Record<string, TelecomStats>>({});
+
+  const fetchStats = useCallback((src: 'UKE' | 'BTMAP') => {
+    if (statsCacheRef.current[src]) {
+      setStats(statsCacheRef.current[src]);
+      setLoading(false);
+      setError('');
+    } else {
+      setLoading(true);
+      setError('');
+    }
+
     api<TelecomStats>(`/stats?source=${src}`)
       .then((data) => {
+        statsCacheRef.current[src] = data;
         setStats(data);
         if (data.timeline && data.timeline.length > 0) {
           setSelectedTimelineIdx(data.timeline.length - 1);
         }
-        setLoading(false);
       })
       .catch((e) => {
-        setError(e.message || (isPl ? 'Nie udało się pobrać statystyk.' : 'Failed to load statistics.'));
+        if (!statsCacheRef.current[src]) {
+          setError(e.message || (isPl ? 'Nie udało się pobrać statystyk.' : 'Failed to load statistics.'));
+        }
+      })
+      .finally(() => {
         setLoading(false);
       });
-  };
+  }, [isPl]);
 
   useEffect(() => {
     fetchStats(apiSource);
-  }, [apiSource]);
+    const otherSource: 'UKE' | 'BTMAP' = apiSource === 'UKE' ? 'BTMAP' : 'UKE';
+    if (!statsCacheRef.current[otherSource]) {
+      api<TelecomStats>(`/stats?source=${otherSource}`)
+        .then((data) => {
+          statsCacheRef.current[otherSource] = data;
+        })
+        .catch(() => {});
+    }
+  }, [apiSource, fetchStats]);
 
   const filteredBands = useMemo(() => {
     if (!stats) return [];
@@ -845,8 +866,10 @@ export function StatsView({
                 type="button"
                 className={`growth-segmented-btn ${growthSource === 'UKE' ? 'is-active' : ''}`}
                 onClick={() => {
-                  setGrowthSource('UKE');
-                  fetchStats('UKE');
+                  if (growthSource !== 'UKE') {
+                    setGrowthPeriodIdx(0);
+                    setGrowthSource('UKE');
+                  }
                 }}
               >
                 <Database size={13} />
@@ -856,8 +879,10 @@ export function StatsView({
                 type="button"
                 className={`growth-segmented-btn ${growthSource === 'BTMAP' ? 'is-active' : ''}`}
                 onClick={() => {
-                  setGrowthSource('BTMAP');
-                  fetchStats('BTMAP');
+                  if (growthSource !== 'BTMAP') {
+                    setGrowthPeriodIdx(0);
+                    setGrowthSource('BTMAP');
+                  }
                 }}
               >
                 <Radio size={13} />

@@ -216,7 +216,9 @@ function classifyRadiolineBand(freqGhz: number): { band: string; rangeLabel: str
 }
 
 const cache = new Map<string, { at: number; data: TelecomStats }>();
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+let cachedComparisonBands: StatsComparisonBandItem[] | null = null;
+let cachedComparisonAt = 0;
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 export function invalidateStatsCache() {
   cache.clear();
@@ -995,47 +997,55 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   const latestNewTowers = latestTimeline?.totalNew || 284;
   const latestNewDate = officialUkeDate;
 
-  // Comparison between UKE and BTMAP bands
-  const ukeBandCounts = new Map<string, number>();
-  const btmapBandCounts = new Map<string, number>();
+  // Cached comparison between UKE and BTMAP bands
+  let comparisonBands: StatsComparisonBandItem[];
+  if (cachedComparisonBands && Date.now() - cachedComparisonAt < CACHE_TTL_MS) {
+    comparisonBands = cachedComparisonBands;
+  } else {
+    const ukeBandCounts = new Map<string, number>();
+    const btmapBandCounts = new Map<string, number>();
 
-  const allTowersWithSource = db.prepare(
-    "SELECT source, operators FROM towers WHERE status='APPROVED'"
-  ).all() as Array<{ source: string; operators: string }>;
+    const allTowersWithSource = db.prepare(
+      "SELECT source, operators FROM towers WHERE status='APPROVED'"
+    ).all() as Array<{ source: string; operators: string }>;
 
-  for (const t of allTowersWithSource) {
-    const isUke = t.source === 'UKE';
-    const targetMap = isUke ? ukeBandCounts : btmapBandCounts;
-    try {
-      const ops = JSON.parse(t.operators);
-      if (Array.isArray(ops)) {
-        for (const op of ops) {
-          const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
-          for (const b of bList) {
-            let tech = String(b.tech || 'Inne').toUpperCase();
-            if (tech === 'NR') tech = '5G';
-            const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
-            if (bandNum) {
-              const bKey = `${tech} ${bandNum}`;
-              targetMap.set(bKey, (targetMap.get(bKey) || 0) + 1);
+    for (const t of allTowersWithSource) {
+      const isUke = t.source === 'UKE';
+      const targetMap = isUke ? ukeBandCounts : btmapBandCounts;
+      try {
+        const ops = JSON.parse(t.operators);
+        if (Array.isArray(ops)) {
+          for (const op of ops) {
+            const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
+            for (const b of bList) {
+              let tech = String(b.tech || 'Inne').toUpperCase();
+              if (tech === 'NR') tech = '5G';
+              const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
+              if (bandNum) {
+                const bKey = `${tech} ${bandNum}`;
+                targetMap.set(bKey, (targetMap.get(bKey) || 0) + 1);
+              }
             }
           }
         }
-      }
-    } catch {}
-  }
+      } catch {}
+    }
 
-  const allBandKeys = new Set([...ukeBandCounts.keys(), ...btmapBandCounts.keys()]);
-  const comparisonBands: StatsComparisonBandItem[] = Array.from(allBandKeys).map(key => {
-    const [tech, ...rest] = key.split(' ');
-    return {
-      key,
-      tech,
-      band: rest.join(' '),
-      ukeTotal: ukeBandCounts.get(key) || 0,
-      btmapTotal: btmapBandCounts.get(key) || 0,
-    };
-  }).sort((a, b) => (techOrder[a.tech] || 99) - (techOrder[b.tech] || 99) || (parseInt(a.band, 10) || 0) - (parseInt(b.band, 10) || 0));
+    const allBandKeys = new Set([...ukeBandCounts.keys(), ...btmapBandCounts.keys()]);
+    comparisonBands = Array.from(allBandKeys).map(key => {
+      const [tech, ...rest] = key.split(' ');
+      return {
+        key,
+        tech,
+        band: rest.join(' '),
+        ukeTotal: ukeBandCounts.get(key) || 0,
+        btmapTotal: btmapBandCounts.get(key) || 0,
+      };
+    }).sort((a, b) => (techOrder[a.tech] || 99) - (techOrder[b.tech] || 99) || (parseInt(a.band, 10) || 0) - (parseInt(b.band, 10) || 0));
+
+    cachedComparisonBands = comparisonBands;
+    cachedComparisonAt = Date.now();
+  }
 
   const dataQuality: StatsDataQuality = {
     totalTowers,
@@ -1085,4 +1095,15 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
 
   cache.set(source, { at: Date.now(), data: result });
   return result;
+}
+
+export function warmStatsCache(db: DatabaseSync): void {
+  setTimeout(() => {
+    try {
+      getTelecomStats(db, 'UKE');
+      getTelecomStats(db, 'BTMAP');
+    } catch (e) {
+      console.error('[stats] Cache prewarm error:', e);
+    }
+  }, 100);
 }

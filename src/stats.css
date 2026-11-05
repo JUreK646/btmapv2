@@ -1194,15 +1194,35 @@
    and Dark Mode (luminous neon cyber aesthetics, deep dark slate).
    ========================================================================== */
 .stats-growth-fullview {
+  height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
   padding: 24px 32px 80px;
   font-family: inherit;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  box-sizing: border-box;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.stats-growth-fullview::-webkit-scrollbar {
+  width: 8px;
+}
+.stats-growth-fullview::-webkit-scrollbar-track {
+  background: transparent;
+}
+.stats-growth-fullview::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+.stats-growth-fullview::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 [data-theme='dark'] .stats-growth-fullview {
