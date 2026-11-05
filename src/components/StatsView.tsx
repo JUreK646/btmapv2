@@ -973,88 +973,68 @@ export function StatsView({
                 const techInfo = getTechBadgeInfo(b.tech);
 
                 return (
-                  <article key={b.key} className="growth-band-card">
-                    <div className="growth-band-card-head">
-                      <div className="growth-band-badge-row">
+                  <article key={b.key} className={`growth-band-card gb-card ${presentOps.length === 0 ? 'is-empty' : ''}`}>
+                    <header className="gb-head">
+                      <div className="gb-title">
                         <span
                           className="growth-tech-badge"
-                          style={{
-                            background: techInfo.bg,
-                            color: techInfo.text,
-                            borderColor: techInfo.border,
-                          }}
+                          style={{ background: techInfo.bg, color: techInfo.text, borderColor: techInfo.border }}
                         >
-                          {b.tech}
+                          {b.tech === '5G' ? 'NR' : b.tech}
                         </span>
-                        <span className="growth-band-name">{b.key}</span>
+                        <span className="gb-band">{b.band}<small>MHz</small></span>
+                        {b.tech !== 'GSM' && <span className="gb-duplex">{b.duplex}</span>}
                       </div>
-
-                      <div className="growth-band-meta-row">
-                        <span className="growth-band-total" title={isPl ? 'Liczba całkowita' : 'Total'}>
-                          {formatNumber(totalCount)}
-                        </span>
-                        {newCount > 0 ? (
-                          <span className="growth-band-new-pill" title={isPl ? 'Nowy przyrost' : 'New additions'}>
-                            +{formatNumber(newCount)}
-                          </span>
-                        ) : (
-                          <span className="growth-band-new-pill is-zero">+0</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="growth-band-body">
-                      {presentOps.length > 0 ? (
-                        <div className="growth-band-bars-stage">
-                          {presentOps.map((op) => {
-                            const theme = getOperatorTheme(op.operator);
-                            const barH = Math.max(16, Math.round((op.total / maxVal) * 82));
-                            const hatchRatio = op.total > 0 ? op.newCount / op.total : 0;
-                            const hatchH = op.newCount > 0
-                              ? Math.max(8, Math.min(Math.round(barH * Math.max(hatchRatio * 3.5, 0.2)), Math.round(barH * 0.45)))
-                              : 0;
-
-                            return (
-                              <div
-                                key={op.operator}
-                                className="growth-band-bar-col"
-                                title={`${b.key} · ${op.operator}: ${formatNumber(op.total)} (${op.newCount > 0 ? `+${formatNumber(op.newCount)}, +${op.newPercent}%` : (isPl ? 'bez zmian' : 'no change')})`}
-                              >
-                                <span className="growth-band-val-top">{formatNumber(op.total)}</span>
-                                {op.newCount > 0 ? (
-                                  <span className="growth-band-new-tag">+{formatNumber(op.newCount)}</span>
-                                ) : (
-                                  <span className="growth-band-new-tag is-empty">+0</span>
-                                )}
-                                <div className="growth-band-track">
-                                  <div
-                                    className="growth-band-pillar"
-                                    style={{
-                                      height: `${barH}px`,
-                                      background: theme.gradient,
-                                      borderColor: theme.border,
-                                      boxShadow: `0 2px 10px ${theme.glow}`,
-                                    }}
-                                  >
-                                    {hatchH > 0 && (
-                                      <div
-                                        className="growth-band-hatched"
-                                        style={{ height: `${hatchH}px`, borderColor: theme.border }}
-                                      />
-                                    )}
-                                  </div>
-                                </div>
-                                <span className="growth-band-op-tag">{op.operator}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      {newCount > 0 ? (
+                        <span className="gb-new-pill" title={isPl ? 'Nowy przyrost' : 'New additions'}>+{formatNumber(newCount)}</span>
                       ) : (
-                        <div className="growth-band-empty">
-                          <span>{isPl ? 'Brak stacji w tym paśmie' : 'No deployments in band'}</span>
-                        </div>
+                        <span className="gb-new-pill is-zero" title={isPl ? 'Brak nowego przyrostu' : 'No new additions'}>+0</span>
                       )}
+                    </header>
+
+                    <div className="gb-total">
+                      <strong>{formatNumber(totalCount)}</strong>
+                      <span>{growthBandMode === 'cells' ? (isPl ? 'komórek' : 'cells') : (isPl ? 'stacji' : 'sites')}</span>
                     </div>
+
+                    {presentOps.length > 0 ? (
+                      <ul className="gb-rows">
+                        {presentOps.map((op) => {
+                          const theme = getOperatorTheme(op.operator);
+                          const pct = Math.max(1.5, (op.total / maxVal) * 100);
+                          const newPct = op.newCount > 0 ? Math.min(100, Math.max(8, (op.newCount / op.total) * 100)) : 0;
+                          return (
+                            <li
+                              key={op.operator}
+                              className="gb-row"
+                              title={`${b.key} · ${op.operator}: ${formatNumber(op.total)}${op.newCount > 0 ? ` (+${formatNumber(op.newCount)}, +${op.newPercent}%)` : ''}`}
+                            >
+                              <span className="gb-op">
+                                <span className="gb-dot" style={{ background: theme.primary }} />
+                                <span className="gb-op-name">{op.operator}</span>
+                              </span>
+                              <span className="gb-track">
+                                <span
+                                  className="gb-fill"
+                                  style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${theme.primary}b3 0%, ${theme.primary} 100%)` }}
+                                >
+                                  {newPct > 0 && <span className="gb-fill-new" style={{ width: `${newPct}%` }} />}
+                                </span>
+                              </span>
+                              <span className="gb-val">
+                                {formatNumber(op.total)}
+                                {op.newCount > 0 && <em>+{formatNumber(op.newCount)}</em>}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="gb-empty">
+                        <span className="gb-empty-icon" aria-hidden="true">∅</span>
+                        <span>{isPl ? 'Brak wdrożeń w tym paśmie' : 'No deployments in this band'}</span>
+                      </div>
+                    )}
                   </article>
                 );
               })}
