@@ -223,20 +223,32 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     catch{res.status(502).json({error:'Nie udało się pobrać pomiarów SI2PEM. Spróbuj ponownie lub otwórz mapę SI2PEM.'});}
   });
   app.get('/api/radiolines', (req, res) => {
-    const bounds = ['minLat', 'maxLat', 'minLng', 'maxLng'].map(k => Number(req.query[k]));
-    if (bounds.some(x => !Number.isFinite(x))) return res.status(400).json({ error: 'Wybierz obszar mapy.' });
+    const onlyNew = req.query.onlyNew === '1' || req.query.onlyNew === 'true';
+    const rawBounds = ['minLat', 'maxLat', 'minLng', 'maxLng'].map(k => req.query[k] !== undefined ? Number(req.query[k]) : NaN);
+    const hasBounds = rawBounds.every(x => Number.isFinite(x));
+
+    if (!hasBounds && !onlyNew) return res.status(400).json({ error: 'Wybierz obszar mapy.' });
     const rawOperators = typeof req.query.operators === 'string' ? req.query.operators : '';
     const operators = rawOperators ? rawOperators.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-    let sql = 'SELECT * FROM radiolines WHERE ((latA BETWEEN ? AND ? AND lngA BETWEEN ? AND ?) OR (latB BETWEEN ? AND ? AND lngB BETWEEN ? AND ?))';
-    const params: (number | string)[] = [...bounds, ...bounds];
+    let sql = 'SELECT * FROM radiolines WHERE 1=1';
+    const params: (number | string)[] = [];
+
+    if (hasBounds) {
+      sql += ' AND ((latA BETWEEN ? AND ? AND lngA BETWEEN ? AND ?) OR (latB BETWEEN ? AND ? AND lngB BETWEEN ? AND ?))';
+      params.push(...rawBounds, ...rawBounds);
+    }
+
+    if (onlyNew) {
+      sql += ' AND isNew = 1';
+    }
 
     if (operators.length > 0) {
       sql += ` AND operator IN (${operators.map(() => '?').join(',')})`;
       params.push(...operators);
     }
-    sql += ' LIMIT 1500';
-    res.json(db.prepare(sql).all(...params));
+    sql += ' LIMIT 2000';
+    return res.json(db.prepare(sql).all(...params));
   });
   // Static WebP photo uploads serving
   app.get('/api/uploads/:filename', (req, res) => {

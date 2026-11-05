@@ -1,4 +1,4 @@
-import {Check,ChevronDown,Compass,Database,FileText,Layers,Radio} from 'lucide-react';
+import {Check,ChevronDown,Compass,Database,FileText,Layers,Radio,Sparkles} from 'lucide-react';
 import type {Filters as FilterState} from '../types';
 import {BANDS,OPERATORS,PROVINCES} from '../lib/constants';
 import {useI18n} from '../lib/i18n';
@@ -23,6 +23,8 @@ export default function Filters({
   radiolinesEnabled,
   onRadiolinesChange,
   radiolinesStatus,
+  onlyNewRadiolines,
+  onOnlyNewRadiolinesChange,
 }:{
   filters:FilterState;
   onChange:(f:FilterState)=>void;
@@ -34,6 +36,8 @@ export default function Filters({
   radiolinesEnabled?:boolean;
   onRadiolinesChange?:(enabled:boolean)=>void;
   radiolinesStatus?:string;
+  onlyNewRadiolines?:boolean;
+  onOnlyNewRadiolinesChange?:(enabled:boolean)=>void;
 }){
   const {t} = useI18n();
   const toggle=(key:'operators'|'techs'|'bands',value:string)=>onChange({
@@ -82,6 +86,21 @@ export default function Filters({
         )}
       </fieldset>
     )}
+    <fieldset className="filter-group">
+      <legend>Nowe stacje UKE</legend>
+      <label className="pem-layer-toggle" style={{ cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={Boolean(filters.onlyNew)}
+          onChange={e => onChange({ ...filters, onlyNew: e.target.checked })}
+        />
+        <span>
+          <strong>Tylko nowe stacje (wykaz UKE)</strong>
+          <small>Wyświetlaj tylko nowe pozwolenia i nowo dodane stacje (126 stacji)</small>
+        </span>
+        <span className="radioline-layer-key" aria-hidden="true"><Sparkles size={14}/></span>
+      </label>
+    </fieldset>
     <fieldset className="filter-group">
       <legend>{t.filterSource} <span>{filters.source === 'BTMAP' ? t.filterSourceDb : filters.source === 'UKE' ? t.filterSourceUke : t.filterSourceAll}</span></legend>
       <div className="filter-options source-filters">

@@ -6,7 +6,8 @@ export function useRadiolines(
   enabled: boolean,
   bounds: Bounds | null,
   operators: string[],
-  refresh: number
+  refresh: number,
+  onlyNew = false
 ) {
   const [data, setData] = useState<Radioline[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ export function useRadiolines(
     }
 
     // Only load radiolines when user is zoomed in enough (zoom >= 10)
-    if (bounds.zoom < 10) {
+    if (!onlyNew && bounds.zoom < 8) {
       setData([]);
       setLoading(false);
       setError('');
@@ -41,7 +42,8 @@ export function useRadiolines(
           maxLat: String(bounds.maxLat),
           minLng: String(bounds.minLng),
           maxLng: String(bounds.maxLng),
-          ...(operatorKey ? { operators: operatorKey } : {})
+          ...(operatorKey ? { operators: operatorKey } : {}),
+          ...(onlyNew ? { onlyNew: '1' } : {})
         });
 
         const result = await api<Radioline[]>(`/radiolines?${params}`, { signal: abort.signal });
@@ -62,7 +64,7 @@ export function useRadiolines(
       abort.abort();
       clearTimeout(timer);
     };
-  }, [enabled, bounds, operatorKey, refresh]);
+  }, [enabled, bounds, operatorKey, refresh, onlyNew]);
 
   return { data, loading, error };
 }

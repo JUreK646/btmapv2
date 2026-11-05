@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {Map as MapIcon,Database,ChartNoAxesCombined,FolderDown,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages,Settings as SettingsIcon,Signal} from 'lucide-react';
+import {Map as MapIcon,Database,ChartNoAxesCombined,FolderDown,Sun,Moon,Plus,Minus,LocateFixed,Maximize,Radio,RadioTower,ArrowUpRight,SlidersHorizontal,PanelLeftClose,PanelLeftOpen,X,Info,ChevronRight,UserRound,List,Menu,RotateCcw,DatabaseZap,History,Crosshair,Radar,Compass,Languages,Settings as SettingsIcon,Signal,Sparkles} from 'lucide-react';
 import type L from 'leaflet';
 import MapView, { type HighlightedSector } from './components/MapView';
 import BasemapPicker from './components/BasemapPicker';
@@ -73,6 +73,7 @@ export default function App(){
   const [showPem,setShowPem]=useState(false);
   const [showAzimuths,setShowAzimuths]=useState(false);
   const [showRadiolines,setShowRadiolines]=useState(false);
+  const [onlyNewRadiolines,setOnlyNewRadiolines]=useState(false);
   const [panel,setPanel]=useState<'filters'|'stations'|null>(null),[navCollapsed,setNavCollapsed]=useState(false),[mobileNav,setMobileNav]=useState(false);
   const [basemap,setBasemap]=useState<BasemapId>(getStoredBasemap);
   const [map,setMap]=useState<L.Map|null>(null),[bounds,setBounds]=useState<Bounds|null>(null),[selected,setSelected]=useState<Tower|null>(null);
@@ -150,9 +151,9 @@ export default function App(){
   const pemCount=pem.data?.items.length??0;
   const pemUnit=pemCount===1?'pomiar':pemCount%10>=2&&pemCount%10<=4&&(pemCount%100<12||pemCount%100>14)?'pomiary':'pomiarów';
   const pemStatus=pem.loading?'Wczytywanie pomiarów SI2PEM…':pem.error?'Nie udało się wczytać pomiarów SI2PEM':!pem.data?.checkedAt?(pem.data?.error||'Wczytywanie z SI2PEM…'):pemCount===0?'Brak pomiarów SI2PEM w tym obszarze':`${pemCount} ${pemUnit} w obszarze${pem.data.hasMore?' · przybliż mapę, aby zobaczyć pozostałe':''}`;
-  const radiolines=useRadiolines(showRadiolines&&view==='map',bounds,filters.operators,refresh);
-  const radiolinesStatus = bounds && bounds.zoom < 10
-    ? t.radiolinesZoomHint
+  const radiolines=useRadiolines(showRadiolines&&view==='map',bounds,filters.operators,refresh,onlyNewRadiolines);
+  const radiolinesStatus = (!onlyNewRadiolines && bounds && bounds.zoom < 8)
+    ? (lang === 'pl' ? 'Przybliż mapę (Z8+), aby zobaczyć linie dosyłowe' : 'Zoom in (Z8+) to view microwave links')
     : radiolines.loading
     ? (lang === 'pl' ? 'Wczytywanie radiolinii…' : 'Loading microwave links…')
     : radiolines.data.length > 0
@@ -274,7 +275,7 @@ export default function App(){
   const filterTotal=filterCount(filters)+(showPem&&view==='map'?1:0)+(showAzimuths&&view==='map'?1:0)+(showRadiolines&&view==='map'?1:0);
   const filterPanel=<aside className="floating-panel filter-drawer" aria-labelledby="station-filters-title">
     <div className="filter-drawer-heading"><h2 id="station-filters-title">{view==='map'?t.filterMapTitle:t.filterStationTitle}</h2><span className="filter-data-source"><DatabaseZap size={13} aria-hidden="true"/>{filters.source==='UKE'?t.filterSourceUke:filters.source==='BTMAP'?'BTMap':t.filterSourceAll}{showPem&&view==='map'?' · SI2PEM':''}{showRadiolines&&view==='map'?' · Radiolinie':''}</span><button className="icon-button" aria-label={t.close} onClick={()=>setPanel(null)}><X size={18}/></button></div>
-    <div className="panel-scroll"><FiltersPanel filters={filters} onChange={changeFilters} pemEnabled={showPem} onPemChange={view==='map'?setShowPem:undefined} pemStatus={pemStatus} azimuthsEnabled={showAzimuths} onAzimuthsChange={view==='map'?setShowAzimuths:undefined} radiolinesEnabled={showRadiolines} onRadiolinesChange={view==='map'?setShowRadiolines:undefined} radiolinesStatus={radiolinesStatus}/></div>
+    <div className="panel-scroll"><FiltersPanel filters={filters} onChange={changeFilters} pemEnabled={showPem} onPemChange={view==='map'?setShowPem:undefined} pemStatus={pemStatus} azimuthsEnabled={showAzimuths} onAzimuthsChange={view==='map'?setShowAzimuths:undefined} radiolinesEnabled={showRadiolines} onRadiolinesChange={view==='map'?setShowRadiolines:undefined} radiolinesStatus={radiolinesStatus} onlyNewRadiolines={onlyNewRadiolines} onOnlyNewRadiolinesChange={view==='map'?setOnlyNewRadiolines:undefined}/></div>
     <div className="filter-drawer-footer"><p className="filter-results" role="status">{loading?t.filterLoading:error?t.filterLoadError:<><strong>{formatNumber(result.total)}</strong> {view==='database'?t.filterResultsInDb(formatNumber(result.total)):t.filterResultsInArea(formatNumber(result.total))}</>}</p><div className="filter-drawer-actions"><button className="filter-reset" disabled={!filterTotal} onClick={()=>{changeFilters(DEFAULT_FILTERS);if(view==='map'){setShowPem(false);setShowAzimuths(false);setShowRadiolines(false);}}}><RotateCcw size={14}/>{t.clear}{filterTotal>0&&<span>{filterTotal}</span>}</button><button className="primary-button" onClick={()=>setPanel(null)}>{t.ready}</button></div></div>
   </aside>;
 
@@ -385,6 +386,30 @@ export default function App(){
             <div className="map-searchbar-actions">
               <button
                 type="button"
+                className={`filter-trigger ${showRadiolines ? 'selected' : ''}`}
+                onClick={() => setShowRadiolines(prev => !prev)}
+                aria-pressed={showRadiolines}
+                aria-label={lang === 'pl' ? 'Linie radiowe UKE' : 'UKE Microwave Links'}
+                title={showRadiolines ? (lang === 'pl' ? 'Ukryj linie radiowe' : 'Hide microwave links') : (lang === 'pl' ? 'Pokaż linie radiowe (dosył UKE)' : 'Show microwave links')}
+              >
+                <Radio size={17} />
+                <span>{lang === 'pl' ? 'Radiolinie' : 'Links'}</span>
+                {showRadiolines && radiolines.data.length > 0 && <b>{radiolines.data.length}</b>}
+              </button>
+              <button
+                type="button"
+                className={`filter-trigger ${filters.onlyNew ? 'selected' : ''}`}
+                onClick={() => changeFilters({ ...filters, onlyNew: !filters.onlyNew })}
+                aria-pressed={Boolean(filters.onlyNew)}
+                aria-label={lang === 'pl' ? 'Nowe stacje UKE' : 'New UKE Stations'}
+                title={filters.onlyNew ? (lang === 'pl' ? 'Pokaż wszystkie stacje' : 'Show all stations') : (lang === 'pl' ? 'Filtruj do nowych stacji z wykazu UKE' : 'Filter to new UKE stations')}
+              >
+                <Sparkles size={17} />
+                <span>{lang === 'pl' ? 'Nowe stacje' : 'New stations'}</span>
+                {filters.onlyNew && <b>{result.total}</b>}
+              </button>
+              <button
+                type="button"
                 className={`filter-trigger ${evalTarget || isPickingEvalTarget ? 'selected' : ''}`}
                 onClick={() => {
                   if (evalTarget || isPickingEvalTarget) {
@@ -428,10 +453,32 @@ export default function App(){
             </div>
           </div>
           {error&&<div className="map-error" role="alert">{error}<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button></div>}
-          {((showPem || showAzimuths || showRadiolines) && !panel && !selected) && (
+          {((showPem || showAzimuths || showRadiolines || filters.onlyNew) && !panel && !selected) && (
             <div className="map-status-stack">
+              {filters.onlyNew && (
+                <div className="radioline-map-status new-stations-hud-status" role="status" style={{ borderColor: 'rgba(16, 185, 129, 0.45)', background: 'rgba(16, 185, 129, 0.12)' }}>
+                  <Sparkles size={13} aria-hidden="true" style={{ color: '#10b981' }} />
+                  <span>{lang === 'pl' ? `Pokazuję nowe stacje z wykazu UKE (${formatNumber(result.total)})` : `Showing new UKE stations (${formatNumber(result.total)})`}</span>
+                  <button type="button" className="retry-button" style={{ marginLeft: '6px', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.2)', color: '#10b981', cursor: 'pointer' }} onClick={() => changeFilters({ ...filters, onlyNew: false })}>
+                    {lang === 'pl' ? 'Wszystkie stacje' : 'All stations'}
+                  </button>
+                </div>
+              )}
               {showAzimuths && <div className="azimuth-map-status" role="status"><Compass size={13} aria-hidden="true"/><span>{bounds&&bounds.zoom<14?t.azimuthsZoomHint:t.azimuthsActive}</span></div>}
-              {showRadiolines && <div className="radioline-map-status" role="status"><Radio size={13} aria-hidden="true"/><span>{radiolinesStatus}</span></div>}
+              {showRadiolines && (
+                <div className="radioline-map-status" role="status">
+                  <Radio size={13} aria-hidden="true"/>
+                  <span>{radiolinesStatus}</span>
+                  <button
+                    type="button"
+                    style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', border: onlyNewRadiolines ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.2)', background: onlyNewRadiolines ? 'rgba(16,185,129,0.25)' : 'transparent', color: onlyNewRadiolines ? '#10b981' : 'inherit', cursor: 'pointer' }}
+                    onClick={() => setOnlyNewRadiolines(prev => !prev)}
+                    title={lang === 'pl' ? 'Przełącz widok: tylko nowe radiolinie z ostatniego wykazu UKE' : 'Toggle only new microwave links from latest UKE registry'}
+                  >
+                    {onlyNewRadiolines ? (lang === 'pl' ? '★ Tylko nowe (774)' : '★ Only new (774)') : (lang === 'pl' ? 'Wszystkie (38k)' : 'All (38k)')}
+                  </button>
+                </div>
+              )}
               {showPem && <div className="pem-map-status" role="status"><i aria-hidden="true"/>{pemStatus}{(pem.error||pem.data?.error)&&<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button>}</div>}
             </div>
           )}
@@ -465,6 +512,24 @@ export default function App(){
               onClick={() => openCreateStation(null)}
             >
               <RadioTower size={19} />
+            </button>
+            <button
+              type="button"
+              className={`map-tool ${showRadiolines ? 'active' : ''}`}
+              aria-label={lang === 'pl' ? 'Linie radiowe UKE' : 'Microwave links'}
+              title={showRadiolines ? (lang === 'pl' ? 'Ukryj linie radiowe' : 'Hide microwave links') : (lang === 'pl' ? 'Pokaż linie radiowe' : 'Show microwave links')}
+              onClick={() => setShowRadiolines(!showRadiolines)}
+            >
+              <Radio size={19} />
+            </button>
+            <button
+              type="button"
+              className={`map-tool ${filters.onlyNew ? 'active' : ''}`}
+              aria-label={lang === 'pl' ? 'Nowe stacje UKE' : 'New UKE stations'}
+              title={filters.onlyNew ? (lang === 'pl' ? 'Pokaż wszystkie stacje' : 'Show all stations') : (lang === 'pl' ? 'Tylko nowe stacje UKE' : 'Only new UKE stations')}
+              onClick={() => changeFilters({ ...filters, onlyNew: !filters.onlyNew })}
+            >
+              <Sparkles size={19} />
             </button>
             <button className="map-tool fullscreen-tool" aria-label={t.fullscreen} title={t.fullscreen} onClick={()=>void fullscreen()}><Maximize size={19}/></button>
           </div>

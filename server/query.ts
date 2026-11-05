@@ -10,7 +10,17 @@ export function towerWhere(query: Record<string, unknown>) {
   const params: SQLInputValue[] = [];
   const list = (value: unknown) => typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 20) : [];
 
-  if (query.source && query.source !== 'ALL') { clauses.push('t.source = ?'); params.push(String(query.source)); }
+  if (query.source && query.source !== 'ALL') {
+    if (query.source === 'UKE') {
+      clauses.push("(t.source = 'UKE' OR t.addedBy = 'Import KML')");
+    } else {
+      clauses.push('t.source = ?');
+      params.push(String(query.source));
+    }
+  }
+  if (query.onlyNew === '1' || query.onlyNew === 'true') {
+    clauses.push("t.createdAt LIKE '2026-10-20%'");
+  }
   if (query.province) { clauses.push('fold(t.province) = fold(?)'); params.push(String(query.province)); }
 
   let cellSearch: ParsedCellId | null = null;
@@ -118,7 +128,8 @@ export function normalizeTower(t: Record<string, unknown>): Record<string, unkno
       }
     }
   }
-  return { ...t, source: (t.source === 'User' || t.source === 'BTMAP') ? 'BTMAP' : (t.source || 'UKE'), operators };
+  const isNew = Boolean(t.createdAt && String(t.createdAt).startsWith('2026-10-20'));
+  return { ...t, source: (t.source === 'User' || t.source === 'BTMAP') ? 'BTMAP' : (t.source || 'UKE'), operators, isNew };
 }
 
 export function withPemCounts<T extends Record<string,unknown>>(db:DatabaseSync,towers:T[]):Array<T&{pemReportsByOperator?:Record<string,{count:number;partial:boolean;checkedAt:string}>}>{
@@ -143,7 +154,8 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
   const zoom = Number(query.zoom ?? 14);
   if (!Number.isFinite(zoom)) throw new Error('Nieprawidłowe przybliżenie.');
   const isMap = query.view === 'map';
-  const limit = Math.min(isMap ? MAP_STATION_LIMIT : 1500, Math.max(1, Number(query.limit) || (isMap ? MAP_STATION_LIMIT : 100)));
+  const isOnlyNew = query.onlyNew === '1' || query.onlyNew === 'true';
+  const limit = Math.min(isMap ? (isOnlyNew ? 1500 : MAP_STATION_LIMIT) : 1500, Math.max(1, Number(query.limit) || (isMap ? (isOnlyNew ? 1500 : MAP_STATION_LIMIT) : 100)));
   const offset = Math.max(0, Number(query.offset) || 0);
 
   let orderSql = 't.address, t.id';

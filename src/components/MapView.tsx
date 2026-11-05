@@ -150,7 +150,7 @@ function Stations({
               }}
             >
               <Tooltip direction="top" offset={tipOffset}>
-                <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
+                <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>{t.isNew && <span style={{ marginLeft: '6px', background: '#059669', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>★ NOWA</span>}
                 <br />
                 {t.operators
                   .map(op => {
@@ -198,7 +198,7 @@ function Stations({
               }}
             >
               <Tooltip direction="top" offset={[0, -4]}>
-                <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
+                <strong>{t.address}</strong> <small style={{ opacity: 0.8, marginLeft: '4px' }}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>{t.isNew && <span style={{ marginLeft: '6px', background: '#059669', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>★ NOWA</span>}
                 <br />
                 {t.operators
                   .map(op => {
@@ -219,6 +219,22 @@ function Stations({
     <>
       {items.map(t => (
         <Fragment key={t.id}>
+          {t.isNew && (
+            <CircleMarker
+              center={[t.lat, t.lng]}
+              radius={(selected === t.id ? 17 : 13) * sizeMultiplier}
+              renderer={renderer}
+              pathOptions={{
+                color: '#10b981',
+                weight: 2.2,
+                opacity: 0.9,
+                fillColor: '#10b981',
+                fillOpacity: 0.25,
+                dashArray: '3, 4',
+              }}
+              interactive={false}
+            />
+          )}
           <CircleMarker
             center={[t.lat, t.lng]}
             radius={(selected === t.id ? 11 : t.source === 'BTMAP' ? 8 : (t.operators.length > 1 ? 7 : 6)) * sizeMultiplier}
@@ -252,7 +268,7 @@ function Stations({
             }}
           >
             <Tooltip direction="top" offset={[0, -8]}>
-              <strong>{t.address}</strong> <small style={{opacity:0.8,marginLeft:'4px'}}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>
+              <strong>{t.address}</strong> <small style={{opacity:0.8,marginLeft:'4px'}}>{t.source === 'BTMAP' ? '· BTMap' : '· UKE'}</small>{t.isNew && <span style={{ marginLeft: '6px', background: '#059669', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>★ NOWA</span>}
               <br />
               {t.operators
                 .map(op => {
@@ -1143,6 +1159,11 @@ function RadiolineCard({
           <div className="rl-popup-title-group">
             <span className="rl-op-name">{brand.displayName}</span>
             {line.permitId && <span className="rl-permit-id">{line.permitId}</span>}
+            {line.isNew === 1 && (
+              <span style={{ background: '#059669', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 700, marginLeft: '6px' }}>
+                ★ NOWA
+              </span>
+            )}
           </div>
         </div>
         <button
@@ -1260,8 +1281,9 @@ function RadiolinesLayer({
             ]}
             renderer={renderer}
             pathOptions={{
-              color: brand.color,
-              weight: isSelected ? 3.8 : 2.3,
+              color: line.isNew === 1 ? '#00e5a3' : brand.color,
+              dashArray: line.isNew === 1 ? '7, 4' : undefined,
+              weight: isSelected ? 4.5 : line.isNew === 1 ? 3.4 : 2.3,
               opacity: isSelected ? 1 : 0.9,
             }}
             eventHandlers={{
