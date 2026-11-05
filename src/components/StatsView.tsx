@@ -668,42 +668,71 @@ export function StatsView({
           </div>
 
           <div className="growth-bars-stage">
+            <div className="growth-stage-gridlines" aria-hidden="true">
+              <span className="growth-gridline" />
+              <span className="growth-gridline" />
+              <span className="growth-gridline" />
+            </div>
+
             {sorted.map((op) => {
               const theme = getOperatorTheme(op.operator);
-              const barH = op.total > 0 ? Math.max(26, Math.round((op.total / maxVal) * 125)) : 6;
+              const barH = op.total > 0 ? Math.max(24, Math.round((op.total / maxVal) * 135)) : 4;
+              const hatchRatio = op.total > 0 ? op.newCount / op.total : 0;
               const hatchH = op.newCount > 0
-                ? Math.max(14, Math.min(Math.round(barH * 0.35), 36))
+                ? Math.max(12, Math.min(Math.round(barH * Math.max(hatchRatio * 3.5, 0.2)), Math.round(barH * 0.48)))
                 : 0;
 
               return (
                 <div
                   key={op.operator}
-                  className="growth-bar-col"
-                  title={`${op.operator}: ${formatNumber(op.total)} ${unitLabel} (${op.newCount > 0 ? `+${formatNumber(op.newCount)}, ${op.newPercent}%` : 'brak zmian'})`}
+                  className={`growth-bar-col ${op.newCount > 0 ? 'has-new' : ''}`}
+                  title={`${op.operator}: ${formatNumber(op.total)} ${unitLabel} (${op.newCount > 0 ? `+${formatNumber(op.newCount)}, +${op.newPercent}%` : (isPl ? 'brak zmian' : 'no change')})`}
                 >
-                  <span className="growth-bar-val-top">
-                    {op.total > 0 ? formatNumber(op.total) : '—'}
-                  </span>
-
-                  <div
-                    className="growth-bar-pillar"
-                    style={{
-                      height: `${barH}px`,
-                      background: op.total > 0 ? theme.gradient : 'rgba(255, 255, 255, 0.05)',
-                      borderColor: op.total > 0 ? theme.border : 'rgba(255, 255, 255, 0.08)',
-                      boxShadow: op.total > 0 ? `0 4px 14px ${theme.glow}` : 'none',
-                    }}
-                  >
-                    {hatchH > 0 && (
-                      <div className="growth-bar-hatched" style={{ height: `${hatchH}px` }}>
-                        <span className="growth-hatch-num">+{formatNumber(op.newCount)}</span>
-                      </div>
+                  <div className="growth-bar-header-stats">
+                    <span className="growth-bar-val-top">
+                      {op.total > 0 ? formatNumber(op.total) : '—'}
+                    </span>
+                    {op.newCount > 0 ? (
+                      <span className="growth-bar-new-chip" title={isPl ? 'Nowy przyrost' : 'New additions'}>
+                        +{formatNumber(op.newCount)}
+                      </span>
+                    ) : (
+                      <span className="growth-bar-new-chip is-empty">—</span>
                     )}
                   </div>
 
+                  <div className="growth-bar-track">
+                    <div
+                      className="growth-bar-pillar"
+                      style={{
+                        height: `${barH}px`,
+                        background: op.total > 0 ? theme.gradient : 'var(--surface-hover)',
+                        borderColor: op.total > 0 ? theme.border : 'var(--line)',
+                        boxShadow: op.total > 0 ? `0 4px 16px ${theme.glow}` : 'none',
+                      }}
+                    >
+                      {hatchH > 0 && (
+                        <div
+                          className="growth-bar-hatched"
+                          style={{
+                            height: `${hatchH}px`,
+                            borderColor: theme.border,
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+
                   <div className="growth-bar-label-group">
-                    <span className="growth-op-dot" style={{ background: theme.primary }} />
-                    <span className="growth-op-name" title={op.operator}>{op.operator}</span>
+                    <div className="growth-op-badge">
+                      <span className="growth-op-dot" style={{ background: theme.primary, boxShadow: `0 0 6px ${theme.primary}` }} />
+                      <span className="growth-op-name" title={op.operator}>{op.operator}</span>
+                    </div>
+                    {op.newCount > 0 ? (
+                      <span className="growth-op-pct-badge">+{op.newPercent}%</span>
+                    ) : (
+                      <span className="growth-op-pct-badge is-zero">—</span>
+                    )}
                   </div>
                 </div>
               );
@@ -949,32 +978,41 @@ export function StatsView({
                         <div className="growth-band-bars-stage">
                           {presentOps.map((op) => {
                             const theme = getOperatorTheme(op.operator);
-                            const barH = Math.max(18, Math.round((op.total / maxVal) * 80));
+                            const barH = Math.max(16, Math.round((op.total / maxVal) * 82));
+                            const hatchRatio = op.total > 0 ? op.newCount / op.total : 0;
                             const hatchH = op.newCount > 0
-                              ? Math.max(12, Math.min(Math.round(barH * 0.35), 26))
+                              ? Math.max(8, Math.min(Math.round(barH * Math.max(hatchRatio * 3.5, 0.2)), Math.round(barH * 0.45)))
                               : 0;
 
                             return (
                               <div
                                 key={op.operator}
                                 className="growth-band-bar-col"
-                                title={`${b.key} · ${op.operator}: ${formatNumber(op.total)} (${op.newCount > 0 ? `+${formatNumber(op.newCount)}, ${op.newPercent}%` : 'bez zmian'})`}
+                                title={`${b.key} · ${op.operator}: ${formatNumber(op.total)} (${op.newCount > 0 ? `+${formatNumber(op.newCount)}, +${op.newPercent}%` : (isPl ? 'bez zmian' : 'no change')})`}
                               >
                                 <span className="growth-band-val-top">{formatNumber(op.total)}</span>
-                                <div
-                                  className="growth-band-pillar"
-                                  style={{
-                                    height: `${barH}px`,
-                                    background: theme.gradient,
-                                    borderColor: theme.border,
-                                    boxShadow: `0 2px 8px ${theme.glow}`,
-                                  }}
-                                >
-                                  {hatchH > 0 && (
-                                    <div className="growth-band-hatched" style={{ height: `${hatchH}px` }}>
-                                      <span className="growth-band-hatch-val">+{formatNumber(op.newCount)}</span>
-                                    </div>
-                                  )}
+                                {op.newCount > 0 ? (
+                                  <span className="growth-band-new-tag">+{formatNumber(op.newCount)}</span>
+                                ) : (
+                                  <span className="growth-band-new-tag is-empty">—</span>
+                                )}
+                                <div className="growth-band-track">
+                                  <div
+                                    className="growth-band-pillar"
+                                    style={{
+                                      height: `${barH}px`,
+                                      background: theme.gradient,
+                                      borderColor: theme.border,
+                                      boxShadow: `0 2px 10px ${theme.glow}`,
+                                    }}
+                                  >
+                                    {hatchH > 0 && (
+                                      <div
+                                        className="growth-band-hatched"
+                                        style={{ height: `${hatchH}px`, borderColor: theme.border }}
+                                      />
+                                    )}
+                                  </div>
                                 </div>
                                 <span className="growth-band-op-tag">{op.operator}</span>
                               </div>
