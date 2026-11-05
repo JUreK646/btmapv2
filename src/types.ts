@@ -1,5 +1,5 @@
 export type Theme = 'light' | 'dark';
-export type View = 'map' | 'database' | 'stats' | 'kmz' | 'guides' | 'admin' | 'changelog';
+export type View = 'map' | 'database' | 'stats' | 'kmz' | 'guides' | 'admin' | 'changelog' | 'coverage';
 export interface Band { tech:string; band:string; status?:string; permit?:string; azimuth?:number; mode?:'NSA'|'SA'; pci?:number; earfcn?:number; isIot?:boolean; cellType?:string; }
 export interface Operator { name:string; color?:string; bands:Band[]; stationIds?:string[]; ukePermitId?:string; }
 export interface PemReportSummary { count:number; partial:boolean; checkedAt:string; }

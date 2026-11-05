@@ -7,6 +7,9 @@ export const i18n = {
     // Nav & General
     map: 'Mapa',
     mapViewTitle: 'Mapa stacji bazowych',
+    coverageMap: 'Mapa zasięgu',
+    coverageMapTitle: 'Mapa zasięgu sieci komórkowych',
+    comingSoon: 'Wkrótce',
     database: 'Baza stacji',
     databaseViewTitle: 'Baza stacji BTMap',
     stats: 'Statystyki',
@@ -424,6 +427,9 @@ export const i18n = {
     // Nav & General
     map: 'Map',
     mapViewTitle: 'Base Station Map',
+    coverageMap: 'Coverage map',
+    coverageMapTitle: 'Cellular Coverage Map',
+    comingSoon: 'Soon',
     database: 'Station Database',
     databaseViewTitle: 'BTMap Station Database',
     stats: 'Statistics',
