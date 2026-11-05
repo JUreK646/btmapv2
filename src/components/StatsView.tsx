@@ -357,7 +357,7 @@ export function StatsView({
   const [hoveredOp, setHoveredOp] = useState<string | null>(null);
   const [selectedTimelineIdx, setSelectedTimelineIdx] = useState<number | null>(null);
   const [showComparison, setShowComparison] = useState(false);
-  const [growthSource, setGrowthSource] = useState<'UKE' | 'BTMAP'>('UKE');
+  const [growthSource, setGrowthSource] = useState<'UKE' | 'BTMAP'>('BTMAP');
   const [growthPeriodIdx, setGrowthPeriodIdx] = useState<number>(0);
   const [growthBandMode, setGrowthBandMode] = useState<'cells' | 'stations'>('cells');
   const periodScrollRef = useRef<HTMLDivElement | null>(null);

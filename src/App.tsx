@@ -398,18 +398,6 @@ export default function App(){
               </button>
               <button
                 type="button"
-                className={`filter-trigger ${filters.onlyNew ? 'selected' : ''}`}
-                onClick={() => changeFilters({ ...filters, onlyNew: !filters.onlyNew })}
-                aria-pressed={Boolean(filters.onlyNew)}
-                aria-label={lang === 'pl' ? 'Nowe stacje UKE' : 'New UKE Stations'}
-                title={filters.onlyNew ? (lang === 'pl' ? 'Pokaż wszystkie stacje' : 'Show all stations') : (lang === 'pl' ? 'Filtruj do nowych stacji z wykazu UKE' : 'Filter to new UKE stations')}
-              >
-                <Sparkles size={17} />
-                <span>{lang === 'pl' ? 'Nowe stacje' : 'New stations'}</span>
-                {filters.onlyNew && <b>{result.total}</b>}
-              </button>
-              <button
-                type="button"
                 className={`filter-trigger ${evalTarget || isPickingEvalTarget ? 'selected' : ''}`}
                 onClick={() => {
                   if (evalTarget || isPickingEvalTarget) {
@@ -453,17 +441,8 @@ export default function App(){
             </div>
           </div>
           {error&&<div className="map-error" role="alert">{error}<button onClick={()=>setRefresh(r=>r+1)}>{t.retry}</button></div>}
-          {((showPem || showAzimuths || showRadiolines || filters.onlyNew) && !panel && !selected) && (
+          {((showPem || showAzimuths || showRadiolines) && !panel && !selected) && (
             <div className="map-status-stack">
-              {filters.onlyNew && (
-                <div className="radioline-map-status new-stations-hud-status" role="status" style={{ borderColor: 'rgba(16, 185, 129, 0.45)', background: 'rgba(16, 185, 129, 0.12)' }}>
-                  <Sparkles size={13} aria-hidden="true" style={{ color: '#10b981' }} />
-                  <span>{lang === 'pl' ? `Pokazuję nowe stacje z wykazu UKE (${formatNumber(result.total)})` : `Showing new UKE stations (${formatNumber(result.total)})`}</span>
-                  <button type="button" className="retry-button" style={{ marginLeft: '6px', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.2)', color: '#10b981', cursor: 'pointer' }} onClick={() => changeFilters({ ...filters, onlyNew: false })}>
-                    {lang === 'pl' ? 'Wszystkie stacje' : 'All stations'}
-                  </button>
-                </div>
-              )}
               {showAzimuths && <div className="azimuth-map-status" role="status"><Compass size={13} aria-hidden="true"/><span>{bounds&&bounds.zoom<14?t.azimuthsZoomHint:t.azimuthsActive}</span></div>}
               {showRadiolines && (
                 <div className="radioline-map-status" role="status">
@@ -521,15 +500,6 @@ export default function App(){
               onClick={() => setShowRadiolines(!showRadiolines)}
             >
               <Radio size={19} />
-            </button>
-            <button
-              type="button"
-              className={`map-tool ${filters.onlyNew ? 'active' : ''}`}
-              aria-label={lang === 'pl' ? 'Nowe stacje UKE' : 'New UKE stations'}
-              title={filters.onlyNew ? (lang === 'pl' ? 'Pokaż wszystkie stacje' : 'Show all stations') : (lang === 'pl' ? 'Tylko nowe stacje UKE' : 'Only new UKE stations')}
-              onClick={() => changeFilters({ ...filters, onlyNew: !filters.onlyNew })}
-            >
-              <Sparkles size={19} />
             </button>
             <button className="map-tool fullscreen-tool" aria-label={t.fullscreen} title={t.fullscreen} onClick={()=>void fullscreen()}><Maximize size={19}/></button>
           </div>

@@ -408,9 +408,11 @@ function computeDynamicReport(
 ): StatsPeriodReport {
   const sql = source === 'ALL'
     ? "SELECT operators FROM towers WHERE status='APPROVED'"
+    : source === 'UKE'
+    ? "SELECT operators FROM towers WHERE status='APPROVED' AND (source='UKE' OR (source='BTMAP' AND operators LIKE '%Plus%'))"
     : "SELECT operators FROM towers WHERE status='APPROVED' AND source=?";
   
-  const rows = (source === 'ALL' ? db.prepare(sql).all() : db.prepare(sql).all(source)) as Array<{ operators: string }>;
+  const rows = (source === 'ALL' || source === 'UKE' ? db.prepare(sql).all() : db.prepare(sql).all(source)) as Array<{ operators: string }>;
 
   const totalStations = rows.length;
   let totalCells = 0;
@@ -737,10 +739,10 @@ function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'
   }
   // UKE / ALL: Full Master Telecom Registry (matching BTSEARCH Screenshot 1)
   return [
-    computeDynamicReport(db, 'ALL', 'Październik 2026 (cały miesiąc)', 'Oficjalny Rejestr Pozwoleń Radiowych UKE (październik 2026)', 'uke-2026-10', 'UKE_MONTH'),
-    computeDynamicReport(db, 'ALL', 'Wykaz z 31.10.2026', 'Wykaz pozwoleń radiowych z 31 października 2026', 'uke-2026-10-31', 'UKE_LATE'),
-    computeDynamicReport(db, 'ALL', 'Wykaz z 20.10.2026', 'Wykaz pozwoleń radiowych z 20 października 2026', 'uke-2026-10-20', 'UKE_MID'),
-    computeDynamicReport(db, 'ALL', 'Wykaz z 10.10.2026', 'Wykaz pozwoleń radiowych z 10 października 2026', 'uke-2026-10-10', 'UKE_EARLY'),
+    computeDynamicReport(db, 'UKE', 'Październik 2026 (cały miesiąc)', 'Oficjalny Rejestr Pozwoleń Radiowych UKE (październik 2026)', 'uke-2026-10', 'UKE_MONTH'),
+    computeDynamicReport(db, 'UKE', 'Wykaz z 31.10.2026', 'Wykaz pozwoleń radiowych z 31 października 2026', 'uke-2026-10-31', 'UKE_LATE'),
+    computeDynamicReport(db, 'UKE', 'Wykaz z 20.10.2026', 'Wykaz pozwoleń radiowych z 20 października 2026', 'uke-2026-10-20', 'UKE_MID'),
+    computeDynamicReport(db, 'UKE', 'Wykaz z 10.10.2026', 'Wykaz pozwoleń radiowych z 10 października 2026', 'uke-2026-10-10', 'UKE_EARLY'),
   ];
 }
 
@@ -759,6 +761,8 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
 
   const sql = source === 'ALL'
     ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED'"
+    : source === 'UKE'
+    ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND (source='UKE' OR (source='BTMAP' AND operators LIKE '%Plus%'))"
     : "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND source=?";
 
   type TowerRow = {
@@ -773,7 +777,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
     createdAt: string | null;
   };
 
-  const rows = (source === 'ALL'
+  const rows = (source === 'ALL' || source === 'UKE'
     ? db.prepare(sql).all()
     : db.prepare(sql).all(source)) as TowerRow[];
 
