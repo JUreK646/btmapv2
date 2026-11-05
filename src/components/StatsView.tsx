@@ -966,73 +966,166 @@ export function StatsView({
             <div className="growth-bands-grid">
               {activeReport.bands.map((b) => {
                 const opList = growthBandMode === 'cells' ? b.operatorCells : b.operatorStations;
-                const presentOps = sortOps(opList.filter((o) => o.total > 0));
-                const maxVal = Math.max(...presentOps.map((o) => o.total), 1);
                 const totalCount = growthBandMode === 'cells' ? b.totalCells : b.totalStations;
                 const newCount = growthBandMode === 'cells' ? b.newCells : b.newStations;
                 const techInfo = getTechBadgeInfo(b.tech);
 
+                // Always display Primary 4 in fixed scan order: Plus, T-Mobile, Orange, Play.
+                // Include Inne / PKP / PGE only if they have data (> 0).
+                const primaryOps = ['Plus', 'T-Mobile', 'Orange', 'Play'];
+                const colsToDisplay = [
+                  ...primaryOps.map((name) => {
+                    const found = opList.find((o) => o.operator === name);
+                    return found || { operator: name, total: 0, newCount: 0, newPercent: 0 };
+                  }),
+                  ...opList.filter((o) => !primaryOps.includes(o.operator) && o.total > 0),
+                ];
+
+                const maxVal = Math.max(...colsToDisplay.map((o) => o.total), 1);
+
                 return (
-                  <article key={b.key} className={`growth-band-card gb-card ${presentOps.length === 0 ? 'is-empty' : ''}`}>
-                    <header className="gb-head">
-                      <div className="gb-title">
+                  <article
+                    key={b.key}
+                    className={`growth-band-card ${totalCount === 0 ? 'is-empty' : ''}`}
+                  >
+                    <header className="growth-band-header">
+                      <div className="growth-band-title-wrap">
                         <span
                           className="growth-tech-badge"
                           style={{ background: techInfo.bg, color: techInfo.text, borderColor: techInfo.border }}
                         >
                           {b.tech === '5G' ? 'NR' : b.tech}
                         </span>
-                        <span className="gb-band">{b.band}<small>MHz</small></span>
-                        {b.tech !== 'GSM' && <span className="gb-duplex">{b.duplex}</span>}
+                        <span className="growth-band-freq">
+                          {b.band}
+                          <small>MHz</small>
+                        </span>
+                        {b.duplex && <span className="growth-band-duplex">{b.duplex}</span>}
                       </div>
                       {newCount > 0 ? (
-                        <span className="gb-new-pill" title={isPl ? 'Nowy przyrost' : 'New additions'}>+{formatNumber(newCount)}</span>
+                        <span className="growth-band-new-pill" title={isPl ? 'Nowy przyrost w wykazie' : 'New additions'}>
+                          +{formatNumber(newCount)}
+                        </span>
                       ) : (
-                        <span className="gb-new-pill is-zero" title={isPl ? 'Brak nowego przyrostu' : 'No new additions'}>+0</span>
+                        <span className="growth-band-new-pill is-zero" title={isPl ? 'Brak nowego przyrostu' : 'No new additions'}>
+                          +0
+                        </span>
                       )}
                     </header>
 
-                    <div className="gb-total">
+                    <div className="growth-band-total-row">
                       <strong>{formatNumber(totalCount)}</strong>
-                      <span>{growthBandMode === 'cells' ? (isPl ? 'komórek' : 'cells') : (isPl ? 'stacji' : 'sites')}</span>
+                      <span>
+                        {growthBandMode === 'cells'
+                          ? isPl ? 'komórek' : 'cells'
+                          : isPl ? 'stacji' : 'sites'}
+                      </span>
                     </div>
 
-                    {presentOps.length > 0 ? (
-                      <ul className="gb-rows">
-                        {presentOps.map((op) => {
-                          const theme = getOperatorTheme(op.operator);
-                          const pct = Math.max(1.5, (op.total / maxVal) * 100);
-                          const newPct = op.newCount > 0 ? Math.min(100, Math.max(8, (op.newCount / op.total) * 100)) : 0;
-                          return (
-                            <li
-                              key={op.operator}
-                              className="gb-row"
-                              title={`${b.key} · ${op.operator}: ${formatNumber(op.total)}${op.newCount > 0 ? ` (+${formatNumber(op.newCount)}, +${op.newPercent}%)` : ''}`}
-                            >
-                              <span className="gb-op">
-                                <span className="gb-dot" style={{ background: theme.primary }} />
-                                <span className="gb-op-name">{op.operator}</span>
-                              </span>
-                              <span className="gb-track">
-                                <span
-                                  className="gb-fill"
-                                  style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${theme.primary}b3 0%, ${theme.primary} 100%)` }}
-                                >
-                                  {newPct > 0 && <span className="gb-fill-new" style={{ width: `${newPct}%` }} />}
-                                </span>
-                              </span>
-                              <span className="gb-val">
-                                {formatNumber(op.total)}
-                                {op.newCount > 0 && <em>+{formatNumber(op.newCount)}</em>}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                    {totalCount === 0 ? (
+                      <div className="growth-band-empty-stage">
+                        <span className="growth-band-empty-icon" aria-hidden="true">∅</span>
+                        <span>{isPl ? 'Brak stacji w tym paśmie' : 'No deployments in this band'}</span>
+                      </div>
                     ) : (
-                      <div className="gb-empty">
-                        <span className="gb-empty-icon" aria-hidden="true">∅</span>
-                        <span>{isPl ? 'Brak wdrożeń w tym paśmie' : 'No deployments in this band'}</span>
+                      <div className="growth-band-chart-area">
+                        <div className="growth-band-stage">
+                          <div className="growth-band-stage-guides" aria-hidden="true">
+                            <div className="growth-band-guide-line" />
+                            <div className="growth-band-guide-line" />
+                            <div className="growth-band-guide-line" />
+                          </div>
+
+                          {colsToDisplay.map((op) => {
+                            const theme = getOperatorTheme(op.operator);
+                            const hasValue = op.total > 0;
+                            // Proportional pillar height, minimum 6% if > 0
+                            const heightPct = hasValue
+                              ? Math.max(6, Math.round((op.total / maxVal) * 100))
+                              : 0;
+                            const newPct =
+                              op.newCount > 0 && op.total > 0
+                                ? Math.min(100, Math.max(12, Math.round((op.newCount / op.total) * 100)))
+                                : 0;
+
+                            const tooltipText = `${b.key} · ${op.operator}: ${formatNumber(op.total)} ${
+                              growthBandMode === 'cells' ? (isPl ? 'komórek' : 'cells') : isPl ? 'stacji' : 'sites'
+                            }${
+                              op.newCount > 0 ? ` (+${formatNumber(op.newCount)}, +${op.newPercent}%)` : ''
+                            }`;
+
+                            return (
+                              <div
+                                key={op.operator}
+                                className={`growth-band-col ${!hasValue ? 'is-zero' : ''}`}
+                                title={tooltipText}
+                              >
+                                <div className={`growth-band-col-val ${!hasValue ? 'is-zero' : ''}`}>
+                                  {hasValue ? (
+                                    <>
+                                      <span>{formatNumber(op.total)}</span>
+                                      {op.newCount > 0 && (
+                                        <span className="growth-band-col-new">
+                                          +{formatNumber(op.newCount)}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="growth-band-dash">—</span>
+                                  )}
+                                </div>
+
+                                <div className="growth-band-bar-track">
+                                  {hasValue && (
+                                    <div
+                                      className="growth-band-bar-fill"
+                                      style={{
+                                        height: `${heightPct}%`,
+                                        background: theme.gradient,
+                                        boxShadow: `0 2px 8px ${theme.glow}`,
+                                      }}
+                                    >
+                                      {newPct > 0 && (
+                                        <div
+                                          className="growth-band-bar-hatch"
+                                          style={{ height: `${newPct}%` }}
+                                        />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="growth-band-labels-row">
+                          {colsToDisplay.map((op) => {
+                            const theme = getOperatorTheme(op.operator);
+                            const shortName =
+                              op.operator === 'T-Mobile'
+                                ? 'T-Mobile'
+                                : op.operator === 'PKP PLK'
+                                ? 'PKP'
+                                : op.operator === 'PGE Systemy'
+                                ? 'PGE'
+                                : op.operator;
+
+                            return (
+                              <div
+                                key={op.operator}
+                                className="growth-band-col-label"
+                                title={op.operator}
+                              >
+                                <span
+                                  className="growth-band-col-dot"
+                                  style={{ background: theme.primary }}
+                                />
+                                <span className="growth-band-col-name">{shortName}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </article>
