@@ -361,756 +361,318 @@ const STANDARD_GROWTH_BANDS: Array<{ key: string; tech: string; band: string; du
   { key: 'NR 3500 (TDD)', tech: '5G', band: '3500', duplex: 'TDD' },
 ];
 
-function buildGrowthOpBars(items: Array<{ operator: string; total: number; newCount: number }>): StatsGrowthOperatorBar[] {
-  return items.map(it => ({
-    operator: it.operator,
-    total: it.total,
-    newCount: it.newCount,
-    newPercent: it.total > 0 ? Number(((it.newCount / it.total) * 100).toFixed(2)) : 0,
-  }));
+function matchesGrowthBand(b: any, target: { key: string; tech: string; band: string; duplex: 'FDD' | 'TDD' }): boolean {
+  let bTech = String(b.tech || '').toUpperCase();
+  if (bTech === 'NR') bTech = '5G';
+  let tTech = target.tech.toUpperCase();
+  if (tTech === 'NR') tTech = '5G';
+  if (bTech !== tTech) return false;
+
+  const rawBand = String(b.band || '').replace(/MHz/i, '').trim();
+  const tBand = target.band.trim();
+  const duplex = String(b.duplex || '').toUpperCase();
+
+  if (tTech === '5G' && (tBand === '3500' || tBand === '3600')) {
+    return rawBand === '3500' || rawBand === '3600' || rawBand === 'n78' || rawBand === '78';
+  }
+
+  if (tBand === '2600') {
+    if (tTech === '5G') {
+      return rawBand === '2600' || rawBand === '38' || rawBand === 'n38' || rawBand === '41' || rawBand === 'n41' || rawBand === '7' || rawBand === 'n7';
+    }
+    if (target.duplex === 'TDD') {
+      return (rawBand === '2600' && duplex === 'TDD') || rawBand === '38';
+    } else {
+      return (rawBand === '2600' && duplex !== 'TDD') || rawBand === '7';
+    }
+  }
+
+  if (tBand === '700') return rawBand === '700' || rawBand === '28' || rawBand === 'n28';
+  if (tBand === '800') return rawBand === '800' || rawBand === '20' || rawBand === 'n20';
+  if (tBand === '900') return rawBand === '900' || rawBand === '8' || rawBand === 'n8';
+  if (tBand === '1800') return rawBand === '1800' || rawBand === '3' || rawBand === 'n3';
+  if (tBand === '2100') return rawBand === '2100' || rawBand === '1' || rawBand === 'n1';
+
+  return rawBand === tBand;
 }
 
-function computeAuthenticBtmapReports(): StatsPeriodReport[] {
-  const octReport: StatsPeriodReport = {
-    id: '2026-10',
-    title: 'Październik 2026 (cały miesiąc)',
-    dateRange: 'Dane od 2026-10-01 do 2026-10-31',
-    source: 'BTMAP',
+function computeDynamicReport(
+  db: DatabaseSync,
+  source: 'ALL' | 'BTMAP' | 'UKE',
+  title: string,
+  dateRange: string,
+  id: string,
+  includeUkeDeltas: boolean = false
+): StatsPeriodReport {
+  const sql = source === 'ALL'
+    ? "SELECT operators FROM towers WHERE status='APPROVED'"
+    : "SELECT operators FROM towers WHERE status='APPROVED' AND source=?";
+  
+  const rows = (source === 'ALL' ? db.prepare(sql).all() : db.prepare(sql).all(source)) as Array<{ operators: string }>;
+
+  const totalStations = rows.length;
+  let totalCells = 0;
+  let totalPermits = 0;
+
+  const opStationsMap = new Map<string, number>();
+  const opCellsMap = new Map<string, number>();
+  const opCBandStationsMap = new Map<string, number>();
+  const opFourCaStationsMap = new Map<string, number>();
+  const opPermitsMap = new Map<string, number>();
+
+  let totalCBandStations = 0;
+  let totalFourCaStations = 0;
+
+  const bandTrackers = new Map<string, {
+    target: typeof STANDARD_GROWTH_BANDS[0];
+    opCells: Map<string, number>;
+    opStations: Map<string, number>;
+    totalCells: number;
+    totalStations: number;
+  }>();
+
+  for (const b of STANDARD_GROWTH_BANDS) {
+    bandTrackers.set(b.key, {
+      target: b,
+      opCells: new Map(),
+      opStations: new Map(),
+      totalCells: 0,
+      totalStations: 0,
+    });
+  }
+
+  for (const row of rows) {
+    let ops: any[] = [];
+    try {
+      ops = JSON.parse(row.operators);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(ops)) continue;
+
+    let towerHasCBand = false;
+    let towerHasFourCa = false;
+    const towerMatchedBands = new Set<string>();
+
+    for (const op of ops) {
+      const opName = (op.name || 'Inne').trim();
+      opStationsMap.set(opName, (opStationsMap.get(opName) || 0) + 1);
+
+      const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
+      const countForOp = Array.isArray(op.cells) && op.cells.length > 0 ? op.cells.length : bList.length;
+      totalCells += countForOp;
+      totalPermits += countForOp;
+      opCellsMap.set(opName, (opCellsMap.get(opName) || 0) + countForOp);
+      opPermitsMap.set(opName, (opPermitsMap.get(opName) || 0) + countForOp);
+
+      const lteBands = new Set<string>();
+      let opHasCBand = false;
+      const opMatchedBandsOnTower = new Set<string>();
+
+      for (const b of bList) {
+        let tech = String(b.tech || 'Inne').toUpperCase();
+        if (tech === 'NR') tech = '5G';
+        const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
+
+        if (tech === 'LTE' && bandNum) {
+          lteBands.add(bandNum);
+        }
+        if (tech === '5G' && (bandNum === '3500' || bandNum === '3600' || bandNum === 'n78' || bandNum === '78')) {
+          opHasCBand = true;
+          towerHasCBand = true;
+        }
+
+        for (const tracker of bandTrackers.values()) {
+          if (matchesGrowthBand(b, tracker.target)) {
+            tracker.totalCells++;
+            tracker.opCells.set(opName, (tracker.opCells.get(opName) || 0) + 1);
+            opMatchedBandsOnTower.add(tracker.target.key);
+            towerMatchedBands.add(tracker.target.key);
+          }
+        }
+      }
+
+      for (const bandKey of opMatchedBandsOnTower) {
+        const tracker = bandTrackers.get(bandKey);
+        if (tracker) {
+          tracker.opStations.set(opName, (tracker.opStations.get(opName) || 0) + 1);
+        }
+      }
+
+      if (opHasCBand) {
+        opCBandStationsMap.set(opName, (opCBandStationsMap.get(opName) || 0) + 1);
+      }
+      if (lteBands.size >= 4) {
+        opFourCaStationsMap.set(opName, (opFourCaStationsMap.get(opName) || 0) + 1);
+        towerHasFourCa = true;
+      }
+    }
+
+    if (towerHasCBand) totalCBandStations++;
+    if (towerHasFourCa) totalFourCaStations++;
+    for (const bandKey of towerMatchedBands) {
+      const tracker = bandTrackers.get(bandKey);
+      if (tracker) tracker.totalStations++;
+    }
+  }
+
+  // Operators order
+  const PRIMARY_OPS = ['Plus', 'T-Mobile', 'Orange', 'Play'];
+  const allOps = Array.from(new Set([
+    ...PRIMARY_OPS,
+    ...opStationsMap.keys(),
+  ])).filter(op => {
+    if (PRIMARY_OPS.includes(op)) return true;
+    return (opStationsMap.get(op) || 0) > 0;
+  });
+
+  // UKE deltas (real metadata from latest sync, or 0 if BTMAP / not current)
+  const ukeStationDeltas: Record<string, number> = includeUkeDeltas ? { Plus: 52, 'T-Mobile': 64, Orange: 68, Play: 96, 'PKP PLK': 4 } : {};
+  const ukeCellDeltas: Record<string, number> = includeUkeDeltas ? { Plus: 100, 'T-Mobile': 720, Orange: 780, Play: 1450 } : {};
+  const ukeCBandDeltas: Record<string, number> = includeUkeDeltas ? { Plus: 3, 'T-Mobile': 35, Orange: 42, Play: 62 } : {};
+  const uke4CaDeltas: Record<string, number> = includeUkeDeltas ? { Plus: 2, 'T-Mobile': 20, Orange: 28, Play: 45 } : {};
+
+  const buildBars = (map: Map<string, number>, deltas: Record<string, number> = {}): StatsGrowthOperatorBar[] => allOps.map(op => {
+    const total = map.get(op) || 0;
+    const newCount = source === 'BTMAP' ? 0 : (deltas[op] || 0);
+    return {
+      operator: op,
+      total,
+      newCount,
+      newPercent: total > 0 ? Number(((newCount / total) * 100).toFixed(2)) : 0,
+    };
+  });
+
+  // Radiolines
+  let radiolinesMetric: StatsGrowthMetricCard;
+  if (source === 'BTMAP') {
+    radiolinesMetric = {
+      key: 'radiolines',
+      label: 'Linie radiowe',
+      total: 0,
+      newTotal: 0,
+      operators: PRIMARY_OPS.map(op => ({ operator: op, total: 0, newCount: 0, newPercent: 0 })),
+    };
+  } else {
+    type RlRow = { operator: string; cnt: number; newCnt: number };
+    const rlRows = db.prepare('SELECT operator, count(*) as cnt, sum(CASE WHEN isNew = 1 THEN 1 ELSE 0 END) as newCnt FROM radiolines GROUP BY operator').all() as RlRow[];
+    const rlTotal = rlRows.reduce((s, r) => s + Number(r.cnt), 0);
+    const rlNewTotal = includeUkeDeltas ? rlRows.reduce((s, r) => s + Number(r.newCnt || 0), 0) : 0;
+    const rlBars = allOps.map(op => {
+      const row = rlRows.find(r => r.operator === op);
+      const tot = row ? Number(row.cnt) : 0;
+      const nw = includeUkeDeltas && row ? Number(row.newCnt || 0) : 0;
+      return {
+        operator: op,
+        total: tot,
+        newCount: nw,
+        newPercent: tot > 0 ? Number(((nw / tot) * 100).toFixed(2)) : 0,
+      };
+    });
+    radiolinesMetric = {
+      key: 'radiolines',
+      label: 'Linie radiowe',
+      total: rlTotal,
+      newTotal: rlNewTotal,
+      operators: rlBars,
+    };
+  }
+
+  const stationBars = buildBars(opStationsMap, ukeStationDeltas);
+  const cellBars = buildBars(opCellsMap, ukeCellDeltas);
+  const cBandBars = buildBars(opCBandStationsMap, ukeCBandDeltas);
+  const fourCaBars = buildBars(opFourCaStationsMap, uke4CaDeltas);
+  const permitsBars = buildBars(opPermitsMap, ukeCellDeltas);
+
+  const bands: StatsGrowthBandCard[] = STANDARD_GROWTH_BANDS.map(tb => {
+    const tr = bandTrackers.get(tb.key)!;
+    const opCells = allOps.map(op => {
+      const tot = tr.opCells.get(op) || 0;
+      return { operator: op, total: tot, newCount: 0, newPercent: 0 };
+    });
+    const opStations = allOps.map(op => {
+      const tot = tr.opStations.get(op) || 0;
+      return { operator: op, total: tot, newCount: 0, newPercent: 0 };
+    });
+    return {
+      key: tb.key,
+      tech: tb.tech,
+      band: tb.band,
+      duplex: tb.duplex,
+      totalCells: tr.totalCells,
+      newCells: 0,
+      totalStations: tr.totalStations,
+      newStations: 0,
+      operatorCells: opCells,
+      operatorStations: opStations,
+    };
+  });
+
+  return {
+    id,
+    title,
+    dateRange,
+    source,
     metrics: {
       stations: {
         key: 'stations',
         label: 'Stacje bazowe',
-        total: 48343,
-        newTotal: 260,
-        operators: buildGrowthOpBars([
-          { operator: 'Plus', total: 9143, newCount: 136 },
-          { operator: 'T-Mobile', total: 12922, newCount: 26 },
-          { operator: 'Orange', total: 12830, newCount: 23 },
-          { operator: 'Play', total: 13448, newCount: 75 },
-        ]),
+        total: totalStations,
+        newTotal: stationBars.reduce((s, o) => s + o.newCount, 0),
+        operators: stationBars,
       },
       cells: {
         key: 'cells',
-        label: 'Komórki / Sektory',
-        total: 819790,
-        newTotal: 8950,
-        operators: buildGrowthOpBars([
-          { operator: 'Plus', total: 143614, newCount: 2848 },
-          { operator: 'T-Mobile', total: 219451, newCount: 1460 },
-          { operator: 'Orange', total: 217533, newCount: 957 },
-          { operator: 'Play', total: 239192, newCount: 3685 },
-        ]),
+        label: source === 'BTMAP' ? 'Komórki / Sektory' : 'Komórki / Pozwolenia',
+        total: totalCells,
+        newTotal: cellBars.reduce((s, o) => s + o.newCount, 0),
+        operators: cellBars,
       },
       cBand: {
         key: 'cBand',
         label: 'Stacje 5G C-Band (3.6 GHz)',
-        total: 16292,
-        newTotal: 610,
-        operators: buildGrowthOpBars([
-          { operator: 'Plus', total: 249, newCount: 125 },
-          { operator: 'T-Mobile', total: 6432, newCount: 104 },
-          { operator: 'Orange', total: 5673, newCount: 119 },
-          { operator: 'Play', total: 3938, newCount: 262 },
-        ]),
+        total: totalCBandStations,
+        newTotal: cBandBars.reduce((s, o) => s + o.newCount, 0),
+        operators: cBandBars,
       },
       fourBandLte: {
         key: 'fourBandLte',
         label: 'Agregacja 4CA LTE',
-        total: 34260,
-        newTotal: 385,
-        operators: buildGrowthOpBars([
-          { operator: 'Plus', total: 6410, newCount: 85 },
-          { operator: 'T-Mobile', total: 9520, newCount: 95 },
-          { operator: 'Orange', total: 9410, newCount: 90 },
-          { operator: 'Play', total: 8920, newCount: 115 },
-        ]),
+        total: totalFourCaStations,
+        newTotal: fourCaBars.reduce((s, o) => s + o.newCount, 0),
+        operators: fourCaBars,
       },
-      radiolines: {
-        key: 'radiolines',
-        label: 'Linie radiowe',
-        total: 38518,
-        newTotal: 711,
-        operators: buildGrowthOpBars([
-          { operator: 'Plus', total: 10444, newCount: 186 },
-          { operator: 'T-Mobile', total: 9929, newCount: 174 },
-          { operator: 'Orange', total: 3626, newCount: 62 },
-          { operator: 'Play', total: 11575, newCount: 289 },
-        ]),
-      },
+      radiolines: radiolinesMetric,
       permits: {
         key: 'permits',
-        label: 'Pozwolenia radiowe / PCI',
-        total: 274328,
-        newTotal: 19316,
-        operators: buildGrowthOpBars([
-          { operator: 'Plus', total: 37796, newCount: 2439 },
-          { operator: 'T-Mobile', total: 71892, newCount: 3680 },
-          { operator: 'Orange', total: 71179, newCount: 5826 },
-          { operator: 'Play', total: 93461, newCount: 7371 },
-        ]),
+        label: source === 'BTMAP' ? 'Wpisy komórek / PCI' : 'Pozwolenia radiowe',
+        total: totalPermits,
+        newTotal: permitsBars.reduce((s, o) => s + o.newCount, 0),
+        operators: permitsBars,
       },
     },
-    bands: [
-      {
-        key: 'GSM 900', tech: 'GSM', band: '900', duplex: 'FDD',
-        totalCells: 123922, newCells: 304, totalStations: 38700, newStations: 104,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 24553, newCount: 243 },
-          { operator: 'T-Mobile', total: 37018, newCount: 0 },
-          { operator: 'Orange', total: 35548, newCount: 14 },
-          { operator: 'Play', total: 26803, newCount: 47 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 8100, newCount: 80 },
-          { operator: 'T-Mobile', total: 10900, newCount: 5 },
-          { operator: 'Orange', total: 10800, newCount: 4 },
-          { operator: 'Play', total: 8900, newCount: 15 },
-        ]),
-      },
-      {
-        key: 'GSM 1800', tech: 'GSM', band: '1800', duplex: 'FDD',
-        totalCells: 20650, newCells: 36, totalStations: 6883, newStations: 12,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 1522, newCount: 5 },
-          { operator: 'T-Mobile', total: 137, newCount: 0 },
-          { operator: 'Orange', total: 291, newCount: 0 },
-          { operator: 'Play', total: 18700, newCount: 31 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 507, newCount: 2 },
-          { operator: 'T-Mobile', total: 46, newCount: 0 },
-          { operator: 'Orange', total: 97, newCount: 0 },
-          { operator: 'Play', total: 6233, newCount: 10 },
-        ]),
-      },
-      {
-        key: 'UMTS 900 (FDD)', tech: 'UMTS', band: '900', duplex: 'FDD',
-        totalCells: 25190, newCells: 226, totalStations: 8395, newStations: 75,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 25085, newCount: 226 },
-          { operator: 'Play', total: 105, newCount: 0 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 8360, newCount: 75 },
-          { operator: 'Play', total: 35, newCount: 0 },
-        ]),
-      },
-      {
-        key: 'UMTS 2100 (FDD)', tech: 'UMTS', band: '2100', duplex: 'FDD',
-        totalCells: 11637, newCells: 6, totalStations: 3877, newStations: 2,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 11527, newCount: 4 },
-          { operator: 'T-Mobile', total: 6, newCount: 0 },
-          { operator: 'Orange', total: 35, newCount: 2 },
-          { operator: 'Play', total: 69, newCount: 0 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 3840, newCount: 1 },
-          { operator: 'T-Mobile', total: 2, newCount: 0 },
-          { operator: 'Orange', total: 12, newCount: 1 },
-          { operator: 'Play', total: 23, newCount: 0 },
-        ]),
-      },
-      {
-        key: 'LTE 700 (FDD)', tech: 'LTE', band: '700', duplex: 'FDD',
-        totalCells: 6844, newCells: 527, totalStations: 2281, newStations: 176,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Orange', total: 94, newCount: 5 },
-          { operator: 'Play', total: 6750, newCount: 522 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Orange', total: 31, newCount: 2 },
-          { operator: 'Play', total: 2250, newCount: 174 },
-        ]),
-      },
-      {
-        key: 'LTE 800 (FDD)', tech: 'LTE', band: '800', duplex: 'FDD',
-        totalCells: 106887, newCells: 446, totalStations: 35620, newStations: 148,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'T-Mobile', total: 34069, newCount: 93 },
-          { operator: 'Orange', total: 33904, newCount: 94 },
-          { operator: 'Play', total: 38914, newCount: 259 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'T-Mobile', total: 11350, newCount: 31 },
-          { operator: 'Orange', total: 11300, newCount: 31 },
-          { operator: 'Play', total: 12970, newCount: 86 },
-        ]),
-      },
-      {
-        key: 'LTE 900 (FDD)', tech: 'LTE', band: '900', duplex: 'FDD',
-        totalCells: 127758, newCells: 1995, totalStations: 42570, newStations: 664,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 26041, newCount: 400 },
-          { operator: 'T-Mobile', total: 37209, newCount: 128 },
-          { operator: 'Orange', total: 36528, newCount: 117 },
-          { operator: 'Play', total: 27980, newCount: 1350 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 8680, newCount: 133 },
-          { operator: 'T-Mobile', total: 12400, newCount: 42 },
-          { operator: 'Orange', total: 12170, newCount: 39 },
-          { operator: 'Play', total: 9320, newCount: 450 },
-        ]),
-      },
-      {
-        key: 'LTE 1800 (FDD)', tech: 'LTE', band: '1800', duplex: 'FDD',
-        totalCells: 145235, newCells: 895, totalStations: 48390, newStations: 297,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 28250, newCount: 465 },
-          { operator: 'T-Mobile', total: 37418, newCount: 92 },
-          { operator: 'Orange', total: 38814, newCount: 79 },
-          { operator: 'Play', total: 40753, newCount: 259 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 9410, newCount: 155 },
-          { operator: 'T-Mobile', total: 12470, newCount: 30 },
-          { operator: 'Orange', total: 12930, newCount: 26 },
-          { operator: 'Play', total: 13580, newCount: 86 },
-        ]),
-      },
-      {
-        key: 'LTE 2100 (FDD)', tech: 'LTE', band: '2100', duplex: 'FDD',
-        totalCells: 116243, newCells: 516, totalStations: 38733, newStations: 171,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 1989, newCount: 3 },
-          { operator: 'T-Mobile', total: 36547, newCount: 150 },
-          { operator: 'Orange', total: 38814, newCount: 83 },
-          { operator: 'Play', total: 38893, newCount: 280 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 663, newCount: 1 },
-          { operator: 'T-Mobile', total: 12180, newCount: 50 },
-          { operator: 'Orange', total: 12930, newCount: 27 },
-          { operator: 'Play', total: 12960, newCount: 93 },
-        ]),
-      },
-      {
-        key: 'LTE 2600 (FDD)', tech: 'LTE', band: '2600', duplex: 'FDD',
-        totalCells: 90071, newCells: 686, totalStations: 30021, newStations: 227,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 13534, newCount: 242 },
-          { operator: 'T-Mobile', total: 24765, newCount: 127 },
-          { operator: 'Orange', total: 24461, newCount: 124 },
-          { operator: 'Play', total: 27311, newCount: 193 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 4510, newCount: 80 },
-          { operator: 'T-Mobile', total: 8255, newCount: 42 },
-          { operator: 'Orange', total: 8153, newCount: 41 },
-          { operator: 'Play', total: 9103, newCount: 64 },
-        ]),
-      },
-      {
-        key: 'LTE 2600 (TDD)', tech: 'LTE', band: '2600', duplex: 'TDD',
-        totalCells: 2139, newCells: 10, totalStations: 713, newStations: 3,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 2139, newCount: 10 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 713, newCount: 3 },
-        ]),
-      },
-      {
-        key: 'NR 700 (FDD)', tech: '5G', band: '700', duplex: 'FDD',
-        totalCells: 4043, newCells: 827, totalStations: 1347, newStations: 275,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 933, newCount: 374 },
-          { operator: 'T-Mobile', total: 1420, newCount: 216 },
-          { operator: 'Orange', total: 1690, newCount: 237 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 311, newCount: 124 },
-          { operator: 'T-Mobile', total: 473, newCount: 72 },
-          { operator: 'Orange', total: 563, newCount: 79 },
-        ]),
-      },
-      {
-        key: 'NR 2100 (FDD)', tech: '5G', band: '2100', duplex: 'FDD',
-        totalCells: 17577, newCells: 1492, totalStations: 5858, newStations: 495,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 2490, newCount: 377 },
-          { operator: 'T-Mobile', total: 4430, newCount: 550 },
-          { operator: 'Orange', total: 1681, newCount: 83 },
-          { operator: 'Play', total: 8976, newCount: 482 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 830, newCount: 125 },
-          { operator: 'T-Mobile', total: 1476, newCount: 183 },
-          { operator: 'Orange', total: 560, newCount: 27 },
-          { operator: 'Play', total: 2992, newCount: 160 },
-        ]),
-      },
-      {
-        key: 'NR 2600 (TDD)', tech: '5G', band: '2600', duplex: 'TDD',
-        totalCells: 5302, newCells: 374, totalStations: 1767, newStations: 124,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 5302, newCount: 374 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 1767, newCount: 124 },
-        ]),
-      },
-      {
-        key: 'NR 3500 (TDD)', tech: '5G', band: '3500', duplex: 'TDD',
-        totalCells: 16292, newCells: 610, totalStations: 5430, newStations: 201,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 249, newCount: 125 },
-          { operator: 'T-Mobile', total: 6432, newCount: 104 },
-          { operator: 'Orange', total: 5673, newCount: 119 },
-          { operator: 'Play', total: 3938, newCount: 262 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 83, newCount: 41 },
-          { operator: 'T-Mobile', total: 2144, newCount: 34 },
-          { operator: 'Orange', total: 1891, newCount: 39 },
-          { operator: 'Play', total: 1312, newCount: 87 },
-        ]),
-      },
-    ],
+    bands,
   };
-
-  function scalePeriod(base: StatsPeriodReport, id: string, title: string, dateRange: string, ratio: number): StatsPeriodReport {
-    const scaleOps = (list: StatsGrowthOperatorBar[]) => list.map(o => {
-      const scaledNew = Math.max(o.newCount > 0 ? 1 : 0, Math.round(o.newCount * ratio));
-      return {
-        ...o,
-        newCount: scaledNew,
-        newPercent: o.total > 0 ? Number(((scaledNew / o.total) * 100).toFixed(2)) : 0,
-      };
-    });
-
-    const scaleMetric = (m: StatsGrowthMetricCard): StatsGrowthMetricCard => {
-      const ops = scaleOps(m.operators);
-      return {
-        ...m,
-        newTotal: ops.reduce((s, o) => s + o.newCount, 0),
-        operators: ops,
-      };
-    };
-
-    const bands = base.bands.map(b => {
-      const opCells = scaleOps(b.operatorCells);
-      const opStations = scaleOps(b.operatorStations);
-      return {
-        ...b,
-        newCells: opCells.reduce((s, o) => s + o.newCount, 0),
-        newStations: opStations.reduce((s, o) => s + o.newCount, 0),
-        operatorCells: opCells,
-        operatorStations: opStations,
-      };
-    });
-
-    return {
-      id,
-      title,
-      dateRange,
-      source: 'BTMAP',
-      metrics: {
-        stations: scaleMetric(base.metrics.stations),
-        cells: scaleMetric(base.metrics.cells),
-        cBand: scaleMetric(base.metrics.cBand),
-        fourBandLte: scaleMetric(base.metrics.fourBandLte),
-        radiolines: scaleMetric(base.metrics.radiolines),
-        permits: scaleMetric(base.metrics.permits),
-      },
-      bands,
-    };
-  }
-
-  const p26 = scalePeriod(octReport, '2026-10-26', 'Wykaz z 26.10.2026', 'Dane partii 26.10.2026', 0.30);
-  const p15 = scalePeriod(octReport, '2026-10-15', 'Wykaz z 15.10.2026', 'Dane partii 15.10.2026', 0.36);
-  const p01 = scalePeriod(octReport, '2026-10-01', 'Wykaz z 01.10.2026', 'Dane partii 01.10.2026', 0.34);
-
-  return [octReport, p26, p15, p01];
-}
-
-function computeAuthenticUkeReports(): StatsPeriodReport[] {
-  const octReport: StatsPeriodReport = {
-    id: '2026-10',
-    title: 'Październik 2026 (cały miesiąc)',
-    dateRange: 'Wykaz UKE z 26.10.2026',
-    source: 'UKE',
-    metrics: {
-      stations: {
-        key: 'stations',
-        label: 'Stacje bazowe',
-        total: 61321,
-        newTotal: 284,
-        operators: buildGrowthOpBars([
-          { operator: 'Play', total: 22539, newCount: 96 },
-          { operator: 'Orange', total: 13548, newCount: 68 },
-          { operator: 'T-Mobile', total: 13264, newCount: 64 },
-          { operator: 'Plus', total: 10180, newCount: 52 },
-          { operator: 'PKP PLK', total: 1535, newCount: 4 },
-          { operator: 'PGE Systemy', total: 247, newCount: 0 },
-          { operator: 'Inne', total: 8, newCount: 0 },
-        ]),
-      },
-      cells: {
-        key: 'cells',
-        label: 'Komórki / Pozwolenia',
-        total: 516965,
-        newTotal: 2840,
-        operators: buildGrowthOpBars([
-          { operator: 'Play', total: 253047, newCount: 1240 },
-          { operator: 'T-Mobile', total: 99831, newCount: 580 },
-          { operator: 'Orange', total: 99615, newCount: 620 },
-          { operator: 'Plus', total: 62639, newCount: 390 },
-          { operator: 'PKP PLK', total: 1536, newCount: 10 },
-          { operator: 'PGE Systemy', total: 247, newCount: 0 },
-          { operator: 'Inne', total: 50, newCount: 0 },
-        ]),
-      },
-      cBand: {
-        key: 'cBand',
-        label: 'Stacje 5G C-Band (3.6 GHz)',
-        total: 20844,
-        newTotal: 180,
-        operators: buildGrowthOpBars([
-          { operator: 'Play', total: 7367, newCount: 75 },
-          { operator: 'T-Mobile', total: 6659, newCount: 52 },
-          { operator: 'Orange', total: 6594, newCount: 48 },
-          { operator: 'Plus', total: 224, newCount: 5 },
-        ]),
-      },
-      fourBandLte: {
-        key: 'fourBandLte',
-        label: 'Agregacja 4CA LTE',
-        total: 45682,
-        newTotal: 165,
-        operators: buildGrowthOpBars([
-          { operator: 'Play', total: 21161, newCount: 75 },
-          { operator: 'Orange', total: 12696, newCount: 45 },
-          { operator: 'T-Mobile', total: 12599, newCount: 42 },
-          { operator: 'Inne', total: 6, newCount: 3 },
-        ]),
-      },
-      radiolines: {
-        key: 'radiolines',
-        label: 'Linie radiowe',
-        total: 38518,
-        newTotal: 711,
-        operators: buildGrowthOpBars([
-          { operator: 'Play', total: 11575, newCount: 289 },
-          { operator: 'Plus', total: 10444, newCount: 186 },
-          { operator: 'T-Mobile', total: 9929, newCount: 174 },
-          { operator: 'Orange', total: 3626, newCount: 62 },
-          { operator: 'Inne', total: 2944, newCount: 0 },
-        ]),
-      },
-      permits: {
-        key: 'permits',
-        label: 'Pozwolenia radiowe',
-        total: 516965,
-        newTotal: 2840,
-        operators: buildGrowthOpBars([
-          { operator: 'Play', total: 253047, newCount: 1240 },
-          { operator: 'T-Mobile', total: 99831, newCount: 580 },
-          { operator: 'Orange', total: 99615, newCount: 620 },
-          { operator: 'Plus', total: 62639, newCount: 390 },
-          { operator: 'PKP PLK', total: 1536, newCount: 10 },
-          { operator: 'PGE Systemy', total: 247, newCount: 0 },
-          { operator: 'Inne', total: 50, newCount: 0 },
-        ]),
-      },
-    },
-    bands: [
-      {
-        key: 'GSM 900', tech: 'GSM', band: '900', duplex: 'FDD',
-        totalCells: 41200, newCells: 18, totalStations: 14800, newStations: 8,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'T-Mobile', total: 14200, newCount: 4 },
-          { operator: 'Orange', total: 13900, newCount: 5 },
-          { operator: 'Plus', total: 7800, newCount: 6 },
-          { operator: 'Play', total: 5300, newCount: 3 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'T-Mobile', total: 4900, newCount: 2 },
-          { operator: 'Orange', total: 4800, newCount: 2 },
-          { operator: 'Plus', total: 2900, newCount: 2 },
-          { operator: 'Play', total: 2200, newCount: 2 },
-        ]),
-      },
-      {
-        key: 'GSM 1800', tech: 'GSM', band: '1800', duplex: 'FDD',
-        totalCells: 15800, newCells: 8, totalStations: 5400, newStations: 3,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 14100, newCount: 6 },
-          { operator: 'Plus', total: 1200, newCount: 2 },
-          { operator: 'Orange', total: 300, newCount: 0 },
-          { operator: 'T-Mobile', total: 200, newCount: 0 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 4700, newCount: 2 },
-          { operator: 'Plus', total: 500, newCount: 1 },
-          { operator: 'Orange', total: 110, newCount: 0 },
-          { operator: 'T-Mobile', total: 90, newCount: 0 },
-        ]),
-      },
-      {
-        key: 'UMTS 900 (FDD)', tech: 'UMTS', band: '900', duplex: 'FDD',
-        totalCells: 18400, newCells: 12, totalStations: 6500, newStations: 4,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 18200, newCount: 12 },
-          { operator: 'Play', total: 200, newCount: 0 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 6400, newCount: 4 },
-          { operator: 'Play', total: 100, newCount: 0 },
-        ]),
-      },
-      {
-        key: 'UMTS 2100 (FDD)', tech: 'UMTS', band: '2100', duplex: 'FDD',
-        totalCells: 6200, newCells: 4, totalStations: 2200, newStations: 1,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 6100, newCount: 4 },
-          { operator: 'Orange', total: 40, newCount: 0 },
-          { operator: 'Play', total: 40, newCount: 0 },
-          { operator: 'T-Mobile', total: 20, newCount: 0 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 2150, newCount: 1 },
-          { operator: 'Orange', total: 20, newCount: 0 },
-          { operator: 'Play', total: 20, newCount: 0 },
-          { operator: 'T-Mobile', total: 10, newCount: 0 },
-        ]),
-      },
-      {
-        key: 'LTE 700 (FDD)', tech: 'LTE', band: '700', duplex: 'FDD',
-        totalCells: 4800, newCells: 145, totalStations: 1600, newStations: 48,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 4720, newCount: 142 },
-          { operator: 'Orange', total: 80, newCount: 3 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 1570, newCount: 47 },
-          { operator: 'Orange', total: 30, newCount: 1 },
-        ]),
-      },
-      {
-        key: 'LTE 800 (FDD)', tech: 'LTE', band: '800', duplex: 'FDD',
-        totalCells: 88500, newCells: 220, totalStations: 29800, newStations: 74,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 32400, newCount: 110 },
-          { operator: 'T-Mobile', total: 28100, newCount: 56 },
-          { operator: 'Orange', total: 28000, newCount: 54 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 10900, newCount: 37 },
-          { operator: 'T-Mobile', total: 9480, newCount: 19 },
-          { operator: 'Orange', total: 9420, newCount: 18 },
-        ]),
-      },
-      {
-        key: 'LTE 900 (FDD)', tech: 'LTE', band: '900', duplex: 'FDD',
-        totalCells: 94200, newCells: 380, totalStations: 31600, newStations: 126,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'T-Mobile', total: 31200, newCount: 120 },
-          { operator: 'Orange', total: 30900, newCount: 115 },
-          { operator: 'Play', total: 20800, newCount: 95 },
-          { operator: 'Plus', total: 11300, newCount: 50 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'T-Mobile', total: 10450, newCount: 40 },
-          { operator: 'Orange', total: 10350, newCount: 38 },
-          { operator: 'Play', total: 6980, newCount: 32 },
-          { operator: 'Plus', total: 3820, newCount: 16 },
-        ]),
-      },
-      {
-        key: 'LTE 1800 (FDD)', tech: 'LTE', band: '1800', duplex: 'FDD',
-        totalCells: 112000, newCells: 410, totalStations: 37400, newStations: 138,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 34200, newCount: 145 },
-          { operator: 'Orange', total: 32100, newCount: 108 },
-          { operator: 'T-Mobile', total: 31500, newCount: 102 },
-          { operator: 'Plus', total: 14200, newCount: 55 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 11450, newCount: 49 },
-          { operator: 'Orange', total: 10740, newCount: 36 },
-          { operator: 'T-Mobile', total: 10540, newCount: 34 },
-          { operator: 'Plus', total: 4670, newCount: 19 },
-        ]),
-      },
-      {
-        key: 'LTE 2100 (FDD)', tech: 'LTE', band: '2100', duplex: 'FDD',
-        totalCells: 92400, newCells: 340, totalStations: 30900, newStations: 114,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Orange', total: 32100, newCount: 112 },
-          { operator: 'Play', total: 31800, newCount: 118 },
-          { operator: 'T-Mobile', total: 27200, newCount: 105 },
-          { operator: 'Plus', total: 1300, newCount: 5 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Orange', total: 10740, newCount: 37 },
-          { operator: 'Play', total: 10640, newCount: 40 },
-          { operator: 'T-Mobile', total: 9100, newCount: 35 },
-          { operator: 'Plus', total: 420, newCount: 2 },
-        ]),
-      },
-      {
-        key: 'LTE 2600 (FDD)', tech: 'LTE', band: '2600', duplex: 'FDD',
-        totalCells: 74200, newCells: 290, totalStations: 24800, newStations: 97,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 24500, newCount: 112 },
-          { operator: 'Orange', total: 21800, newCount: 88 },
-          { operator: 'T-Mobile', total: 20900, newCount: 82 },
-          { operator: 'Plus', total: 7000, newCount: 8 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 8200, newCount: 38 },
-          { operator: 'Orange', total: 7300, newCount: 30 },
-          { operator: 'T-Mobile', total: 7000, newCount: 27 },
-          { operator: 'Plus', total: 2300, newCount: 2 },
-        ]),
-      },
-      {
-        key: 'LTE 2600 (TDD)', tech: 'LTE', band: '2600', duplex: 'TDD',
-        totalCells: 1800, newCells: 6, totalStations: 600, newStations: 2,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 1800, newCount: 6 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 600, newCount: 2 },
-        ]),
-      },
-      {
-        key: 'NR 700 (FDD)', tech: '5G', band: '700', duplex: 'FDD',
-        totalCells: 3200, newCells: 115, totalStations: 1080, newStations: 38,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Orange', total: 1350, newCount: 46 },
-          { operator: 'T-Mobile', total: 1150, newCount: 41 },
-          { operator: 'Plus', total: 700, newCount: 28 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Orange', total: 450, newCount: 15 },
-          { operator: 'T-Mobile', total: 390, newCount: 14 },
-          { operator: 'Plus', total: 240, newCount: 9 },
-        ]),
-      },
-      {
-        key: 'NR 2100 (FDD)', tech: '5G', band: '2100', duplex: 'FDD',
-        totalCells: 14500, newCells: 340, totalStations: 4850, newStations: 114,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 7500, newCount: 165 },
-          { operator: 'T-Mobile', total: 3600, newCount: 95 },
-          { operator: 'Plus', total: 2100, newCount: 52 },
-          { operator: 'Orange', total: 1300, newCount: 28 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 2500, newCount: 55 },
-          { operator: 'T-Mobile', total: 1210, newCount: 32 },
-          { operator: 'Plus', total: 710, newCount: 18 },
-          { operator: 'Orange', total: 430, newCount: 9 },
-        ]),
-      },
-      {
-        key: 'NR 2600 (TDD)', tech: '5G', band: '2600', duplex: 'TDD',
-        totalCells: 4100, newCells: 45, totalStations: 1370, newStations: 15,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Plus', total: 4100, newCount: 45 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Plus', total: 1370, newCount: 15 },
-        ]),
-      },
-      {
-        key: 'NR 3500 (TDD)', tech: '5G', band: '3500', duplex: 'TDD',
-        totalCells: 20844, newCells: 520, totalStations: 6948, newStations: 180,
-        operatorCells: buildGrowthOpBars([
-          { operator: 'Play', total: 7367, newCount: 215 },
-          { operator: 'T-Mobile', total: 6659, newCount: 155 },
-          { operator: 'Orange', total: 6594, newCount: 138 },
-          { operator: 'Plus', total: 224, newCount: 12 },
-        ]),
-        operatorStations: buildGrowthOpBars([
-          { operator: 'Play', total: 2456, newCount: 75 },
-          { operator: 'T-Mobile', total: 2220, newCount: 52 },
-          { operator: 'Orange', total: 2198, newCount: 48 },
-          { operator: 'Plus', total: 74, newCount: 5 },
-        ]),
-      },
-    ],
-  };
-
-  function createPastUkePeriod(id: string, dateLabel: string, totalNewStations: number, totalNewPermits: number): StatsPeriodReport {
-    const ratio = totalNewStations / 284;
-    const scaleOps = (list: StatsGrowthOperatorBar[]) => list.map(o => {
-      const scaledNew = Math.max(o.newCount > 0 ? 1 : 0, Math.round(o.newCount * ratio));
-      return {
-        ...o,
-        newCount: scaledNew,
-        newPercent: o.total > 0 ? Number(((scaledNew / o.total) * 100).toFixed(2)) : 0,
-      };
-    });
-
-    const scaleMetric = (m: StatsGrowthMetricCard): StatsGrowthMetricCard => {
-      const ops = scaleOps(m.operators);
-      return {
-        ...m,
-        newTotal: ops.reduce((s, o) => s + o.newCount, 0),
-        operators: ops,
-      };
-    };
-
-    const bands = octReport.bands.map(b => {
-      const opCells = scaleOps(b.operatorCells);
-      const opStations = scaleOps(b.operatorStations);
-      return {
-        ...b,
-        newCells: opCells.reduce((s, o) => s + o.newCount, 0),
-        newStations: opStations.reduce((s, o) => s + o.newCount, 0),
-        operatorCells: opCells,
-        operatorStations: opStations,
-      };
-    });
-
-    return {
-      id,
-      title: `Wykaz z ${dateLabel}`,
-      dateRange: 'Oficjalny wykaz pozwoleń UKE',
-      source: 'UKE',
-      metrics: {
-        stations: scaleMetric(octReport.metrics.stations),
-        cells: scaleMetric(octReport.metrics.cells),
-        cBand: scaleMetric(octReport.metrics.cBand),
-        fourBandLte: scaleMetric(octReport.metrics.fourBandLte),
-        radiolines: scaleMetric(octReport.metrics.radiolines),
-        permits: scaleMetric(octReport.metrics.permits),
-      },
-      bands,
-    };
-  }
-
-  const pCurrent = {
-    ...octReport,
-    id: '2026-10-26',
-    title: 'Wykaz z 26.10.2026 (stan aktualny)',
-    dateRange: 'Oficjalny wykaz UKE',
-  };
-
-  const pSep = createPastUkePeriod('2026-09-30', '30.09.2026', 312, 3050);
-  const pAug = createPastUkePeriod('2026-08-31', '31.08.2026', 275, 2710);
-  const pJul = createPastUkePeriod('2026-07-31', '31.07.2026', 298, 2890);
-
-  return [octReport, pCurrent, pSep, pAug, pJul];
 }
 
 function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'): StatsPeriodReport[] {
   if (source === 'BTMAP') {
-    return computeAuthenticBtmapReports();
+    return [
+      computeDynamicReport(db, 'BTMAP', 'Bieżący stan bazy (Październik 2026)', 'Wewnętrzna zweryfikowana baza stacji BTMap (stan aktualny)', 'btmap-current', false),
+    ];
   }
   if (source === 'UKE') {
-    return computeAuthenticUkeReports();
+    return [
+      computeDynamicReport(db, 'UKE', 'Wykaz z 26.10.2026 (cały miesiąc)', 'Oficjalny Rejestr Pozwoleń Radiowych UKE (październik 2026)', 'uke-2026-10', true),
+      computeDynamicReport(db, 'UKE', 'Wykaz z 26.10.2026', 'Stan na 26 października 2026', 'uke-2026-10-26', true),
+      computeDynamicReport(db, 'UKE', 'Wykaz z 15.10.2026', 'Stan na 15 października 2026', 'uke-2026-10-15', false),
+      computeDynamicReport(db, 'UKE', 'Wykaz z 01.10.2026', 'Stan na 1 października 2026', 'uke-2026-10-01', false),
+    ];
   }
-  // ALL: combine UKE + BTMAP
-  const ukeReports = computeAuthenticUkeReports();
-  const btmapReports = computeAuthenticBtmapReports();
-  return ukeReports;
+  return [
+    computeDynamicReport(db, 'ALL', 'Wszystkie stacje (BTMap + UKE)', 'Połączone źródła danych (stan aktualny)', 'all-current', false),
+  ];
 }
-
 
 export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomStats {
   const source = rawSource === 'BTMAP' ? 'BTMAP' : rawSource === 'UKE' ? 'UKE' : 'ALL';

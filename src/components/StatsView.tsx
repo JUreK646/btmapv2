@@ -663,7 +663,10 @@ export function StatsView({
                 +{formatNumber(m.newTotal)}
               </span>
             ) : (
-              <span className="growth-metric-stable-badge">{isPl ? 'Bez zmian' : 'Stable'}</span>
+              <span className="growth-metric-new-badge is-zero" title={isPl ? 'Brak nowego przyrostu' : 'No new additions'}>
+                <Sparkles size={12} />
+                +0
+              </span>
             )}
           </div>
 
@@ -697,7 +700,7 @@ export function StatsView({
                         +{formatNumber(op.newCount)}
                       </span>
                     ) : (
-                      <span className="growth-bar-new-chip is-empty">—</span>
+                      <span className="growth-bar-new-chip is-empty">+0</span>
                     )}
                   </div>
 
@@ -731,7 +734,7 @@ export function StatsView({
                     {op.newCount > 0 ? (
                       <span className="growth-op-pct-badge">+{op.newPercent}%</span>
                     ) : (
-                      <span className="growth-op-pct-badge is-zero">—</span>
+                      <span className="growth-op-pct-badge is-zero">0.00%</span>
                     )}
                   </div>
                 </div>
@@ -965,10 +968,12 @@ export function StatsView({
                         <span className="growth-band-total" title={isPl ? 'Liczba całkowita' : 'Total'}>
                           {formatNumber(totalCount)}
                         </span>
-                        {newCount > 0 && (
+                        {newCount > 0 ? (
                           <span className="growth-band-new-pill" title={isPl ? 'Nowy przyrost' : 'New additions'}>
                             +{formatNumber(newCount)}
                           </span>
+                        ) : (
+                          <span className="growth-band-new-pill is-zero">+0</span>
                         )}
                       </div>
                     </div>
@@ -994,7 +999,7 @@ export function StatsView({
                                 {op.newCount > 0 ? (
                                   <span className="growth-band-new-tag">+{formatNumber(op.newCount)}</span>
                                 ) : (
-                                  <span className="growth-band-new-tag is-empty">—</span>
+                                  <span className="growth-band-new-tag is-empty">+0</span>
                                 )}
                                 <div className="growth-band-track">
                                   <div
