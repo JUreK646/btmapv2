@@ -12,7 +12,7 @@ export function towerWhere(query: Record<string, unknown>) {
 
   if (query.source && query.source !== 'ALL') {
     if (query.source === 'UKE') {
-      clauses.push("(t.source = 'UKE' OR t.addedBy = 'Import KML')");
+      clauses.push("(t.source = 'UKE' OR t.addedBy = 'Import KML' OR t.operators LIKE '%/26%')");
     } else {
       clauses.push('t.source = ?');
       params.push(String(query.source));

@@ -236,6 +236,7 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       const permitNo = b.permit?.match(/^([^\[-]+)/)?.[1]?.trim() || (b.permit || '—');
                       const permitType = b.permit?.match(/\[([^\]]+)\]/)?.[1] || null;
                       const expMatch = b.permit?.match(/expires\s+(\d{4}-\d{2}-\d{2})/);
+                      const isNewPermit = Boolean(b.permit && (b.permit.includes('/26 [P]') || b.permit.includes('/26 [zmP]') || b.permit.includes('/26 ')));
                       const expiryDate = expMatch
                         ? expMatch[1].startsWith('2099')
                           ? (isPl ? 'Bezterminowo' : 'Indefinite')
@@ -263,6 +264,11 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                                 </span>
                                 {permitType && (
                                   <span className="cell-badge-type">[{permitType}]</span>
+                                )}
+                                {isNewPermit && (
+                                  <span className="cell-badge-new-2026" title={isPl ? 'Nowe pozwolenie UKE / Rejestr (2026)' : 'New permit UKE / Registry (2026)'}>
+                                    ★ {isPl ? 'Nowe 2026' : 'New 2026'}
+                                  </span>
                                 )}
                                 {b.status && (
                                   <span className="cell-badge-status">{b.status}</span>
@@ -384,6 +390,9 @@ export default function DetailsPanel({
       return m ? 2000 + parseInt(m[1], 10) : 0;
     }) || [])
     .reduce((max, y) => Math.max(max, y), 0);
+  const new2026PermitsCount = tower.operators
+    .flatMap(op => op.bands || [])
+    .filter(b => b.permit && (b.permit.includes('/26 [P]') || b.permit.includes('/26 [zmP]') || b.permit.includes('/26 '))).length;
 
   return (
     <aside className="details-panel station-sheet" aria-labelledby="station-sheet-title">
@@ -407,6 +416,11 @@ export default function DetailsPanel({
               <Database size={12} aria-hidden="true" />
               {tower.source === 'BTMAP' ? t.detailsSourceBtmap : t.detailsSourceUke}
             </span>
+            {new2026PermitsCount > 0 && (
+              <span className="station-sheet-new-badge" title={isPl ? `${new2026PermitsCount} nowych pozwoleń UKE / Rejestr z 2026 roku` : `${new2026PermitsCount} new 2026 permits`}>
+                ★ {isPl ? `${new2026PermitsCount} nowych pozwoleń (2026)` : `${new2026PermitsCount} new permits (2026)`}
+              </span>
+            )}
             {tower.operators.some(o => o.name === 'Orange' || o.name === 'T-Mobile') && (
               <span className="station-networks-badge" title="Stacja współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)">
                 <span className="networks-n-badge">N!</span>

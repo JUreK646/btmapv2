@@ -409,7 +409,7 @@ function computeDynamicReport(
   const sql = source === 'ALL'
     ? "SELECT operators FROM towers WHERE status='APPROVED'"
     : source === 'UKE'
-    ? "SELECT operators FROM towers WHERE status='APPROVED' AND (source='UKE' OR (source='BTMAP' AND operators LIKE '%Plus%'))"
+    ? "SELECT operators FROM towers WHERE status='APPROVED' AND (source='UKE' OR addedBy='Import KML' OR operators LIKE '%Plus%' OR operators LIKE '%/26%')"
     : "SELECT operators FROM towers WHERE status='APPROVED' AND source=?";
   
   const rows = (source === 'ALL' || source === 'UKE' ? db.prepare(sql).all() : db.prepare(sql).all(source)) as Array<{ operators: string }>;
@@ -762,7 +762,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   const sql = source === 'ALL'
     ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED'"
     : source === 'UKE'
-    ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND (source='UKE' OR (source='BTMAP' AND operators LIKE '%Plus%'))"
+    ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND (source='UKE' OR addedBy='Import KML' OR operators LIKE '%Plus%' OR operators LIKE '%/26%')"
     : "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND source=?";
 
   type TowerRow = {
