@@ -167,6 +167,25 @@ function colLettersToIndex(letters: string): number {
 
 async function resolveLatestUkeZipUrl(): Promise<{ url: string; title: string }> {
   try {
+    const bipRes = await fetch('https://bip.uke.gov.pl/pozwolenia-radiowe/wykaz-pozwolen-radiowych-tresci/linie-radiowe,7.html', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (bipRes.ok) {
+      const html = await bipRes.text();
+      const match = html.match(/href="(\/download\/[^"]+?linie_radiowe[^"]+?\.xlsx)"/i);
+      if (match) {
+        const fullUrl = match[1].startsWith('http') ? match[1] : `https://bip.uke.gov.pl${match[1]}`;
+        return {
+          url: fullUrl,
+          title: 'Wykaz pozwoleń radiowych dla stacji linii radiowych (BIP UKE)',
+        };
+      }
+    }
+  } catch {
+    // Fallback to dane.gov.pl
+  }
+  try {
     const res = await fetch(DANE_GOV_DATASET_URL);
     if (res.ok) {
       const json = (await res.json()) as {
@@ -378,22 +397,27 @@ export async function syncRadiolinesFromUke(
           throw new Error(`Błąd pobierania archiwum UKE: HTTP ${res.status}`);
         }
         const buffer = Buffer.from(await res.arrayBuffer());
-        zipPath = resolve(workDir, 'uke_radiolines.zip');
+        const urlFilename = url.split('/').pop() || 'uke_radiolines.zip';
+        zipPath = resolve(workDir, urlFilename);
         writeFileSync(zipPath, buffer);
-        console.log(`[Radiolines Sync] Pobrano ${(buffer.length / 1024 / 1024).toFixed(2)} MB.`);
+        console.log(`[Radiolines Sync] Pobrano ${(buffer.length / 1024 / 1024).toFixed(2)} MB (${urlFilename}).`);
       }
     }
 
-    const extractZipDir = resolve(workDir, 'zip_contents');
-    mkdirSync(extractZipDir, { recursive: true });
-    execSync(`tar -xf "${zipPath}" -C "${extractZipDir}"`);
+    let xlsxPath = zipPath;
+    let xlsxFile = zipPath.split(/[\\/]/).pop() || '';
+    if (!zipPath.toLowerCase().endsWith('.xlsx')) {
+      const extractZipDir = resolve(workDir, 'zip_contents');
+      mkdirSync(extractZipDir, { recursive: true });
+      execSync(`tar -xf "${zipPath}" -C "${extractZipDir}"`);
 
-    const xlsxFile = readdirSync(extractZipDir).find(f => f.toLowerCase().endsWith('.xlsx'));
-    if (!xlsxFile) {
-      throw new Error('Nie znaleziono pliku .xlsx wewnątrz pobranego archiwum UKE.');
+      const found = readdirSync(extractZipDir).find(f => f.toLowerCase().endsWith('.xlsx'));
+      if (!found) {
+        throw new Error('Nie znaleziono pliku .xlsx wewnątrz pobranego archiwum UKE.');
+      }
+      xlsxFile = found;
+      xlsxPath = resolve(extractZipDir, found);
     }
-
-    const xlsxPath = resolve(extractZipDir, xlsxFile);
     const dateMatch = xlsxFile.match(/(\d{4})-(\d{2})-(\d{2})/);
     const snapshotDate = dateMatch ? `${dateMatch[3]}.${dateMatch[2]}.${dateMatch[1]}` : undefined;
     const extractXlsxDir = resolve(workDir, 'xlsx_contents');

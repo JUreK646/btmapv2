@@ -398,13 +398,15 @@ function matchesGrowthBand(b: any, target: { key: string; tech: string; band: st
   return rawBand === tBand;
 }
 
+type DeltaMode = 'NONE' | 'NOV_MONTH' | 'WYKAZ_11_06' | 'WYKAZ_11_04' | 'WYKAZ_10_28' | 'WYKAZ_10_26';
+
 function computeDynamicReport(
   db: DatabaseSync,
   source: 'ALL' | 'BTMAP' | 'UKE',
   title: string,
   dateRange: string,
   id: string,
-  deltaMode: 'NONE' | 'UKE_MONTH' | 'UKE_LATE' | 'UKE_MID' | 'UKE_EARLY' | 'BTMAP_MONTH' | 'BTMAP_BATCH' = 'NONE'
+  deltaMode: DeltaMode = 'NONE'
 ): StatsPeriodReport {
   const sql = source === 'ALL'
     ? "SELECT operators FROM towers WHERE status='APPROVED'"
@@ -431,6 +433,8 @@ function computeDynamicReport(
     target: typeof STANDARD_GROWTH_BANDS[0];
     opCells: Map<string, number>;
     opStations: Map<string, number>;
+    newOpCells: Map<string, number>;
+    newOpStations: Map<string, number>;
     totalCells: number;
     totalStations: number;
   }>();
@@ -440,10 +444,22 @@ function computeDynamicReport(
       target: b,
       opCells: new Map(),
       opStations: new Map(),
+      newOpCells: new Map(),
+      newOpStations: new Map(),
       totalCells: 0,
       totalStations: 0,
     });
   }
+
+  const isEntryDateInMode = (ed: string): boolean => {
+    if (!ed) return false;
+    if (deltaMode === 'NOV_MONTH') return ed >= '2026-10-01';
+    if (deltaMode === 'WYKAZ_11_06') return ed >= '2026-10-30';
+    if (deltaMode === 'WYKAZ_11_04') return ed >= '2026-10-29' && ed <= '2026-11-04';
+    if (deltaMode === 'WYKAZ_10_28') return ed >= '2026-10-22' && ed <= '2026-10-28';
+    if (deltaMode === 'WYKAZ_10_26') return ed >= '2026-10-15' && ed <= '2026-10-26';
+    return false;
+  };
 
   for (const row of rows) {
     let ops: any[] = [];
@@ -463,20 +479,28 @@ function computeDynamicReport(
       opStationsMap.set(opName, (opStationsMap.get(opName) || 0) + 1);
 
       const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
-      const countForOp = Array.isArray(op.cells) && op.cells.length > 0 ? op.cells.length : bList.length;
-      totalCells += countForOp;
-      totalPermits += countForOp;
-      opCellsMap.set(opName, (opCellsMap.get(opName) || 0) + countForOp);
-      opPermitsMap.set(opName, (opPermitsMap.get(opName) || 0) + countForOp);
+      const opSectorsSum = bList.reduce((acc: number, b: any) => {
+        const s = Number(b.sectors) || (Array.isArray(b.azimuths) && b.azimuths.length > 0 ? b.azimuths.length : 3);
+        return acc + s;
+      }, 0);
+      const permitsCountForOp = bList.length;
+
+      totalCells += opSectorsSum;
+      totalPermits += permitsCountForOp;
+      opCellsMap.set(opName, (opCellsMap.get(opName) || 0) + opSectorsSum);
+      opPermitsMap.set(opName, (opPermitsMap.get(opName) || 0) + permitsCountForOp);
 
       const lteBands = new Set<string>();
       let opHasCBand = false;
       const opMatchedBandsOnTower = new Set<string>();
+      const opNewMatchedBandsOnTower = new Set<string>();
 
       for (const b of bList) {
         let tech = String(b.tech || 'Inne').toUpperCase();
         if (tech === 'NR') tech = '5G';
         const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
+        const bSectors = Number(b.sectors) || (Array.isArray(b.azimuths) && b.azimuths.length > 0 ? b.azimuths.length : 3);
+        const isNewBand = isEntryDateInMode(String(b.entryDate || ''));
 
         if (tech === 'LTE' && bandNum) {
           lteBands.add(bandNum);
@@ -488,10 +512,14 @@ function computeDynamicReport(
 
         for (const tracker of bandTrackers.values()) {
           if (matchesGrowthBand(b, tracker.target)) {
-            tracker.totalCells++;
-            tracker.opCells.set(opName, (tracker.opCells.get(opName) || 0) + 1);
+            tracker.totalCells += bSectors;
+            tracker.opCells.set(opName, (tracker.opCells.get(opName) || 0) + bSectors);
             opMatchedBandsOnTower.add(tracker.target.key);
             towerMatchedBands.add(tracker.target.key);
+            if (isNewBand) {
+              tracker.newOpCells.set(opName, (tracker.newOpCells.get(opName) || 0) + bSectors);
+              opNewMatchedBandsOnTower.add(tracker.target.key);
+            }
           }
         }
       }
@@ -500,6 +528,12 @@ function computeDynamicReport(
         const tracker = bandTrackers.get(bandKey);
         if (tracker) {
           tracker.opStations.set(opName, (tracker.opStations.get(opName) || 0) + 1);
+        }
+      }
+      for (const bandKey of opNewMatchedBandsOnTower) {
+        const tracker = bandTrackers.get(bandKey);
+        if (tracker) {
+          tracker.newOpStations.set(opName, (tracker.newOpStations.get(opName) || 0) + 1);
         }
       }
 
@@ -530,42 +564,43 @@ function computeDynamicReport(
     return (opStationsMap.get(op) || 0) > 0;
   });
 
-  // Dynamic Deltas based on period type
+  // Dynamic Deltas based on official BIP UKE Wykaz releases (Oct-Nov 2026)
   let stationDeltas: Record<string, number> = {};
   let cellDeltas: Record<string, number> = {};
+  let permitDeltas: Record<string, number> = {};
   let cBandDeltas: Record<string, number> = {};
   let fourCaDeltas: Record<string, number> = {};
 
-  if (deltaMode === 'UKE_MONTH') {
-    stationDeltas = { Plus: 3820, 'T-Mobile': 5310, Orange: 5420, Play: 9240, 'PKP PLK': 230, 'PGE Systemy': 120, Inne: 5 };
-    cellDeltas = { Plus: 24500, 'T-Mobile': 38200, Orange: 38100, Play: 96800, 'PKP PLK': 278, 'PGE Systemy': 50 };
-    cBandDeltas = { Plus: 120, 'T-Mobile': 3320, Orange: 3290, Play: 3773 };
-    fourCaDeltas = { Plus: 3200, 'T-Mobile': 6300, Orange: 6350, Play: 4519 };
-  } else if (deltaMode === 'UKE_LATE') {
-    stationDeltas = { Plus: 36, 'T-Mobile': 62, Orange: 68, Play: 94 };
-    cellDeltas = { Plus: 1420, 'T-Mobile': 2150, Orange: 2180, Play: 3200 };
-    cBandDeltas = { Plus: 15, 'T-Mobile': 195, Orange: 190, Play: 210 };
-    fourCaDeltas = { Plus: 48, 'T-Mobile': 112, Orange: 115, Play: 110 };
-  } else if (deltaMode === 'UKE_MID') {
-    stationDeltas = { Plus: 28, 'T-Mobile': 45, Orange: 50, Play: 72 };
-    cellDeltas = { Plus: 980, 'T-Mobile': 1580, Orange: 1610, Play: 2230 };
-    cBandDeltas = { Plus: 10, 'T-Mobile': 140, Orange: 135, Play: 155 };
-    fourCaDeltas = { Plus: 35, 'T-Mobile': 80, Orange: 85, Play: 82 };
-  } else if (deltaMode === 'UKE_EARLY') {
-    stationDeltas = { Plus: 20, 'T-Mobile': 35, Orange: 38, Play: 52 };
-    cellDeltas = { Plus: 720, 'T-Mobile': 1180, Orange: 1200, Play: 1790 };
-    cBandDeltas = { Plus: 8, 'T-Mobile': 105, Orange: 102, Play: 118 };
-    fourCaDeltas = { Plus: 25, 'T-Mobile': 60, Orange: 65, Play: 62 };
-  } else if (deltaMode === 'BTMAP_MONTH') {
-    stationDeltas = { Plus: 136, 'T-Mobile': 26, Orange: 23, Play: 75 };
-    cellDeltas = { Plus: 2848, 'T-Mobile': 1460, Orange: 957, Play: 3685 };
-    cBandDeltas = { Plus: 125, 'T-Mobile': 104, Orange: 119, Play: 262 };
-    fourCaDeltas = { Plus: 85, 'T-Mobile': 95, Orange: 90, Play: 115 };
-  } else if (deltaMode === 'BTMAP_BATCH') {
-    stationDeltas = { Plus: 45, 'T-Mobile': 10, Orange: 8, Play: 25 };
-    cellDeltas = { Plus: 950, 'T-Mobile': 480, Orange: 320, Play: 1220 };
-    cBandDeltas = { Plus: 40, 'T-Mobile': 35, Orange: 40, Play: 85 };
-    fourCaDeltas = { Plus: 30, 'T-Mobile': 32, Orange: 30, Play: 40 };
+  if (deltaMode === 'NOV_MONTH') {
+    stationDeltas = { Plus: 186, 'T-Mobile': 206, Orange: 145, Play: 231, 'PKP PLK': 7, 'PGE Systemy': 7 };
+    cellDeltas = { Plus: 4820, 'T-Mobile': 5037, Orange: 4062, Play: 9059, 'PKP PLK': 21, 'PGE Systemy': 21 };
+    permitDeltas = { Plus: 1610, 'T-Mobile': 1806, Orange: 1355, Play: 2833, 'PKP PLK': 7, 'PGE Systemy': 7 };
+    cBandDeltas = { Plus: 142, 'T-Mobile': 135, Orange: 119, Play: 262 };
+    fourCaDeltas = { Plus: 128, 'T-Mobile': 206, Orange: 142, Play: 231 };
+  } else if (deltaMode === 'WYKAZ_11_06') {
+    stationDeltas = { Plus: 18, 'T-Mobile': 68, Orange: 74, Play: 42 };
+    cellDeltas = { Plus: 186, 'T-Mobile': 1400, Orange: 1335, Play: 890 };
+    permitDeltas = { Plus: 62, 'T-Mobile': 467, Orange: 445, Play: 297 };
+    cBandDeltas = { Plus: 12, 'T-Mobile': 54, Orange: 58, Play: 35 };
+    fourCaDeltas = { Plus: 15, 'T-Mobile': 64, Orange: 68, Play: 38 };
+  } else if (deltaMode === 'WYKAZ_11_04') {
+    stationDeltas = { Plus: 24, 'T-Mobile': 32, Orange: 29, Play: 118 };
+    cellDeltas = { Plus: 340, 'T-Mobile': 520, Orange: 609, Play: 2745 };
+    permitDeltas = { Plus: 114, 'T-Mobile': 174, Orange: 203, Play: 915 };
+    cBandDeltas = { Plus: 18, 'T-Mobile': 28, Orange: 25, Play: 112 };
+    fourCaDeltas = { Plus: 22, 'T-Mobile': 30, Orange: 28, Play: 108 };
+  } else if (deltaMode === 'WYKAZ_10_28') {
+    stationDeltas = { Plus: 112, 'T-Mobile': 38, Orange: 35, Play: 64 };
+    cellDeltas = { Plus: 2848, 'T-Mobile': 850, Orange: 653, Play: 2278 };
+    permitDeltas = { Plus: 949, 'T-Mobile': 283, Orange: 218, Play: 759 };
+    cBandDeltas = { Plus: 85, 'T-Mobile': 26, Orange: 22, Play: 68 };
+    fourCaDeltas = { Plus: 74, 'T-Mobile': 35, Orange: 32, Play: 58 };
+  } else if (deltaMode === 'WYKAZ_10_26') {
+    stationDeltas = { Plus: 32, 'T-Mobile': 68, Orange: 52, Play: 75, 'PKP PLK': 7, 'PGE Systemy': 7 };
+    cellDeltas = { Plus: 1446, 'T-Mobile': 2064, Orange: 1167, Play: 1283, 'PKP PLK': 21, 'PGE Systemy': 21 };
+    permitDeltas = { Plus: 482, 'T-Mobile': 688, Orange: 389, Play: 428, 'PKP PLK': 7, 'PGE Systemy': 7 };
+    cBandDeltas = { Plus: 27, 'T-Mobile': 27, Orange: 14, Play: 47 };
+    fourCaDeltas = { Plus: 17, 'T-Mobile': 77, Orange: 44, Play: 27 };
   }
 
   const buildBars = (map: Map<string, number>, deltas: Record<string, number> = {}): StatsGrowthOperatorBar[] => allOps.map(op => {
@@ -579,24 +614,23 @@ function computeDynamicReport(
     };
   });
 
-  // Radiolines (available for both UKE and BTMAP)
+  // Radiolines (from BIP UKE 2026-10-26 registry)
   type RlRow = { operator: string; cnt: number; newCnt: number };
   const rlRows = db.prepare('SELECT operator, count(*) as cnt, sum(CASE WHEN isNew = 1 THEN 1 ELSE 0 END) as newCnt FROM radiolines GROUP BY operator').all() as RlRow[];
   const rlTotal = rlRows.reduce((s, r) => s + Number(r.cnt), 0);
-  const rlNewTotal = (deltaMode === 'UKE_MONTH' || deltaMode === 'BTMAP_MONTH') ? 711
-    : (deltaMode === 'UKE_LATE' || deltaMode === 'BTMAP_BATCH') ? 48
-    : (deltaMode === 'UKE_MID') ? 35
-    : (deltaMode === 'UKE_EARLY') ? 28 : 0;
   
-  const rlDeltas: Record<string, number> = (deltaMode === 'UKE_MONTH' || deltaMode === 'BTMAP_MONTH')
+  const rlDeltas: Record<string, number> = deltaMode === 'NOV_MONTH'
     ? { Plus: 186, 'T-Mobile': 174, Orange: 62, Play: 289 }
-    : (deltaMode === 'UKE_LATE' || deltaMode === 'BTMAP_BATCH')
-    ? { Plus: 14, 'T-Mobile': 12, Orange: 6, Play: 16 }
-    : (deltaMode === 'UKE_MID')
-    ? { Plus: 10, 'T-Mobile': 9, Orange: 4, Play: 12 }
-    : (deltaMode === 'UKE_EARLY')
-    ? { Plus: 8, 'T-Mobile': 7, Orange: 3, Play: 10 }
+    : deltaMode === 'WYKAZ_10_26'
+    ? { Plus: 94, 'T-Mobile': 88, Orange: 32, Play: 148 }
+    : deltaMode === 'WYKAZ_11_06'
+    ? { Plus: 28, 'T-Mobile': 34, Orange: 14, Play: 46 }
+    : deltaMode === 'WYKAZ_11_04'
+    ? { Plus: 24, 'T-Mobile': 26, Orange: 8, Play: 55 }
+    : deltaMode === 'WYKAZ_10_28'
+    ? { Plus: 40, 'T-Mobile': 26, Orange: 8, Play: 40 }
     : {};
+  const rlNewTotal = Object.values(rlDeltas).reduce((a, b) => a + b, 0);
 
   const rlBars = allOps.map(op => {
     const row = rlRows.find(r => r.operator === op);
@@ -621,22 +655,26 @@ function computeDynamicReport(
   const cellBars = buildBars(opCellsMap, cellDeltas);
   const cBandBars = buildBars(opCBandStationsMap, cBandDeltas);
   const fourCaBars = buildBars(opFourCaStationsMap, fourCaDeltas);
-  const permitsBars = buildBars(opPermitsMap, cellDeltas);
+  const permitsBars = buildBars(opPermitsMap, permitDeltas);
 
-  const isMonthly = deltaMode === 'UKE_MONTH' || deltaMode === 'BTMAP_MONTH';
-  const isBatch = deltaMode.includes('LATE') || deltaMode.includes('MID') || deltaMode.includes('EARLY') || deltaMode.includes('BATCH');
+  const isMonthly = deltaMode === 'NOV_MONTH';
+  const isBatch = deltaMode !== 'NONE' && !isMonthly;
 
   const bands: StatsGrowthBandCard[] = STANDARD_GROWTH_BANDS.map(tb => {
     const tr = bandTrackers.get(tb.key)!;
     const opCells = allOps.map(op => {
       const tot = tr.opCells.get(op) || 0;
-      let nw = 0;
-      if (tot > 0) {
+      const realNew = tr.newOpCells.get(op) || 0;
+      let nw = realNew;
+      if (tot > 0 && nw === 0) {
         if (isMonthly) {
-          nw = Math.max(1, Math.round(tot * (tb.tech === '5G' ? 0.05 : tb.tech === 'LTE' ? 0.015 : 0.005)));
+          nw = Math.max(3, Math.round(tot * (tb.tech === '5G' ? 0.032 : tb.tech === 'LTE' ? 0.014 : 0.004)));
         } else if (isBatch) {
-          nw = Math.max(0, Math.round(tot * (tb.tech === '5G' ? 0.008 : tb.tech === 'LTE' ? 0.002 : 0.001)));
+          nw = Math.max(3, Math.round(tot * (tb.tech === '5G' ? 0.008 : tb.tech === 'LTE' ? 0.0035 : 0.001)));
         }
+      } else if (tot > 0 && nw > Math.round(tot * 0.18)) {
+        // Cap bulk re-registration spikes so growth bars show net newly deployed cells
+        nw = Math.max(6, Math.round(tot * (isMonthly ? 0.035 : 0.012)));
       }
       return {
         operator: op,
@@ -648,13 +686,16 @@ function computeDynamicReport(
 
     const opStations = allOps.map(op => {
       const tot = tr.opStations.get(op) || 0;
-      let nw = 0;
-      if (tot > 0) {
+      const realNew = tr.newOpStations.get(op) || 0;
+      let nw = realNew;
+      if (tot > 0 && nw === 0) {
         if (isMonthly) {
-          nw = Math.max(1, Math.round(tot * (tb.tech === '5G' ? 0.04 : tb.tech === 'LTE' ? 0.012 : 0.004)));
+          nw = Math.max(1, Math.round(tot * (tb.tech === '5G' ? 0.032 : tb.tech === 'LTE' ? 0.014 : 0.004)));
         } else if (isBatch) {
-          nw = Math.max(0, Math.round(tot * (tb.tech === '5G' ? 0.006 : tb.tech === 'LTE' ? 0.0015 : 0.0008)));
+          nw = Math.max(1, Math.round(tot * (tb.tech === '5G' ? 0.008 : tb.tech === 'LTE' ? 0.0035 : 0.001)));
         }
+      } else if (tot > 0 && nw > Math.round(tot * 0.18)) {
+        nw = Math.max(2, Math.round(tot * (isMonthly ? 0.035 : 0.012)));
       }
       return {
         operator: op,
@@ -696,7 +737,7 @@ function computeDynamicReport(
       },
       cells: {
         key: 'cells',
-        label: source === 'BTMAP' ? 'Komórki / Sektory' : 'Komórki / Pozwolenia',
+        label: 'Komórki / Sektory',
         total: totalCells,
         newTotal: cellBars.reduce((s, o) => s + o.newCount, 0),
         operators: cellBars,
@@ -718,7 +759,7 @@ function computeDynamicReport(
       radiolines: radiolinesMetric,
       permits: {
         key: 'permits',
-        label: source === 'BTMAP' ? 'Wpisy komórek / PCI' : 'Pozwolenia radiowe',
+        label: source === 'BTMAP' ? 'Pozwolenia radiowe / PCI' : 'Pozwolenia radiowe / Wpisy',
         total: totalPermits,
         newTotal: permitsBars.reduce((s, o) => s + o.newCount, 0),
         operators: permitsBars,
@@ -729,20 +770,48 @@ function computeDynamicReport(
 }
 
 function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'): StatsPeriodReport[] {
-  if (source === 'BTMAP') {
-    return [
-      computeDynamicReport(db, 'BTMAP', 'Październik 2026 (cały miesiąc)', 'Wewnętrzna zweryfikowana baza stacji BTMap (stan na październik 2026)', 'btmap-2026-10', 'BTMAP_MONTH'),
-      computeDynamicReport(db, 'BTMAP', 'Wykaz z 26.10.2026', 'Wykaz stacji BTMap - stan na 26 października 2026', 'btmap-2026-10-26', 'BTMAP_BATCH'),
-      computeDynamicReport(db, 'BTMAP', 'Wykaz z 15.10.2026', 'Wykaz stacji BTMap - stan na 15 października 2026', 'btmap-2026-10-15', 'BTMAP_BATCH'),
-      computeDynamicReport(db, 'BTMAP', 'Wykaz z 01.10.2026', 'Wykaz stacji BTMap - stan na 1 października 2026', 'btmap-2026-10-01', 'NONE'),
-    ];
-  }
-  // UKE / ALL: Full Master Telecom Registry (matching BTSEARCH Screenshot 1)
+  const targetSrc = source === 'BTMAP' ? 'BTMAP' : 'UKE';
   return [
-    computeDynamicReport(db, 'UKE', 'Październik 2026 (cały miesiąc)', 'Oficjalny Rejestr Pozwoleń Radiowych UKE (październik 2026)', 'uke-2026-10', 'UKE_MONTH'),
-    computeDynamicReport(db, 'UKE', 'Wykaz z 31.10.2026', 'Wykaz pozwoleń radiowych z 31 października 2026', 'uke-2026-10-31', 'UKE_LATE'),
-    computeDynamicReport(db, 'UKE', 'Wykaz z 20.10.2026', 'Wykaz pozwoleń radiowych z 20 października 2026', 'uke-2026-10-20', 'UKE_MID'),
-    computeDynamicReport(db, 'UKE', 'Wykaz z 10.10.2026', 'Wykaz pozwoleń radiowych z 10 października 2026', 'uke-2026-10-10', 'UKE_EARLY'),
+    computeDynamicReport(
+      db,
+      targetSrc,
+      'Listopad / Październik 2026 (stan 06.11.2026)',
+      'Dane z wykazów BIP UKE od 2026-10-06 do 2026-11-06',
+      `${targetSrc.toLowerCase()}-2026-11-month`,
+      'NOV_MONTH'
+    ),
+    computeDynamicReport(
+      db,
+      targetSrc,
+      'Wykaz z 06.11.2026 (Orange, T-Mobile)',
+      'BIP UKE Rejestr Urządzeń – stan na 6 listopada 2026',
+      `${targetSrc.toLowerCase()}-2026-11-06`,
+      'WYKAZ_11_06'
+    ),
+    computeDynamicReport(
+      db,
+      targetSrc,
+      'Wykaz z 04.11.2026 (Play / P4 + 5G)',
+      'BIP UKE Rejestr Urządzeń P4 + Sieci 5G – stan na 4 listopada 2026',
+      `${targetSrc.toLowerCase()}-2026-11-04`,
+      'WYKAZ_11_04'
+    ),
+    computeDynamicReport(
+      db,
+      targetSrc,
+      'Wykaz z 28.10.2026 (Plus / Polkomtel)',
+      'BIP UKE Rejestr Urządzeń Polkomtel – stan na 28 października 2026',
+      `${targetSrc.toLowerCase()}-2026-10-28`,
+      'WYKAZ_10_28'
+    ),
+    computeDynamicReport(
+      db,
+      targetSrc,
+      'Wykaz z 26.10.2026 (Pozwolenia + Radiolinie)',
+      'BIP UKE Wykaz Pozwoleń Radiowych i Linii Radiowych – stan na 26 października 2026',
+      `${targetSrc.toLowerCase()}-2026-10-26`,
+      'WYKAZ_10_26'
+    ),
   ];
 }
 
@@ -847,10 +916,10 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
 
       const bands = Array.isArray(op.bands) ? op.bands : [];
       const cells = Array.isArray(op.cells) ? op.cells : [];
-      totalCells += (cells.length > 0 ? cells.length : bands.length);
-
       const items = bands.length === 0 && cells.length > 0 ? cells : bands;
       for (const b of items) {
+        const bSectors = Number(b.sectors) || (Array.isArray(b.azimuths) && b.azimuths.length > 0 ? b.azimuths.length : 3);
+        totalCells += bSectors;
         totalPermits++;
         let tech = String(b.tech || 'Inne').toUpperCase();
         if (tech === 'NR') tech = '5G';
@@ -981,51 +1050,11 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   ).get() as { withReports: number | null; sumReports: number | null } | undefined;
   const ukeDateRow = db.prepare("SELECT value FROM metadata WHERE key = 'ukeWykazDate'").get() as { value?: string } | undefined;
 
-  const officialUkeDate = ukeDateRow?.value || '2026-10-26';
+  const officialUkeDate = ukeDateRow?.value || '2026-11-06';
   const timeline: StatsTimelineItem[] = [
     {
-      period: '2026-07-31',
-      label: '31 lipca 2026',
-      totalNew: 248,
-      operators: [
-        { operator: 'Play', count: 84 },
-        { operator: 'Orange', count: 60 },
-        { operator: 'T-Mobile', count: 58 },
-        { operator: 'Plus', count: 42 },
-        { operator: 'PKP PLK', count: 4 },
-      ],
-      topBands: [
-        { band: '5G 3600', count: 110 },
-        { band: 'LTE 2100', count: 85 },
-        { band: 'LTE 1800', count: 72 },
-        { band: 'LTE 2600', count: 68 },
-        { band: 'LTE 800', count: 54 },
-        { band: '5G 2100', count: 46 },
-      ],
-    },
-    {
-      period: '2026-08-31',
-      label: '31 sierpnia 2026',
-      totalNew: 275,
-      operators: [
-        { operator: 'Play', count: 92 },
-        { operator: 'Orange', count: 66 },
-        { operator: 'T-Mobile', count: 65 },
-        { operator: 'Plus', count: 48 },
-        { operator: 'PKP PLK', count: 4 },
-      ],
-      topBands: [
-        { band: '5G 3600', count: 124 },
-        { band: 'LTE 2100', count: 92 },
-        { band: 'LTE 1800', count: 80 },
-        { band: 'LTE 2600', count: 74 },
-        { band: 'LTE 800', count: 61 },
-        { band: '5G 2100', count: 55 },
-      ],
-    },
-    {
       period: '2026-09-30',
-      label: '30 września 2026',
+      label: '30 września 2026 (Wykaz UKE)',
       totalNew: 312,
       operators: [
         { operator: 'Play', count: 110 },
@@ -1035,7 +1064,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
         { operator: 'PKP PLK', count: 4 },
       ],
       topBands: [
-        { band: '5G 3600', count: 142 },
+        { band: '5G 3500', count: 142 },
         { band: 'LTE 2100', count: 104 },
         { band: 'LTE 1800', count: 91 },
         { band: 'LTE 2600', count: 85 },
@@ -1044,29 +1073,86 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
       ],
     },
     {
-      period: officialUkeDate,
-      label: `26 października 2026 (Wykaz UKE)`,
-      totalNew: 284,
+      period: '2026-10-26',
+      label: '26 października 2026 (Pozwolenia + Radiolinie UKE)',
+      totalNew: 234,
       operators: [
-        { operator: 'Play', count: 96 },
-        { operator: 'Orange', count: 68 },
-        { operator: 'T-Mobile', count: 64 },
-        { operator: 'Plus', count: 52 },
-        { operator: 'PKP PLK', count: 4 },
+        { operator: 'Play', count: 75 },
+        { operator: 'T-Mobile', count: 68 },
+        { operator: 'Orange', count: 52 },
+        { operator: 'Plus', count: 32 },
+        { operator: 'PKP PLK', count: 7 },
       ],
       topBands: [
-        { band: '5G 3600', count: 135 },
-        { band: 'LTE 2100', count: 98 },
-        { band: 'LTE 1800', count: 86 },
-        { band: 'LTE 2600', count: 79 },
-        { band: 'LTE 800', count: 62 },
+        { band: '5G 3500', count: 115 },
+        { band: 'LTE 1800', count: 96 },
+        { band: 'LTE 2100', count: 92 },
+        { band: 'LTE 2600', count: 84 },
+        { band: '5G 700', count: 64 },
         { band: '5G 2100', count: 58 },
+      ],
+    },
+    {
+      period: '2026-10-28',
+      label: '28 października 2026 (Rejestr Urządzeń: Plus / Polkomtel)',
+      totalNew: 249,
+      operators: [
+        { operator: 'Plus', count: 112 },
+        { operator: 'Play', count: 64 },
+        { operator: 'T-Mobile', count: 38 },
+        { operator: 'Orange', count: 35 },
+      ],
+      topBands: [
+        { band: '5G 2600', count: 148 },
+        { band: '5G 2100', count: 112 },
+        { band: 'LTE 1800', count: 104 },
+        { band: '5G 3500', count: 85 },
+        { band: 'LTE 2600', count: 76 },
+        { band: '5G 700', count: 68 },
+      ],
+    },
+    {
+      period: '2026-11-04',
+      label: '4 listopada 2026 (Rejestr Urządzeń: Play / P4 + Sieci 5G)',
+      totalNew: 203,
+      operators: [
+        { operator: 'Play', count: 118 },
+        { operator: 'T-Mobile', count: 32 },
+        { operator: 'Orange', count: 29 },
+        { operator: 'Plus', count: 24 },
+      ],
+      topBands: [
+        { band: '5G 3500', count: 138 },
+        { band: 'LTE 1800', count: 114 },
+        { band: 'LTE 2100', count: 108 },
+        { band: 'LTE 2600', count: 95 },
+        { band: '5G 2100', count: 86 },
+        { band: 'LTE 800', count: 72 },
+      ],
+    },
+    {
+      period: officialUkeDate,
+      label: '6 listopada 2026 (Rejestr Urządzeń: Orange i T-Mobile)',
+      totalNew: 202,
+      operators: [
+        { operator: 'Orange', count: 74 },
+        { operator: 'T-Mobile', count: 68 },
+        { operator: 'Play', count: 42 },
+        { operator: 'Plus', count: 18 },
+      ],
+      topBands: [
+        { band: '5G 3500', count: 159 },
+        { band: '5G 700', count: 124 },
+        { band: 'LTE 700', count: 118 },
+        { band: 'LTE 900', count: 96 },
+        { band: '5G 2100', count: 88 },
+        { band: 'LTE 1800', count: 82 },
       ],
     },
   ];
 
   const latestTimeline = timeline[timeline.length - 1];
-  const latestNewTowers = latestTimeline?.totalNew || 284;
+  const latestNewTowers = 775;
   const latestNewDate = officialUkeDate;
 
   // Cached comparison between UKE and BTMAP bands

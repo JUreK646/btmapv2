@@ -357,7 +357,7 @@ export function StatsView({
   const [hoveredOp, setHoveredOp] = useState<string | null>(null);
   const [selectedTimelineIdx, setSelectedTimelineIdx] = useState<number | null>(null);
   const [showComparison, setShowComparison] = useState(false);
-  const [growthSource, setGrowthSource] = useState<'UKE' | 'BTMAP'>('BTMAP');
+  const [growthSource, setGrowthSource] = useState<'UKE' | 'BTMAP'>('UKE');
   const [growthPeriodIdx, setGrowthPeriodIdx] = useState<number>(0);
   const [growthBandMode, setGrowthBandMode] = useState<'cells' | 'stations'>('cells');
   const periodScrollRef = useRef<HTMLDivElement | null>(null);
@@ -778,18 +778,18 @@ export function StatsView({
                 </div>
                 <h1>
                   {isPl
-                    ? `Raport miesięczny: ${activeReport?.title || 'Październik 2026'}`
-                    : `Monthly Report: ${activeReport?.title || 'October 2026'}`}
+                    ? `Raport wykazów: ${activeReport?.title || 'Listopad / Październik 2026'}`
+                    : `Registry Report: ${activeReport?.title || 'November / October 2026'}`}
                 </h1>
                 <span className="growth-period-badge">
                   <Calendar size={13} />
-                  {activeReport?.dateRange || 'Dane od 2026-10-01 do 2026-10-31'}
+                  {activeReport?.dateRange || 'Dane z wykazów BIP UKE do 2026-11-06'}
                 </span>
               </div>
               <span className="growth-subtitle">
                 {growthSource === 'UKE'
-                  ? (isPl ? 'Oficjalny Rejestr Pozwoleń Radiowych UKE (stan na 26.10.2026)' : 'Official UKE Radio Permit Registry (as of 2026-10-26)')
-                  : (isPl ? 'Wewnętrzna zweryfikowana baza stacji BTMap (stan na październik 2026)' : 'Internal Verified BTMap Station Database (October 2026)')}
+                  ? (isPl ? 'Oficjalny Rejestr Urządzeń i Pozwoleń Radiowych BIP UKE (stan na 06.11.2026 / 04.11.2026 / 28.10.2026 / 26.10.2026)' : 'Official BIP UKE Device & Radio Permit Registry (as of 2026-11-06)')
+                  : (isPl ? 'Zweryfikowana baza stacji BTMap zsynchronizowana z Rejestrem Urządzeń BIP UKE (stan na 06.11.2026)' : 'Verified BTMap Station Database synced with BIP UKE (as of 2026-11-06)')}
               </span>
             </div>
           </div>

@@ -19,7 +19,7 @@ export function towerWhere(query: Record<string, unknown>) {
     }
   }
   if (query.onlyNew === '1' || query.onlyNew === 'true') {
-    clauses.push("(t.createdAt LIKE '2026-10-31%' OR t.createdAt LIKE '2026-10-20%' OR t.operators LIKE '%/26 [P]%' OR t.operators LIKE '%/26 [zmP]%')");
+    clauses.push("(t.createdAt LIKE '2026-11-%' OR t.createdAt LIKE '2026-10-%' OR t.operators LIKE '%wpis 2026-11-%' OR t.operators LIKE '%wpis 2026-10-%' OR t.operators LIKE '%/26 [P]%')");
   }
   if (query.province) { clauses.push('fold(t.province) = fold(?)'); params.push(String(query.province)); }
 
@@ -129,8 +129,8 @@ export function normalizeTower(t: Record<string, unknown>): Record<string, unkno
     }
   }
   const isNew = Boolean(
-    (t.createdAt && (String(t.createdAt).startsWith('2026-10-31') || String(t.createdAt).startsWith('2026-10-20'))) ||
-    (typeof t.operators === 'string' && (t.operators.includes('/26 [P]') || t.operators.includes('/26 [zmP]')))
+    (t.createdAt && (String(t.createdAt).startsWith('2026-11-') || String(t.createdAt).startsWith('2026-10-2') || String(t.createdAt).startsWith('2026-10-3'))) ||
+    (typeof t.operators === 'string' && (t.operators.includes('wpis 2026-11-') || t.operators.includes('wpis 2026-10-28') || t.operators.includes('wpis 2026-10-26') || t.operators.includes('/26 [P]')))
   );
   return { ...t, source: (t.source === 'User' || t.source === 'BTMAP') ? 'BTMAP' : (t.source || 'UKE'), operators, isNew };
 }

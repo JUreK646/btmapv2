@@ -128,14 +128,34 @@ export async function fetchBipUkeLinks(): Promise<{ date: string; links: string[
   }
 
   let latestDate = '';
-  const dateMatch = html.match(/stan[_\s]+na[_\s]+(\d{4}-\d{2}-\d{2})/i) || html.match(/(\d{4}-\d{2}-\d{2})\.xlsx/i);
-  if (dateMatch) {
-    latestDate = dateMatch[1];
-  } else {
-    for (const link of links) {
-      const lm = link.match(/(\d{4}-\d{2}-\d{2})/);
-      if (lm && (!latestDate || lm[1] > latestDate)) latestDate = lm[1];
+  for (const link of links) {
+    const lm = link.match(/(\d{4}-\d{2}-\d{2})/);
+    if (lm && (!latestDate || lm[1] > latestDate)) latestDate = lm[1];
+  }
+  if (!latestDate) {
+    const dateMatch = html.match(/stan[_\s]+na[_\s]+(\d{4}-\d{2}-\d{2})/i) || html.match(/(\d{4}-\d{2}-\d{2})\.xlsx/i);
+    if (dateMatch) latestDate = dateMatch[1];
+  }
+
+  // Also check BIP UKE Rejestr Urządzeń for newer weekly operator device registries
+  try {
+    const rejRes = await fetch('https://bip.uke.gov.pl/pozwolenia-radiowe/rejestr-urzadzen/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (rejRes.ok) {
+      const rejHtml = await rejRes.text();
+      const rejDateRegex = /(\d{4}-\d{2}-\d{2})_[a-z0-9-]+\.xlsx/gi;
+      let rm: RegExpExecArray | null;
+      while ((rm = rejDateRegex.exec(rejHtml)) !== null) {
+        if (!latestDate || rm[1] > latestDate) latestDate = rm[1];
+      }
     }
+  } catch {
+    // Ignore optional Rejestr Urządzeń date check failure
   }
 
   return { date: latestDate, links };

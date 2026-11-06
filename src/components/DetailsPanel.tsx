@@ -236,24 +236,33 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       const permitNo = b.permit?.match(/^([^\[-]+)/)?.[1]?.trim() || (b.permit || '—');
                       const permitType = b.permit?.match(/\[([^\]]+)\]/)?.[1] || null;
                       const expMatch = b.permit?.match(/expires\s+(\d{4}-\d{2}-\d{2})/);
-                      const isNewPermit = Boolean(b.permit && (b.permit.includes('/26 [P]') || b.permit.includes('/26 [zmP]') || b.permit.includes('/26 ')));
+                      const wpisMatch = b.entryDate || b.permit?.match(/wpis\s+(\d{4}-\d{2}-\d{2})/)?.[1] || null;
+                      const isNewPermit = Boolean(
+                        (wpisMatch && wpisMatch >= '2026-10-01') ||
+                        (b.permit && (b.permit.includes('/26 [P]') || b.permit.includes('/26 [zmP]') || b.permit.includes('/26 ')))
+                      );
                       const expiryDate = expMatch
                         ? expMatch[1].startsWith('2099')
                           ? (isPl ? 'Bezterminowo' : 'Indefinite')
                           : expMatch[1]
                         : null;
+                      const azList = Array.isArray(b.azimuths) && b.azimuths.length > 0
+                        ? b.azimuths
+                        : (b.azimuth != null ? [b.azimuth] : []);
 
                       return (
                         <tr key={idx}>
                           <td className="cell-col-pasmo">
                             <strong className="cell-pasmo-main">{b.band}</strong>{b.mode && <span className={`cell-mode-tag mode-${b.mode.toLowerCase()}`} title={`Tryb 5G ${b.mode}`}>{b.mode}</span>}
-                            {b.azimuth != null && (
-                              <span className="cell-azimuth-tag" title="Azymut sektora">{b.azimuth}°</span>
+                            {azList.length > 0 && (
+                              <span className="cell-azimuth-tag" title={isPl ? 'Azymuty sektorów (BIP UKE)' : 'Sector azimuths (BIP UKE)'}>
+                                {azList.map(a => `${a}°`).join(' / ')}
+                              </span>
                             )}
                           </td>
                           <td className="cell-col-zastosowanie">
                             <span className="cell-pasmo-sub">
-                              {meta.tag} | {meta.duplex} | {meta.macro}
+                              {meta.tag} | {b.duplex || meta.duplex} | {b.sectors ? `${b.sectors} ${isPl ? 'sekt.' : 'sect.'}` : meta.macro}
                             </span>
                           </td>
                           <td className="cell-col-details">
@@ -266,16 +275,20 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                                   <span className="cell-badge-type">[{permitType}]</span>
                                 )}
                                 {isNewPermit && (
-                                  <span className="cell-badge-new-2026" title={isPl ? 'Nowe pozwolenie UKE / Rejestr (2026)' : 'New permit UKE / Registry (2026)'}>
-                                    ★ {isPl ? 'Nowe 2026' : 'New 2026'}
+                                  <span className="cell-badge-new-2026" title={isPl ? 'Nowy wpis / pozwolenie BIP UKE (X–XI 2026)' : 'New BIP UKE entry / permit (Oct–Nov 2026)'}>
+                                    ★ {wpisMatch && wpisMatch >= '2026-10-01' ? wpisMatch : (isPl ? 'Nowe 2026' : 'New 2026')}
                                   </span>
                                 )}
                                 {b.status && (
                                   <span className="cell-badge-status">{b.status}</span>
                                 )}
                               </div>
-                              {expiryDate && (
-                                <span className="cell-expiry">{isPl ? 'Ważność:' : 'Expires:'} {expiryDate}</span>
+                              {(wpisMatch || expiryDate) && (
+                                <span className="cell-expiry">
+                                  {wpisMatch ? `${isPl ? 'Wpis UKE:' : 'Entry:'} ${wpisMatch}` : ''}
+                                  {wpisMatch && expiryDate ? ' · ' : ''}
+                                  {expiryDate ? `${isPl ? 'Ważność:' : 'Expires:'} ${expiryDate}` : ''}
+                                </span>
                               )}
                             </div>
                           </td>
