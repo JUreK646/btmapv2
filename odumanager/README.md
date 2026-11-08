@@ -1,10 +1,29 @@
-# ODU Manager (BTMap Companion)
+# ODU Manager — Cyfrowy Polsat / Plus (Zygmunt Solorz)
 
-Moduł i narzędzie diagnostyczno-zarządcze dla jednostek zewnętrznych **ODU** (Outdoor Unit) oraz modemów i routerów LTE / 5G (np. ZTE MC889, ZTE MC7010, Huawei B2368, Zyxel NR7101, Nokia FastMile, MikroTik).
+Niezależne narzędzie diagnostyczno-zarządcze dedykowane dla autorskich zestawów antenowo-routerowych **ODU-IDU** Grupy Polsat Plus / Cyfrowy Polsat (zestawy ODU-IDU 100, ODU-IDU 200, ODU-IDU 300 oraz nowsze rozwiązania ODU 5G/LTE).
 
-## Planowane funkcjonalności:
-- **Odczyt parametrów radiowych w czasie rzeczywistym**: RSRP, RSRQ, SINR, RSSI, pasmo podstawowe oraz pasma w agregacji (Carrier Aggregation CA).
-- **Identyfikacja stacji bazowej**: automatyczne dopasowywanie odczytanego eNB / gNB, PCI i Cell ID do bazy stacji BTMap i wskazywanie nadajnika na mapie.
-- **Wymuszanie pasm (Band Locking)**: wybór i blokowanie preferowanych nośnych LTE i 5G (np. 5G N78 3500 MHz, LTE B7 2600 MHz, LTE B1 2100 MHz, LTE B3 1800 MHz).
-- **Blokowanie komórki (Cell / PCI Locking)**: blokowanie połączenia do konkretnego sektora / PCI stacji bazowej bez przełączania na słabsze maszty w okolicy.
-- **Wskaźnik optymalnego nakierowania anteny**: pomoc w precyzyjnym ustawieniu azymutu ODU w kierunku masztu na podstawie danych o sektorach z BTMap.
+---
+
+## 🛰️ Obsługiwane urządzenia:
+1. **ODU-IDU 300** (LTE-Advanced z agregacją pasm 2CA/3CA: B1 2100 MHz, B3 1800 MHz, B7 2600 MHz, B8 900 MHz, B20 800 MHz, B38 2600 MHz TDD)
+2. **ODU-IDU 200** (LTE B3 1800 MHz, B8 900 MHz, B20 800 MHz)
+3. **ODU-IDU 100** (Pierwsza generacja zestawów LTE Cyfrowego Polsatu)
+
+---
+
+## 🎯 Główne cele projektu:
+- **Odczyt telemetrii z ODU w czasie rzeczywistym**:
+  - Domyślny adres bramy IDU: `http://192.168.0.1` (lub `192.168.1.1`).
+  - Poziomy sygnału z zewnętrznej anteny ODU: **RSRP**, **RSRQ**, **RSSI**, **SINR**.
+  - Identyfikatory sieci komórkowej: **eNodeB ID**, **Cell ID**, **PCI**, **TAC**, kod operatora (`260 01` Plus / Polkomtel).
+  - Diagnostyka instalacji jednokablowej (zasilanie ODU przez kabel koncentryczny TV-SAT, status połączenia ODU-IDU).
+
+- **Wymuszanie i blokowanie pasm LTE Plusa**:
+  - Wymuszanie najszybszych pasm pojemnościowych (np. tylko **B7 2600 MHz** + **B3 1800 MHz** + **B1 2100 MHz**) z wykluczeniem wolnego, zapchanego pasma B20 800 MHz.
+  - Wymuszanie pracy w pasmach TDD (B38 2600 MHz) wykorzystywanych w sieci Plusa / Aero2.
+
+- **Identyfikacja masztu Plusa**:
+  - Tłumaczenie parametrów eNodeB i Cell ID z ODU na konkretną stację bazową Plusa (miejscowość, adres masztu, azymut sektora).
+
+- **Automatyczny watchdog i restart ODU**:
+  - Wykrywanie utraty agregacji pasm lub zawieszenia modemu zewnętrznego i automatyczny restart przez API routera IDU.
