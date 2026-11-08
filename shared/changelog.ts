@@ -16,8 +16,45 @@ export interface ChangelogRelease {
 
 export const releases: ChangelogRelease[] = [
   {
-    version: '2.0.2',
+    version: '2.0.3',
     isLatest: true,
+    from: '2026-11-01',
+    to: '2026-11-08',
+    title: 'Najnowsze wykazy BIP UKE (listopad 2026), pełna baza Plusa, azymuty sektorów i ODU Manager',
+    summary: 'Najnowsze oficjalne wykazy Rejestru Urządzeń BIP UKE ze stanem na 06.11.2026, kompletna baza 10,9 tys. stacji i 300 tys. sektorów Plusa (Polkomtel), 22 wykazy pozwoleń radiowych UKE, 38,8 tys. linii radiowych, precyzyjne azymuty sektorów oraz nowy moduł ODU Manager.',
+    sections: [
+      {
+        id: 'bip-uke-rejestr-urzadzen-listopad',
+        title: 'Rejestr Urządzeń i pozwolenia radiowe BIP UKE (listopad 2026)',
+        items: [
+          'Oficjalne rejestry urządzeń BIP UKE ze stanem na 6 listopada 2026 r.: zaimportowano zaktualizowane zbiory dla Orange, T-Mobile, Play (04.11.2026) oraz Plusa (28.10.2026) – ponad 768 tys. aktywnych sektorów i komórek.',
+          'Pełna baza stacji bazowych Plusa (Polkomtel): włączenie 10 962 stacji i ponad 300 tys. komórek we wszystkich pasmach (GSM 900/1800, UMTS 900/2100, LTE 900/1800/2100/2600 FDD & TDD oraz 5G 700/1800/2100/2600 TDD/3500 TDD).',
+          'Wszystkie 22 pliki pasmowe pozwoleń radiowych UKE (stan 26.10.2026 oraz 04.11.2026): zaimportowano 197 289 pozwoleń radiowych (w tym sieci prywatne 5G 3.8–4.2 GHz).',
+          'Rzeczywiste azymuty sektorów anten: odczyt i prezentacja kątów promieniowania wiązek antenowych (np. 50° / 170° / 290°) bezpośrednio w karcie stacji i tabeli pasm.',
+          'Precyzyjne daty wpisów UKE: wyświetlanie dokładnej daty dokonania wpisu (Wpis UKE: YYYY-MM-DD) z oznaczeniem nowości dla wpisów z października i listopada 2026 r.',
+        ],
+      },
+      {
+        id: 'statystyki-przyrostu-listopad',
+        title: 'Zaktualizowane statystyki i wykazy przyrostu sieci',
+        items: [
+          'Nowe okresy w raportach wykazów: „Listopad / Październik 2026 (stan 06.11.2026)”, „Wykaz z 06.11.2026 (Orange, T-Mobile)”, „Wykaz z 04.11.2026 (Play / P4 + 5G)”, „Wykaz z 28.10.2026 (Plus / Polkomtel)” oraz „Wykaz z 26.10.2026 (Pozwolenia + Radiolinie)”.',
+          'Pełna korekta zliczania sektorów w 15 kartach pasmowych: kompletne słupki i przyrosty dla wszystkich 4 operatorów.',
+          'Najnowszy stan linii radiowych UKE: 38 896 linii radiowych (102 842 kanały transmisyjne) ze stanem na 26.10.2026.',
+        ],
+      },
+      {
+        id: 'odu-manager-companion',
+        title: 'Nowy moduł ODU Manager (Outdoor Unit Companion)',
+        items: [
+          'Przygotowanie dedykowanego podprojektu „odumanager/” dla jednostek zewnętrznych LTE/5G (np. ZTE MC889, ZTE MC7010, Huawei B2368, Zyxel NR7101, Nokia FastMile, MikroTik).',
+          'Planowana integracja z BTMap: odczyt parametrów sygnału RF w czasie rzeczywistym, wymuszanie pasm (Band Locking), blokowanie komórek (PCI Locking) oraz asystent nakierowania anteny na maszt.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '2.0.2',
     from: '2026-10-24',
     to: '2026-11-01',
     title: 'Aktualizacja wykazu UKE, radiolinie, analityka sieci i ulepszenia interfejsu',

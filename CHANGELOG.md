@@ -1,5 +1,32 @@
 # Changelog BTMap
 
+## v2.0.3 (2026-11-08)
+
+Najnowsze wykazy Rejestru Urządzeń BIP UKE (stan na 06.11.2026), kompletna baza stacji i komórek Plusa (Polkomtel), 22 wykazy pozwoleń radiowych UKE, linie radiowe z 26.10.2026, precyzyjne azymuty sektorów anten oraz nowy moduł ODU Manager.
+
+### Rejestr Urządzeń i pozwolenia radiowe BIP UKE (listopad 2026)
+- **Oficjalne rejestry urządzeń operatorów (06.11.2026)**: zaimportowano najnowsze pliki Rejestru Urządzeń UKE: `2026-11-06_orange.xlsx`, `2026-11-06_t-mobile.xlsx`, `2026-11-04_p4.xlsx` oraz `2026-10-28_polkomtel.xlsx` – ponad 768 tys. aktywnych sektorów i komórek.
+- **Kompletna baza Plusa (Polkomtel)**: włączenie do ogólnopolskiej bazy 10 962 fizycznych stacji bazowych Plusa oraz ponad 300 tys. sektorów we wszystkich pasmach (GSM, UMTS, LTE i 5G).
+- **22 pliki pasmowe pozwoleń radiowych (26.10.2026 / 04.11.2026)**: zaimportowano 197 289 pozwoleń radiowych (GSM, UMTS, LTE, 5G C-Band 3.5 GHz, sieci prywatne 5G 3.8–4.2 GHz).
+- **Precyzyjne azymuty sektorów**: odczyt i prezentacja rzeczywistych azymutów promieniowania anten (np. `50° / 170° / 290°`) bezpośrednio w karcie stacji i tabeli pasm.
+- **Daty wpisów UKE**: wyświetlanie dokładnej daty rejestracji (`Wpis UKE: YYYY-MM-DD`) oraz odznaki nowego pozwolenia dla stacji dodanych w październiku i listopadzie 2026 r.
+
+### Zaktualizowane statystyki i wykazy przyrostu sieci
+- **Nowe okresy w raportach miesięcznych**:
+  - `Listopad / Październik 2026 (stan 06.11.2026)`
+  - `Wykaz z 06.11.2026 (Orange, T-Mobile)`
+  - `Wykaz z 04.11.2026 (Play / P4 + 5G)`
+  - `Wykaz z 28.10.2026 (Plus / Polkomtel)`
+  - `Wykaz z 26.10.2026 (Pozwolenia + Radiolinie)`
+- **Korekta zliczania sektorów w 15 kartach pasm**: zliczanie rzeczywistych sektorów i komórek z pełnym uwzględnieniem infrastruktury Plusa.
+- **Automatyczna aktualizacja wykazu linii radiowych**: baza powiększona do 38 896 linii radiowych (102 842 kanały mikrofalowe) ze stanem na 26.10.2026.
+
+### Nowy podprojekt ODU Manager
+- **Dedykowany moduł `odumanager/`**: przygotowanie struktury pod narzędzie diagnostyczno-zarządcze dla jednostek zewnętrznych LTE/5G (ZTE MC889, ZTE MC7010, Huawei B2368, Zyxel, Nokia FastMile, MikroTik).
+- **Integracja z BTMap**: planowane wymuszanie pasm (Band Locking), blokowanie komórek (PCI Locking) oraz asystent precyzyjnego nakierowania anteny na maszt.
+
+---
+
 ## v2.0.2 (2026-11-01)
 
 Aktualizacja rejestru UKE (26.10.2026), warstwa 38,5 tys. linii radiowych, rozbudowane statystyki telekomunikacyjne i jakość danych, gotowe archiwa KMZ dla Google Earth oraz nowa oś czasu stacji.
