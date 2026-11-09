@@ -173,14 +173,17 @@ Open `http://127.0.0.1:5174/btmap` in your browser.
 
 ---
 
-## 🤝 Contributing / Współpraca
+## 🤝 Contributing & Security
 
-Wszelkie usprawnienia, poprawki błędów i nowe funkcje są mile widziane!
-1. Sforkuj repozytorium
-2. Stwórz gałąź dla nowej funkcji (`git checkout -b feature/nowa-funkcja`)
-3. Zatwierdź zmiany (`git commit -m "Dodano nową funkcję"`)
-4. Wypchnij gałąź (`git push origin feature/nowa-funkcja`)
-5. Otwórz Pull Request
+Wszelkie usprawnienia, poprawki błędów i nowe dane stacji są mile widziane!
+* Zasady współpracy i rozwoju: [CONTRIBUTING.md](.github/CONTRIBUTING.md)
+* Zgłaszanie luk i bezpieczeństwo: [SECURITY.md](.github/SECURITY.md)
+* Źródła danych i polityka Open Data: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)
+
+---
+
+## 📚 Citation
+If you use BTMap or its data pipelines in academic, engineering, or journalistic research, please cite using [CITATION.cff](CITATION.cff).
 
 ---
 

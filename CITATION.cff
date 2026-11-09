@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use BTMap software, spatial data, or regulatory processing pipelines in your academic or technical work, please cite it as below."
+title: "BTMap: Open-source Cellular Telecommunications and RF Infrastructure Platform"
+authors:
+  - family-names: "Janiszewski"
+    given-names: "Jerzy"
+version: "2.0.3"
+date-released: "2026-11-08"
+license: "MIT"
+url: "https://github.com/JUreK646/btmapv2"
+repository-code: "https://github.com/JUreK646/btmapv2"
+abstract: "A nationwide open-source telecommunications intelligence platform and data pipeline aggregating official Polish Office of Electronic Communications (UKE) radio permits, 5G/LTE cellular deployments, and environmental electromagnetic field (SI2PEM) measurements."
+keywords:
+  - telecommunications
+  - base-transceiver-station
+  - 5g-nr
+  - lte
+  - rf-engineering
+  - open-data
+  - electromagnetic-fields
