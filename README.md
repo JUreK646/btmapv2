@@ -5,6 +5,9 @@
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/JUreK646/btmapv2/actions/workflows/ci.yml/badge.svg)](https://github.com/JUreK646/btmapv2/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/JUreK646/btmapv2/actions/workflows/codeql.yml/badge.svg)](https://github.com/JUreK646/btmapv2/actions/workflows/codeql.yml)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-brightgreen.svg)](.github/SECURITY.md)
 
 > **[PL]** Otwarty, społecznościowy projekt interaktywnej mapy oraz bazy stacji bazowych telefonii komórkowej (BTS / GSM / UMTS / LTE / 5G) w Polsce.  
 > **[EN]** An open-source, community-driven interactive map and database of cellular base transceiver stations (BTS / GSM / UMTS / LTE / 5G) in Poland.

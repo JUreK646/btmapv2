@@ -1,0 +1,29 @@
+name: Feature Request
+description: Suggest an idea or enhancement for BTMap v2
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We appreciate suggestions for new features, data layers, or user experience improvements!
+  - type: input
+    id: feature_title
+    attributes:
+      label: Feature Title
+      placeholder: e.g. Add radioline azimuth visualizer or KML bulk export
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: Is your feature request related to a problem or limitation? Please describe.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you would like this feature to work.
+    validations:
+      required: true

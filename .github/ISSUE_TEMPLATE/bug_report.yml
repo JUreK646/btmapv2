@@ -1,0 +1,41 @@
+name: Bug Report
+description: Report a software bug or visual glitch in BTMap v2
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue!
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: A concise description of the bug.
+      placeholder: e.g. Station popup fails to load antenna azimuths
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the issue.
+      placeholder: |
+        1. Open map at http://localhost:5174
+        2. Filter by Plus n78
+        3. Click on station ID 12345
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, and app version (e.g. Chrome 130 on Windows 11, BTMap v2.0.3)
+    validations:
+      required: false

@@ -9,6 +9,9 @@
     "type": "git",
     "url": "git+https://github.com/JUreK646/btmapv2.git"
   },
+  "bugs": {
+    "url": "https://github.com/JUreK646/btmapv2/issues"
+  },
   "keywords": [
     "telecom",
     "gsm",

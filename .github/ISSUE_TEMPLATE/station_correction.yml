@@ -1,0 +1,46 @@
+name: Cell / Station Data Correction
+description: Report missing BTS permits, incorrect antennas, or updated cell IDs in the database
+labels: ["data-correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to submit verified ground-truth data, missing UKE permits, or corrections for cellular base stations.
+  - type: input
+    id: station_id
+    attributes:
+      label: Station ID / Operator Code
+      description: The identifier of the base station (e.g. BT12345, KRK1024, POZ2001).
+      placeholder: e.g. BT33421
+    validations:
+      required: true
+  - type: dropdown
+    id: operator
+    attributes:
+      label: Operator
+      options:
+        - Plus (Polkomtel)
+        - Play (P4)
+        - Orange
+        - T-Mobile
+        - Other / MVNO
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Correction Details
+      description: Describe what needs to be updated (frequencies, bands, azimuths, antenna height, missing eNB/gNB).
+      placeholder: |
+        New 5G C-Band (n78) active on site.
+        eNB: 33421, gNB: 33421
+        Antenna azimuths: 30, 150, 270 degrees.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Verification Source
+      description: UKE permit number, NetMonster log, field observation, or SI2PEM report.
+    validations:
+      required: false
