@@ -92,7 +92,7 @@ export default function Filters({
         <button
           type="button"
           className={`filter-option ${(!filters.source || filters.source === 'ALL') ? 'is-selected' : ''}`}
-          onClick={() => onChange({ ...filters, source: 'ALL', modes5g: [] })}
+          onClick={() => onChange({ ...filters, source: 'ALL' })}
           aria-pressed={!filters.source || filters.source === 'ALL'}
           title={t.filterSourceAllDesc}
         >
@@ -112,7 +112,7 @@ export default function Filters({
         <button
           type="button"
           className={`filter-option ${filters.source === 'UKE' ? 'is-selected' : ''}`}
-          onClick={() => onChange({ ...filters, source: 'UKE', modes5g: [] })}
+          onClick={() => onChange({ ...filters, source: 'UKE' })}
           aria-pressed={filters.source === 'UKE'}
           title={t.filterSourceUkeDesc}
         >
@@ -122,40 +122,38 @@ export default function Filters({
       </div>
     </fieldset>
 
-    {filters.source === 'BTMAP' && (
-      <fieldset className="filter-group filter-group-5g-mode">
-        <legend>
-          {t.filter5gMode}{' '}
-          <span>
-            {filters.modes5g?.length
-              ? filters.modes5g.join(', ')
-              : t.filterAll}
-          </span>
-        </legend>
-        <div className="filter-options mode-5g-filters">
-          <button
-            type="button"
-            className={`filter-option ${filters.modes5g?.includes('NSA') ? 'is-selected' : ''}`}
-            aria-pressed={Boolean(filters.modes5g?.includes('NSA'))}
-            onClick={() => toggle5gMode('NSA')}
-            title={t.filter5gModeNsaDesc}
-          >
-            <span className="mode-5g-tag">NSA</span>
-            <span>{t.filter5gModeNsa}</span>
-          </button>
-          <button
-            type="button"
-            className={`filter-option ${filters.modes5g?.includes('SA') ? 'is-selected' : ''}`}
-            aria-pressed={Boolean(filters.modes5g?.includes('SA'))}
-            onClick={() => toggle5gMode('SA')}
-            title={t.filter5gModeSaDesc}
-          >
-            <span className="mode-5g-tag">SA</span>
-            <span>{t.filter5gModeSa}</span>
-          </button>
-        </div>
-      </fieldset>
-    )}
+    <fieldset className="filter-group filter-group-5g-mode">
+      <legend>
+        {t.filter5gMode}{' '}
+        <span>
+          {filters.modes5g?.length
+            ? filters.modes5g.join(', ')
+            : t.filterAll}
+        </span>
+      </legend>
+      <div className="filter-options mode-5g-filters">
+        <button
+          type="button"
+          className={`filter-option ${filters.modes5g?.includes('NSA') ? 'is-selected' : ''}`}
+          aria-pressed={Boolean(filters.modes5g?.includes('NSA'))}
+          onClick={() => toggle5gMode('NSA')}
+          title={t.filter5gModeNsaDesc}
+        >
+          <span className="mode-5g-tag">NSA</span>
+          <span>{t.filter5gModeNsa}</span>
+        </button>
+        <button
+          type="button"
+          className={`filter-option ${filters.modes5g?.includes('SA') ? 'is-selected' : ''}`}
+          aria-pressed={Boolean(filters.modes5g?.includes('SA'))}
+          onClick={() => toggle5gMode('SA')}
+          title={t.filter5gModeSaDesc}
+        >
+          <span className="mode-5g-tag">SA</span>
+          <span>{t.filter5gModeSa}</span>
+        </button>
+      </div>
+    </fieldset>
 
     <fieldset className="filter-group">
       <legend>{t.filterOperators} <span>{filters.operators.length ? t.filterSelectedCount(filters.operators.length) : t.filterAll}</span></legend>

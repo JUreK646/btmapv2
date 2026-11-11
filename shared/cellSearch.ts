@@ -46,11 +46,13 @@ export function parseCellSearch(input: string | null | undefined): ParsedCellId 
   if (raw.length < 2) return null;
 
   // 1. Check for explicit keywords: eNB, eNodeB, gNB, gNodeB, ECI, NCI, CID, LCID, RNC, TAC, PCI
+  const gnbCidMatch = raw.match(/(?:\b|_)(?:gnb|gnodeb)(?:[:_\s]*cid)?\s*[:=]?\s*(\d{4,8})\s*[:\/-]\s*(\d{1,4})/i);
   const enbMatch = raw.match(/(?:\b|_)(?:enb|enodeb)(?:\b|_|\s*[:=]?\s*)(\d{1,8})/i);
-  const gnbMatch = raw.match(/(?:\b|_)(?:gnb|gnodeb)(?:\b|_|\s*[:=]?\s*)(\d{1,10})/i);
-  const cellIdFallback = !enbMatch ? raw.match(/(?:\b|_)(?:cell\s*id|ci)(?:\b|_|\s*[:=]?\s*)(\d{6,10})/i) : null;
+  const gnbMatch = !gnbCidMatch ? raw.match(/(?:\b|_)(?:gnb|gnodeb)(?:[:_\s]*cid)?\s*[:=]?\s*(\d{1,10})/i) : null;
+  const is5gExplicit = /(?:5g|nr|sa\b|gnb|3500|3600)/i.test(raw);
+  const cellIdFallback = !enbMatch && !gnbMatch && !gnbCidMatch ? raw.match(/(?:\b|_)(?:cell\s*id|ci)(?:\b|_|\s*[:=]?\s*)(\d{6,10})/i) : null;
   const eciMatch = raw.match(/(?:\b|_)(?:eci|global\s*cell\s*id|cgi)(?:\b|_|\s*[:=]?\s*)(\d{6,10})/i) || cellIdFallback;
-  const nciMatch = raw.match(/(?:\b|_)(?:nci)(?:\b|_|\s*[:=]?\s*)(\d{6,12})/i);
+  const nciMatch = raw.match(/(?:\b|_)(?:nci|nr\s*ci|5g\s*ci)(?:\b|_|\s*[:=]?\s*)(\d{6,12})/i);
 
   // Local Cell ID / Sector (1..999)
   const cidMatch = raw.match(/(?:\b|_)(?:cid|lcid|cell\s*id|sector|sektor)(?:\b|_|\s*[:=]?\s*)(\d{1,4})/i)
@@ -61,10 +63,12 @@ export function parseCellSearch(input: string | null | undefined): ParsedCellId 
   const rncMatch = raw.match(/(?:\b|_)(?:rnc)(?:\b|_|\s*[:=]?\s*)(\d{1,5})/i);
 
   // Common pattern like "24102-1" or "24102/1" or "24102:1" or "26002-24102-1"
-  const dashPattern = raw.match(/^(?:260\d{2}[-\s])?(\d{3,6})[-\/:_](\d{1,3})$/);
+  const dashPattern = !gnbCidMatch ? raw.match(/^(?:260\d{2}[-\s])?(\d{3,6})[-\/:_](\d{1,3})$/) : null;
 
-  // Standalone large 7-8 digit number -> probable ECI
-  const plainEciMatch = !enbMatch && !gnbMatch && !eciMatch && raw.match(/^(\d{7,9})$/);
+  // Standalone large 7-8 digit number -> probable ECI or 5G CI
+  const plainEciMatch = !enbMatch && !gnbMatch && !gnbCidMatch && !eciMatch && raw.match(/^(\d{7,9})$/);
+  // Standalone 4-6 digit number -> probable station ID / gNB / eNB
+  const plainNodeIdMatch = !enbMatch && !gnbMatch && !gnbCidMatch && !eciMatch && !plainEciMatch && !dashPattern && raw.match(/^(\d{4,6})$/);
 
   let type: 'LTE' | 'NR' | 'UMTS' | 'GSM' | 'GENERIC' = 'GENERIC';
   let nodeId: number | null = null;
@@ -74,9 +78,21 @@ export function parseCellSearch(input: string | null | undefined): ParsedCellId 
   let nci: number | null = null;
 
   const matchedEci = eciMatch || plainEciMatch;
-  if (matchedEci) {
+  if (gnbCidMatch) {
+    type = 'NR';
+    nodeId = Number(gnbCidMatch[1]);
+    cellId = Number(gnbCidMatch[2]);
+    sectorNum = deriveSectorNumber(cellId);
+    nci = nodeId * 256 + cellId;
+  } else if (matchedEci) {
     const rawVal = Number(matchedEci[1]);
-    if (rawVal >= 256 && rawVal < 268435456) { // 28-bit LTE ECI limit
+    if (is5gExplicit) {
+      type = 'NR';
+      nci = rawVal;
+      nodeId = Math.floor(rawVal / 256);
+      cellId = rawVal % 256;
+      sectorNum = deriveSectorNumber(cellId);
+    } else if (rawVal >= 256 && rawVal < 268435456) { // 28-bit LTE ECI limit
       type = 'LTE';
       eci = rawVal;
       nodeId = Math.floor(rawVal / 256);
@@ -87,8 +103,9 @@ export function parseCellSearch(input: string | null | undefined): ParsedCellId 
     const rawVal = Number(nciMatch[1]);
     type = 'NR';
     nci = rawVal;
-    nodeId = Math.floor(rawVal / 4096);
-    cellId = rawVal % 4096;
+    // Support both 8-bit and 12-bit cell ID conventions in Poland
+    nodeId = rawVal >= 16777216 ? Math.floor(rawVal / 4096) : Math.floor(rawVal / 256);
+    cellId = rawVal >= 16777216 ? (rawVal % 4096) : (rawVal % 256);
     sectorNum = deriveSectorNumber(cellId);
   } else if (enbMatch) {
     type = 'LTE';
@@ -97,10 +114,14 @@ export function parseCellSearch(input: string | null | undefined): ParsedCellId 
     type = 'NR';
     nodeId = Number(gnbMatch[1]);
   } else if (dashPattern) {
-    type = 'LTE';
+    type = is5gExplicit ? 'NR' : 'LTE';
     nodeId = Number(dashPattern[1]);
     cellId = Number(dashPattern[2]);
     sectorNum = deriveSectorNumber(cellId);
+    if (type === 'NR') nci = nodeId * 256 + cellId;
+  } else if (plainNodeIdMatch) {
+    nodeId = Number(plainNodeIdMatch[1]);
+    type = 'GENERIC';
   }
 
   if (cidMatch && cellId === null) {

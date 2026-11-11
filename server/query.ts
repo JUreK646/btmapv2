@@ -33,6 +33,7 @@ export function towerWhere(query: Record<string, unknown>) {
       const enb = cellSearch.nodeIdStr;
       const btEnb = 'BT' + enb;
       const wildSuffix = '%' + enb;
+      const wildPrefix = enb + '%';
       const wildBoth = '%' + enb + '%';
       const cleanAddress = `%${rawQ.replace(/[!%_]/g, '!$&')}%`;
 
@@ -40,11 +41,12 @@ export function towerWhere(query: Record<string, unknown>) {
         fold(t.stationId) = fold(?) OR
         fold(t.stationId) = fold(?) OR
         fold(t.stationId) LIKE fold(?) OR
+        fold(t.stationId) LIKE fold(?) OR
         fold(t.operators) LIKE fold(?) OR
         fold(t.id) LIKE fold(?) OR
         fold(t.address) LIKE fold(?) ESCAPE '!'
       )`);
-      params.push(enb, btEnb, wildSuffix, wildBoth, wildBoth, cleanAddress);
+      params.push(enb, btEnb, wildSuffix, wildPrefix, wildBoth, wildBoth, cleanAddress);
     } else {
       clauses.push("(fold(t.address) LIKE fold(?) ESCAPE '!' OR fold(t.stationId) LIKE fold(?) ESCAPE '!' OR fold(t.id) LIKE fold(?) ESCAPE '!' OR fold(t.operators) LIKE fold(?) ESCAPE '!')");
       const text = `%${rawQ.replace(/[!%_]/g, '!$&')}%`;
@@ -61,7 +63,7 @@ export function towerWhere(query: Record<string, unknown>) {
   }
 
   const operators = list(query.operators), techs = list(query.techs || query.tech), bands = list(query.bands);
-  const modes5g = (query.source === 'BTMAP' && (query.modes5g || query.mode5g)) ? list(query.modes5g || query.mode5g) : [];
+  const modes5g = (query.modes5g || query.mode5g) ? list(query.modes5g || query.mode5g) : [];
 
   if (operators.length || techs.length || bands.length || modes5g.length) {
     const opClauses: string[] = [];
@@ -87,13 +89,22 @@ export function towerWhere(query: Record<string, unknown>) {
         opClauses.push(`EXISTS (
           SELECT 1 FROM json_each(op.value, '$.bands') b5g
           WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
-            AND UPPER(COALESCE(json_extract(b5g.value, '$.mode'), 'NSA')) = 'NSA'
+            AND (
+              UPPER(COALESCE(json_extract(b5g.value, '$.mode'), 'NSA')) = 'NSA'
+              OR t.source = 'UKE'
+            )
         )`);
       } else if (hasSa && !hasNsa) {
         opClauses.push(`EXISTS (
           SELECT 1 FROM json_each(op.value, '$.bands') b5g
           WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
-            AND UPPER(json_extract(b5g.value, '$.mode')) = 'SA'
+            AND (
+              UPPER(json_extract(b5g.value, '$.mode')) = 'SA'
+              OR (
+                (t.source = 'UKE' OR t.addedBy = 'Import KML' OR t.operators LIKE '%/26%')
+                AND REPLACE(json_extract(b5g.value, '$.band'), 'MHz', '') IN ('3600', '3500', '2600', '2100', '700')
+              )
+            )
         )`);
       } else if (hasNsa && hasSa) {
         opClauses.push(`EXISTS (

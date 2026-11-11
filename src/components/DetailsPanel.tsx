@@ -202,6 +202,12 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                 <span className="cell-tech-count">
                   ({techBands.length} {techBands.length === 1 ? (isPl ? 'pasmo' : 'band') : techBands.length < 5 ? (isPl ? 'pasma' : 'bands') : (isPl ? 'pasm' : 'bands')})
                 </span>
+                {gen.gen === '5G' && (
+                  <span className="cell-tag cell-tag-5g-mode" title={isPl ? "Wsparcie 5G Standalone (SA) i Non-Standalone (NSA)" : "5G Standalone (SA) & Non-Standalone (NSA) support"}>
+                    <span>5G</span>
+                    <strong>SA / NSA</strong>
+                  </span>
+                )}
                 {op.stationIds?.[0] && (
                   <span
                     className="cell-tag"
@@ -253,7 +259,17 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       return (
                         <tr key={idx}>
                           <td className="cell-col-pasmo">
-                            <strong className="cell-pasmo-main">{b.band}</strong>{b.mode && <span className={`cell-mode-tag mode-${b.mode.toLowerCase()}`} title={`Tryb 5G ${b.mode}`}>{b.mode}</span>}
+                            <strong className="cell-pasmo-main">{b.band}</strong>
+                            {b.mode ? (
+                              <span className={`cell-mode-tag mode-${b.mode.toLowerCase()}`} title={`Tryb 5G ${b.mode}`}>{b.mode}</span>
+                            ) : (tech === '5G' ? (
+                              <span
+                                className={`cell-mode-tag ${b.band === '3500' || b.band === '3600' ? 'mode-sa' : 'mode-nsa'}`}
+                                title={b.band === '3500' || b.band === '3600' ? (isPl ? '5G C-Band (gotowe na SA / NSA)' : '5G C-Band (SA / NSA ready)') : (isPl ? '5G DSS / NSA' : '5G DSS / NSA')}
+                              >
+                                {b.band === '3500' || b.band === '3600' ? 'SA / NSA' : 'NSA'}
+                              </span>
+                            ) : null)}
                             {azList.length > 0 && (
                               <span className="cell-azimuth-tag" title={isPl ? 'Azymuty sektorów (BIP UKE)' : 'Sector azimuths (BIP UKE)'}>
                                 {azList.map(a => `${a}°`).join(' / ')}
