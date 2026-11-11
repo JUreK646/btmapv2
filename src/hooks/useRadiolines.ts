@@ -48,7 +48,7 @@ export function useRadiolines(
 
         const result = await api<Radioline[]>(`/radiolines?${params}`, { signal: abort.signal });
         if (abort.signal.aborted) return;
-        setData(result || []);
+        setData(Array.isArray(result) ? result.slice(0, 1000) : []);
         setLoading(false);
         setError('');
       } catch (e) {

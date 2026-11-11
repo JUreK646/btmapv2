@@ -169,7 +169,7 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
   if (!Number.isFinite(zoom)) throw new Error('Nieprawidłowe przybliżenie.');
   const isMap = query.view === 'map';
   const isOnlyNew = query.onlyNew === '1' || query.onlyNew === 'true';
-  const limit = Math.min(isMap ? (isOnlyNew ? 1500 : MAP_STATION_LIMIT) : 1500, Math.max(1, Number(query.limit) || (isMap ? (isOnlyNew ? 1500 : MAP_STATION_LIMIT) : 100)));
+  const limit = Math.min(isMap ? MAP_STATION_LIMIT : 1500, Math.max(1, Number(query.limit) || (isMap ? MAP_STATION_LIMIT : 100)));
   const offset = Math.max(0, Number(query.offset) || 0);
 
   let orderSql = 't.address, t.id';

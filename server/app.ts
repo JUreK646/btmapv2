@@ -15,6 +15,7 @@ import {createPemPdfService} from './pemCatalog.ts';
 import type {createSi2pemSync} from './si2pemSync.ts';
 import type {Tower} from '../src/types.ts';
 import {validateStationSubmission} from '../shared/cellValidation.ts';
+import { MAP_RADIOLINE_LIMIT } from '../shared/mapLimits.ts';
 import {calculateTerrainProfile} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
 import {getTelecomStats, invalidateStatsCache, warmStatsCache} from './stats.ts';
@@ -247,7 +248,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
       sql += ` AND operator IN (${operators.map(() => '?').join(',')})`;
       params.push(...operators);
     }
-    sql += ' LIMIT 2000';
+    sql += ` LIMIT ${MAP_RADIOLINE_LIMIT}`; // LIMIT 1000
     return res.json(db.prepare(sql).all(...params));
   });
   // Static WebP photo uploads serving

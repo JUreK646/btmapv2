@@ -38,7 +38,7 @@ import type { BasemapId } from '../lib/basemaps';
 import 'leaflet/dist/leaflet.css';
 import type { Bounds, Radioline, RadiolineChannel, Theme, Tower } from '../types';
 import { operatorColor, readStored, saveStored } from '../lib/constants';
-import { MAP_STATION_LIMIT } from '../../shared/mapLimits';
+import { MAP_STATION_LIMIT, MAP_RADIOLINE_LIMIT } from '../../shared/mapLimits';
 import PemPlanMarkers from './PemPlanMarkers';
 import type { PemPlan } from '../../shared/pemPlans';
 import { operatorName } from '../../shared/operators';
@@ -1212,6 +1212,7 @@ function RadiolinesLayer({
   radiolines: Radioline[];
   renderer: L.Canvas;
 }) {
+  const cappedRadiolines = useMemo(() => radiolines.slice(0, 1000), [radiolines]);
   const [selectedRl, setSelectedRl] = useState<{ line: Radioline; pos: [number, number] } | null>(null);
   const [detailsModal, setDetailsModal] = useState<{ line: Radioline; channelIdx: number } | null>(null);
 
@@ -1222,10 +1223,10 @@ function RadiolinesLayer({
   });
 
   useEffect(() => {
-    if (selectedRl && !radiolines.some(r => r.id === selectedRl.line.id)) {
+    if (selectedRl && !cappedRadiolines.some(r => r.id === selectedRl.line.id)) {
       setSelectedRl(null);
     }
-  }, [radiolines, selectedRl]);
+  }, [cappedRadiolines, selectedRl]);
 
   const selectedBrand = useMemo(
     () => (selectedRl ? getRadiolineBrand(selectedRl.line) : null),
@@ -1241,11 +1242,11 @@ function RadiolinesLayer({
     [selectedBrand]
   );
 
-  if (!radiolines.length && !detailsModal) return null;
+  if (!cappedRadiolines.length && !detailsModal) return null;
 
   return (
     <>
-      {radiolines.map(line => {
+      {cappedRadiolines.map(line => {
         const isSelected = selectedRl?.line.id === line.id;
         const brand = getRadiolineBrand(line);
         return (
@@ -1257,10 +1258,10 @@ function RadiolinesLayer({
             ]}
             renderer={renderer}
             pathOptions={{
-              color: line.isNew === 1 ? '#00e5a3' : brand.color,
-              dashArray: line.isNew === 1 ? '7, 4' : undefined,
-              weight: isSelected ? 4.5 : line.isNew === 1 ? 3.4 : 2.3,
-              opacity: isSelected ? 1 : 0.9,
+              color: brand.color,
+              dashArray: line.isNew === 1 ? '6, 4' : undefined,
+              weight: isSelected ? 3.5 : 1.7,
+              opacity: isSelected ? 1.0 : 0.72,
             }}
             eventHandlers={{
               click: e => {
@@ -1381,19 +1382,19 @@ export default function MapView({
   highlightedSector?: HighlightedSector | null;
   settings?: AppSettings;
 }) {
-  const markers = items.slice(0, MAP_STATION_LIMIT);
+  const markers = items.slice(0, 1000);
   const visible = useMemo(() => {
     let list = markers;
     if (selected && !list.some(t => t.id === selected.id)) {
-      list = [...list.slice(0, MAP_STATION_LIMIT - 1), selected];
+      list = [...list.slice(0, 999), selected];
     }
     if (highlightedSector && !list.some(t => t.id === highlightedSector.towerId)) {
       const hlTower = items.find(t => t.id === highlightedSector.towerId);
       if (hlTower) {
-        list = [hlTower, ...list];
+        list = [hlTower, ...list.slice(0, 999)];
       }
     }
-    return list;
+    return list.slice(0, 1000);
   }, [markers, selected, highlightedSector, items]);
 
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5, tolerance: 8 }), []);
@@ -1470,7 +1471,7 @@ export default function MapView({
       <PemPlanMarkers items={pemPlans} />
 
       {/* Radiolines */}
-      <RadiolinesLayer radiolines={radiolines} renderer={canvasRenderer} />
+      <RadiolinesLayer radiolines={radiolines.slice(0, 1000)} renderer={canvasRenderer} />
 
       {/* User GPS location */}
       {position && (
