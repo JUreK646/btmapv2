@@ -169,7 +169,8 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
   if (!Number.isFinite(zoom)) throw new Error('Nieprawidłowe przybliżenie.');
   const isMap = query.view === 'map';
   const isOnlyNew = query.onlyNew === '1' || query.onlyNew === 'true';
-  const limit = Math.min(isMap ? MAP_STATION_LIMIT : 1500, Math.max(1, Number(query.limit) || (isMap ? MAP_STATION_LIMIT : 100)));
+  const mapStationLimit = Math.min(MAP_STATION_LIMIT, 1000);
+  const limit = Math.min(isMap ? mapStationLimit : 1500, Math.max(1, Number(query.limit) || (isMap ? mapStationLimit : 100)));
   const offset = Math.max(0, Number(query.offset) || 0);
 
   let orderSql = 't.address, t.id';
@@ -230,8 +231,10 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
     .all(...params, ...orderParams, Math.floor(limit), Math.floor(offset))
     .map(normalizeTower);
 
+  const cappedTotal = isMap ? Math.min(total, mapStationLimit) : total;
+
   if (isMinimal) {
-    return { items, total: items.length, limit, hasMore: false };
+    return { items, total: isMap ? Math.min(items.length, mapStationLimit) : items.length, limit, hasMore: false };
   }
-  return { items: withAzimuths(db, withPemCounts(db, items)), total, limit, hasMore: offset + items.length < total };
+  return { items: withAzimuths(db, withPemCounts(db, items)), total: cappedTotal, limit, hasMore: offset + items.length < cappedTotal };
 }

@@ -248,7 +248,8 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
       sql += ` AND operator IN (${operators.map(() => '?').join(',')})`;
       params.push(...operators);
     }
-    sql += ` LIMIT ${MAP_RADIOLINE_LIMIT}`; // LIMIT 1000
+    const radiolineLimit = Math.min(MAP_RADIOLINE_LIMIT, 1000);
+    sql += ` LIMIT ${radiolineLimit}`;
     return res.json(db.prepare(sql).all(...params));
   });
   // Static WebP photo uploads serving

@@ -1233,35 +1233,70 @@ function RadiolinesLayer({
     [selectedRl]
   );
 
+  const selectedColor = selectedRl
+    ? selectedRl.line.isNew === 1
+      ? '#10b981'
+      : selectedBrand?.color || '#3b82f6'
+    : '#3b82f6';
+
   const iconA = useMemo(
-    () => (selectedBrand ? createEndpointIcon('A', selectedBrand.color) : null),
-    [selectedBrand]
+    () => (selectedBrand ? createEndpointIcon('A', selectedColor) : null),
+    [selectedBrand, selectedColor]
   );
   const iconB = useMemo(
-    () => (selectedBrand ? createEndpointIcon('B', selectedBrand.color) : null),
-    [selectedBrand]
+    () => (selectedBrand ? createEndpointIcon('B', selectedColor) : null),
+    [selectedBrand, selectedColor]
   );
 
   if (!cappedRadiolines.length && !detailsModal) return null;
 
   return (
     <>
+      {/* Sleek glowing halo underlayer for modern fiber/beam aesthetic */}
       {cappedRadiolines.map(line => {
         const isSelected = selectedRl?.line.id === line.id;
         const brand = getRadiolineBrand(line);
+        const color = line.isNew === 1 ? '#10b981' : brand.color;
         return (
           <Polyline
-            key={line.id}
+            key={`halo-${line.id}`}
             positions={[
               [line.latA, line.lngA],
               [line.latB, line.lngB],
             ]}
             renderer={renderer}
             pathOptions={{
-              color: brand.color,
-              dashArray: line.isNew === 1 ? '6, 4' : undefined,
-              weight: isSelected ? 3.5 : 1.7,
-              opacity: isSelected ? 1.0 : 0.72,
+              color,
+              weight: isSelected ? 9.0 : 6.0,
+              opacity: isSelected ? 0.35 : 0.22,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
+            interactive={false}
+          />
+        );
+      })}
+
+      {/* Modern rounded core lines */}
+      {cappedRadiolines.map(line => {
+        const isSelected = selectedRl?.line.id === line.id;
+        const brand = getRadiolineBrand(line);
+        const color = line.isNew === 1 ? '#10b981' : brand.color;
+        return (
+          <Polyline
+            key={`core-${line.id}`}
+            positions={[
+              [line.latA, line.lngA],
+              [line.latB, line.lngB],
+            ]}
+            renderer={renderer}
+            pathOptions={{
+              color,
+              dashArray: line.isNew === 1 ? '8, 6' : undefined,
+              weight: isSelected ? 5.0 : 3.2,
+              opacity: isSelected ? 1.0 : 0.85,
+              lineCap: 'round',
+              lineJoin: 'round',
             }}
             eventHandlers={{
               click: e => {
@@ -1285,9 +1320,11 @@ function RadiolinesLayer({
             ]}
             renderer={renderer}
             pathOptions={{
-              color: selectedBrand.color,
-              weight: 8,
-              opacity: 0.28,
+              color: selectedColor,
+              weight: 10,
+              opacity: 0.38,
+              lineCap: 'round',
+              lineJoin: 'round',
             }}
             interactive={false}
           />
