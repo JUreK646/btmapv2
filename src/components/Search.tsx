@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search as SearchIcon, ArrowRight, MapPin, X, Radio, Compass } from 'lucide-react';
+import { Search as SearchIcon, ArrowRight, MapPin, X, Radio, Compass, Navigation } from 'lucide-react';
 import type { Tower, TowerResult } from '../types';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
@@ -20,10 +20,42 @@ export interface SearchProps {
   onActiveChange?: (active: boolean) => void;
 }
 
+export interface PlaceSuggestion {
+  id: string;
+  name: string;
+  displayName: string;
+  type: string;
+  lat: number;
+  lng: number;
+}
+
+function formatPlaceType(type: string): string {
+  switch (type.toLowerCase()) {
+    case 'city':
+    case 'administrative':
+      return 'Miasto';
+    case 'town':
+      return 'Miejscowość';
+    case 'village':
+      return 'Wieś';
+    case 'suburb':
+    case 'neighbourhood':
+      return 'Dzielnica';
+    case 'road':
+    case 'street':
+    case 'residential':
+    case 'pedestrian':
+      return 'Ulica';
+    default:
+      return 'Lokalizacja';
+  }
+}
+
 export default function Search({ onSelect, onPlace, onError, onActiveChange }: SearchProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Tower[]>([]);
+  const [places, setPlaces] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,33 +82,79 @@ export default function Search({ onSelect, onPlace, onError, onActiveChange }: S
   }, []);
 
   useEffect(() => {
-    if (query.trim().length < 2) {
+    const cleanQ = query.trim();
+    if (cleanQ.length < 2) {
       setItems([]);
+      setPlaces([]);
       setLoading(false);
       return;
     }
+
     const abort = new AbortController();
     setLoading(true);
-    const timer = setTimeout(
-      () =>
-        api<TowerResult>(`/towers?q=${encodeURIComponent(query)}&limit=6`, { signal: abort.signal })
-          .then(r => {
-            setItems(r.items);
-            setLoading(false);
-          })
+
+    const timer = setTimeout(async () => {
+      try {
+        // 1. Fetch matching base stations from database
+        const towersPromise = api<TowerResult>(`/towers?q=${encodeURIComponent(cleanQ)}&limit=5`, {
+          signal: abort.signal,
+        })
+          .then(r => r.items)
           .catch(e => {
-            if (e.name !== 'AbortError') {
-              setItems([]);
-              setLoading(false);
-            }
-          }),
-      300
-    );
+            if (e.name === 'AbortError') throw e;
+            return [] as Tower[];
+          });
+
+        // 2. Fetch matching cities, towns, and streets from OpenStreetMap Nominatim
+        const placesPromise = (!parsedCell?.isCellIdQuery
+          ? fetch(
+              `https://nominatim.openstreetmap.org/search?format=json&countrycodes=pl&limit=4&addressdetails=1&q=${encodeURIComponent(
+                cleanQ
+              )}`,
+              {
+                signal: abort.signal,
+                headers: { Accept: 'application/json' },
+              }
+            )
+              .then(res => (res.ok ? res.json() : []))
+              .then((rawPlaces: Array<Record<string, unknown>>) =>
+                rawPlaces.map(p => {
+                  const rawName = String(p.name || String(p.display_name).split(',')[0] || '').trim();
+                  const rawDisplay = String(p.display_name || '').trim();
+                  return {
+                    id: String(p.place_id || `${p.lat}-${p.lon}`),
+                    name: rawName,
+                    displayName: rawDisplay,
+                    type: String(p.type || p.addresstype || 'miejsce'),
+                    lat: Number(p.lat),
+                    lng: Number(p.lon),
+                  };
+                })
+              )
+              .catch(e => {
+                if (e.name === 'AbortError') throw e;
+                return [] as PlaceSuggestion[];
+              })
+          : Promise.resolve([] as PlaceSuggestion[]));
+
+        const [fetchedTowers, fetchedPlaces] = await Promise.all([towersPromise, placesPromise]);
+        if (!abort.signal.aborted) {
+          setItems(fetchedTowers);
+          setPlaces(fetchedPlaces);
+          setLoading(false);
+        }
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') {
+          setLoading(false);
+        }
+      }
+    }, 280);
+
     return () => {
       clearTimeout(timer);
       abort.abort();
     };
-  }, [query]);
+  }, [query, parsedCell]);
 
   const dismissSearch = () => {
     setOpen(false);
@@ -86,6 +164,11 @@ export default function Search({ onSelect, onPlace, onError, onActiveChange }: S
 
   const handleSelect = (tower: Tower, sector?: SectorSelection) => {
     onSelect(tower, sector);
+    dismissSearch();
+  };
+
+  const handleSelectPlace = (place: PlaceSuggestion) => {
+    onPlace(place.lat, place.lng);
     dismissSearch();
   };
 
@@ -119,11 +202,15 @@ export default function Search({ onSelect, onPlace, onError, onActiveChange }: S
         handleSelect(items[0], sectorSelection);
         return;
       }
+      if (places.length) {
+        handleSelectPlace(places[0]);
+        return;
+      }
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&countrycodes=pl&limit=1&q=${encodeURIComponent(
           query
         )}`,
-        { signal: AbortSignal.timeout(10000) }
+        { signal: AbortSignal.timeout(8000) }
       );
       if (!response.ok) throw new Error(t.searchServiceUnavailable);
       const results = await response.json();
@@ -150,7 +237,7 @@ export default function Search({ onSelect, onPlace, onError, onActiveChange }: S
         <input
           ref={inputRef}
           aria-label={t.searchAria}
-          placeholder={isFocused ? t.searchPlaceholderFocused : t.searchPlaceholder}
+          placeholder={isFocused ? 'Wpisz miasto, ulicę, stację lub gNB/eNB...' : t.searchPlaceholder}
           value={query}
           onFocus={() => {
             setIsFocused(true);
@@ -174,6 +261,8 @@ export default function Search({ onSelect, onPlace, onError, onActiveChange }: S
             aria-label={t.clear}
             onClick={() => {
               setQuery('');
+              setItems([]);
+              setPlaces([]);
               dismissSearch();
             }}
           >
@@ -200,72 +289,100 @@ export default function Search({ onSelect, onPlace, onError, onActiveChange }: S
             </div>
           )}
 
-          <span className="search-label">
-            {loading
-              ? t.filterLoading
-              : items.length
-              ? parsedCell?.isCellIdQuery
-                ? 'Dopasowane stacje bazowe i sektory:'
-                : t.language === 'Język'
-                ? 'Stacje w bazie'
-                : 'Stations in database'
-              : parsedCell?.isCellIdQuery
-              ? 'Nie znaleziono stacji dla tego numeru eNodeB/CID'
-              : t.language === 'Język'
-              ? 'Brak pasujących stacji'
-              : 'No matching stations'}
-          </span>
+          {/* Stacje bazowe section */}
+          {items.length > 0 && (
+            <>
+              <span className="search-label">
+                {parsedCell?.isCellIdQuery ? 'Dopasowane stacje bazowe:' : 'Stacje bazowe (BTS):'}
+              </span>
+              {items.map(tower => {
+                const sectorInfo =
+                  parsedCell?.sectorNum && tower.azimuths?.length
+                    ? resolveSectorAzimuth(tower.azimuths, parsedCell.sectorNum)
+                    : null;
 
-          {items.map(tower => {
-            const sectorInfo =
-              parsedCell?.sectorNum && tower.azimuths?.length
-                ? resolveSectorAzimuth(tower.azimuths, parsedCell.sectorNum)
-                : null;
+                const sectorSelection: SectorSelection | undefined = sectorInfo
+                  ? {
+                      azimuth: sectorInfo.azimuth,
+                      sectorNum: sectorInfo.sectorNum,
+                      cellId: parsedCell?.cellId,
+                      eci: parsedCell?.eci,
+                      label: parsedCell?.displaySummary,
+                    }
+                  : undefined;
 
-            const sectorSelection: SectorSelection | undefined = sectorInfo
-              ? {
-                  azimuth: sectorInfo.azimuth,
-                  sectorNum: sectorInfo.sectorNum,
-                  cellId: parsedCell?.cellId,
-                  eci: parsedCell?.eci,
-                  label: parsedCell?.displaySummary,
-                }
-              : undefined;
+                return (
+                  <button
+                    key={tower.id}
+                    type="button"
+                    className={`search-tower-item ${sectorInfo ? 'has-sector-match' : ''}`}
+                    onClick={() => handleSelect(tower, sectorSelection)}
+                  >
+                    <Radio size={16} style={{ color: 'var(--accent, #2582eb)' }} />
+                    <span>
+                      <strong className="search-tower-title">
+                        {tower.address || t.dbNoAddress}
+                        {sectorInfo && (
+                          <span className="search-sector-pill" title={`Kierunek sektora anteny: ${sectorInfo.azimuth}°`}>
+                            <Compass size={11} /> Sektor {sectorInfo.sectorNum} ({sectorInfo.azimuth}°)
+                          </span>
+                        )}
+                      </strong>
+                      <small>
+                        {tower.operators.map(o => o.name).join(' · ')} · {tower.stationId || tower.id}
+                      </small>
+                    </span>
+                    <ArrowRight size={14} />
+                  </button>
+                );
+              })}
+            </>
+          )}
 
-            return (
-              <button
-                key={tower.id}
-                className={`search-tower-item ${sectorInfo ? 'has-sector-match' : ''}`}
-                onClick={() => handleSelect(tower, sectorSelection)}
-              >
-                <MapPin size={16} />
-                <span>
-                  <strong className="search-tower-title">
-                    {tower.address || t.dbNoAddress}
-                    {sectorInfo && (
-                      <span className="search-sector-pill" title={`Kierunek sektora anteny: ${sectorInfo.azimuth}°`}>
-                        <Compass size={11} /> Sektor {sectorInfo.sectorNum} ({sectorInfo.azimuth}°)
-                      </span>
-                    )}
-                  </strong>
-                  <small>
-                    {tower.operators.map(o => o.name).join(' · ')} · {tower.stationId || tower.id}
-                  </small>
-                </span>
-                <ArrowRight size={14} />
-              </button>
-            );
-          })}
+          {/* Miejscowości i ulice section */}
+          {places.length > 0 && (
+            <>
+              <span className="search-label" style={{ marginTop: items.length > 0 ? '6px' : '0' }}>
+                Miejscowości i ulice:
+              </span>
+              {places.map(place => (
+                <button
+                  key={place.id}
+                  type="button"
+                  className="search-place-item"
+                  onClick={() => handleSelectPlace(place)}
+                >
+                  <MapPin size={16} style={{ color: '#10b981' }} />
+                  <span>
+                    <strong className="search-tower-title">
+                      {place.name}
+                      <span className="search-place-type-pill">{formatPlaceType(place.type)}</span>
+                    </strong>
+                    <small>{place.displayName}</small>
+                  </span>
+                  <Navigation size={13} style={{ opacity: 0.7 }} />
+                </button>
+              ))}
+            </>
+          )}
 
-          <button className="place-result" disabled={busy} onClick={() => void findPlace()}>
+          {loading && items.length === 0 && places.length === 0 && (
+            <span className="search-label">{t.filterLoading}</span>
+          )}
+
+          {!loading && items.length === 0 && places.length === 0 && (
+            <span className="search-label">
+              {parsedCell?.isCellIdQuery
+                ? 'Nie znaleziono stacji dla tego numeru eNodeB/CID'
+                : 'Brak pasujących stacji i miejscowości'}
+            </span>
+          )}
+
+          <button type="button" className="place-result" disabled={busy} onClick={() => void findPlace()}>
             <SearchIcon size={16} />
-            {busy
-              ? t.language === 'Język'
-                ? 'Szukam miejsca…'
-                : 'Searching location…'
-              : t.language === 'Język'
-              ? 'Znajdź na mapie'
-              : 'Find on map'}
+            <span>
+              {busy ? 'Szukam miejsca…' : 'Szukaj lokalizacji na mapie'}
+            </span>
             <ArrowRight size={14} />
           </button>
         </div>

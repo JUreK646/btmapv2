@@ -190,6 +190,20 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
       ELSE 6
     END, t.address, t.id`;
     orderParams.push(enb, btEnb, playPattern, wildSuffix, wildBoth);
+  } else if (query.q) {
+    const rawQ = String(query.q).slice(0, 150).trim();
+    const exactPrefix = `${rawQ}%`;
+    const cityPrefix = `${rawQ},%`;
+    const streetPrefix = `%${rawQ}%`;
+    orderSql = `CASE
+      WHEN fold(t.stationId) = fold(?) THEN 1
+      WHEN fold(t.stationId) LIKE fold(?) THEN 2
+      WHEN fold(t.address) LIKE fold(?) THEN 3
+      WHEN fold(t.address) LIKE fold(?) THEN 4
+      WHEN fold(t.address) LIKE fold(?) THEN 5
+      ELSE 6
+    END, t.address, t.id`;
+    orderParams.push(rawQ, exactPrefix, cityPrefix, exactPrefix, streetPrefix);
   } else if (isMap) {
     const south = Number(query.minLat);
     const north = Number(query.maxLat);
