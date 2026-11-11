@@ -219,22 +219,6 @@ function Stations({
     <>
       {items.map(t => (
         <Fragment key={t.id}>
-          {t.isNew && (
-            <CircleMarker
-              center={[t.lat, t.lng]}
-              radius={(selected === t.id ? 17 : 13) * sizeMultiplier}
-              renderer={renderer}
-              pathOptions={{
-                color: '#10b981',
-                weight: 2.2,
-                opacity: 0.9,
-                fillColor: '#10b981',
-                fillOpacity: 0.25,
-                dashArray: '3, 4',
-              }}
-              interactive={false}
-            />
-          )}
           <CircleMarker
             center={[t.lat, t.lng]}
             radius={(selected === t.id ? 11 : t.source === 'BTMAP' ? 8 : (t.operators.length > 1 ? 7 : 6)) * sizeMultiplier}
