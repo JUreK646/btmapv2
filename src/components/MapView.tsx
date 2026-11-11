@@ -221,20 +221,12 @@ function Stations({
         <Fragment key={t.id}>
           <CircleMarker
             center={[t.lat, t.lng]}
-            radius={(selected === t.id ? 11 : t.source === 'BTMAP' ? 8 : (t.operators.length > 1 ? 7 : 6)) * sizeMultiplier}
+            radius={(selected === t.id ? 11 : (t.operators.length > 1 ? 7 : 6)) * sizeMultiplier}
             renderer={renderer}
             pathOptions={{
-              color:
-                selected === t.id && theme === 'light'
-                  ? '#086c60'
-                  : t.source === 'BTMAP'
-                  ? '#00e5ff'
-                  : theme === 'light' && operatorName(t.operators[0]?.name || '') === 'Plus'
-                  ? '#244230'
-                  : highContrast
-                  ? '#ffffff'
-                  : '#fff',
-              weight: (selected === t.id ? 4 : t.source === 'BTMAP' ? 3 : 2) + (highContrast ? 1.5 : 0),
+              stroke: Boolean(selected === t.id || highContrast),
+              color: selected === t.id ? (theme === 'light' ? '#086c60' : '#ffffff') : '#ffffff',
+              weight: selected === t.id ? 3.5 : (highContrast ? 1.5 : 0),
               fillColor: operatorColor(t.operators[0]?.name),
               fillOpacity: 1,
             }}
