@@ -110,6 +110,7 @@ function formatRelativeTime(dateStr?: string | null, isPl = true): string {
 }
 
 function formatDateGroupHeader(dateStr: string, isPl: boolean): string {
+  if (dateStr === 'unknown') return isPl ? 'Data nieznana' : 'Date unknown';
   if (/^\d{4}$/.test(dateStr)) {
     return isPl ? `Decyzje UKE – ${dateStr} r.` : `UKE Decisions – ${dateStr}`;
   }

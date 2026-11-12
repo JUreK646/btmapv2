@@ -19,6 +19,15 @@ export interface TowerHistoryDiff {
   };
 }
 
+/** `dateGroup` of timeline entries whose date is not known. The UI shows it as "date unknown". */
+export const UNKNOWN_DATE = 'unknown';
+
+const newestFirst = (a: { createdAt: string }, b: { createdAt: string }) => {
+  const ta = Date.parse(a.createdAt), tb = Date.parse(b.createdAt);
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return Number(!Number.isFinite(ta)) - Number(!Number.isFinite(tb));
+  return tb - ta;
+};
+
 export function recordTowerChange(
   db: DatabaseSync,
   data: {
@@ -268,11 +277,12 @@ function buildRealTimelineEvents(
   // 1. Real Community / User / Admin Edits (from tower_history & comments)
   for (const item of btmapTimeline) {
     if (item.id.startsWith('initial-create-')) continue;
+    // An entry without a readable date is listed under "unknown date"; it is never stamped with today's date.
     const d = new Date(item.createdAt);
-    const validDate = !isNaN(d.getTime()) ? d : new Date();
-    const dateGroup = validDate.toISOString().slice(0, 10);
-    const hh = String(validDate.getHours()).padStart(2, '0');
-    const mm = String(validDate.getMinutes()).padStart(2, '0');
+    const hasDate = !isNaN(d.getTime());
+    const dateGroup = hasDate ? d.toISOString().slice(0, 10) : UNKNOWN_DATE;
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
 
     const diffs: StationTimelineDiffItem[] = [];
     if (item.diff) {
@@ -298,8 +308,8 @@ function buildRealTimelineEvents(
     events.push({
       id: item.id,
       dateGroup,
-      time: `${hh}:${mm}`,
-      createdAt: validDate.toISOString(),
+      time: hasDate ? `${hh}:${mm}` : '',
+      createdAt: hasDate ? d.toISOString() : '',
       kind: item.changeType === 'PHOTO' ? 'photo' : item.changeType === 'COMMENT' ? 'comment' : 'location',
       title: item.title,
       subtitle: item.userNick ? `Użytkownik: ${item.userNick}` : undefined,
@@ -349,14 +359,14 @@ function buildRealTimelineEvents(
       });
     }
 
-    const decisionYear = p.decisionYear || 2026;
-    const createdAt = `${decisionYear}-01-01T12:00:00.000Z`;
+    // The decision year is read from the permit number; a permit without one is not assigned to any year.
+    const decisionYear = p.decisionYear;
 
     events.push({
       id: `uke-permit-${p.permitId}`,
-      dateGroup: `${decisionYear}`,
-      time: `UKE ${decisionYear} r.`,
-      createdAt,
+      dateGroup: decisionYear ? `${decisionYear}` : UNKNOWN_DATE,
+      time: decisionYear ? `UKE ${decisionYear} r.` : 'UKE',
+      createdAt: decisionYear ? `${decisionYear}-01-01T12:00:00.000Z` : '',
       kind: 'permit',
       title: p.kind || 'Decyzja radiowa UKE',
       subtitle: `Pozwolenie: ${p.permitId}${p.revision != null ? ` · Rewizja: nr ${p.revision}` : ''}`,
@@ -369,12 +379,12 @@ function buildRealTimelineEvents(
 
   // 3. Real SI2PEM Environmental Measurement Reports
   for (const pem of pemTimeline) {
-    const pemDate = pem.date || '2024-01-01';
+    const pemDate = pem.date && /^\d{4}-\d{2}-\d{2}/.test(pem.date) ? pem.date.slice(0, 10) : null;
     events.push({
       id: `pem-report-${pem.id || pem.number}`,
-      dateGroup: pemDate,
+      dateGroup: pemDate || UNKNOWN_DATE,
       time: 'SI2PEM',
-      createdAt: `${pemDate}T12:00:00.000Z`,
+      createdAt: pemDate ? `${pemDate}T12:00:00.000Z` : '',
       kind: 'pem',
       title: 'Urzędowy pomiar PEM (SI2PEM)',
       subtitle: `Sprawozdanie nr: ${pem.number || 'Brak numeru'}${pem.laboratory ? ` · ${pem.laboratory}` : ''}`,
@@ -383,22 +393,22 @@ function buildRealTimelineEvents(
   }
 
   // 4. Real Station Registration
-  const rawCreatedAt = String(tower.createdAt || '');
-  const regDate = rawCreatedAt ? rawCreatedAt.slice(0, 10) : '2026-10-10';
-  const regTime = rawCreatedAt && rawCreatedAt.includes('T') ? rawCreatedAt.split('T')[1].slice(0, 5) : '00:00';
+  const rawCreatedAt = Number.isFinite(Date.parse(String(tower.createdAt || ''))) ? String(tower.createdAt) : '';
+  const regDate = rawCreatedAt ? rawCreatedAt.slice(0, 10) : UNKNOWN_DATE;
+  const regTime = rawCreatedAt.includes('T') ? rawCreatedAt.split('T')[1].slice(0, 5) : '';
 
   events.push({
     id: `reg-${towerId}`,
     dateGroup: regDate,
     time: regTime,
-    createdAt: rawCreatedAt || '2026-10-10T00:00:00.000Z',
+    createdAt: rawCreatedAt,
     kind: 'created',
     title: isBtmap ? 'Zarejestrowano w społecznościowej bazie BTMap' : 'Rejestracja stacji w urzędowym wykazie UKE',
     subtitle: `Źródło: ${tower.source || 'UKE'}${tower.addedBy ? ` · ${tower.addedBy}` : ''}`
   });
 
-  // Sort chronologically descending
-  events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Sort chronologically descending; entries without a date go last
+  events.sort(newestFirst);
 
   return events;
 }
@@ -477,11 +487,11 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
         ? `Zarejestrowano stację bazową w społecznościowej bazie BTMap. Uwagi: ${tower.notes}`
         : 'Zarejestrowano stację bazową w społecznościowej bazie BTMap.',
       diff: null,
-      createdAt: String(tower.createdAt || '2026-10-10T00:00:00.000Z')
+      createdAt: String(tower.createdAt || '')
     });
   }
 
-  btmapTimeline.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  btmapTimeline.sort(newestFirst);
 
   // 2. UKE Radio History & RF Modernization
   const ukeAnalysis = parseUkeHistory(String(tower.operators || '[]'));
@@ -549,7 +559,7 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
   }
 
   const events = buildRealTimelineEvents(tower, btmapTimeline, ukeAnalysis, pemTimeline);
-  const updatedAt = events[0]?.createdAt || String(tower.createdAt || '2026-10-10T00:00:00.000Z');
+  const updatedAt = events[0]?.createdAt || String(tower.createdAt || '');
 
   return {
     towerId,
@@ -557,7 +567,7 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
     address: String(tower.address || ''),
     source,
     isBtmap,
-    createdAt: String(tower.createdAt || '2026-10-10T00:00:00.000Z'),
+    createdAt: String(tower.createdAt || ''),
     updatedAt,
     addedBy: String(tower.addedBy || ''),
     mastType: tower.mastType ? String(tower.mastType) : null,
