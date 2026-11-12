@@ -3,7 +3,7 @@ export type View = 'map' | 'database' | 'stats' | 'kmz' | 'guides' | 'admin' | '
 export interface Band { tech:string; band:string; duplex?:'FDD'|'TDD'|string; status?:string; permit?:string; entryDate?:string; sectors?:number; azimuth?:number; azimuths?:number[]; mode?:'NSA'|'SA'; pci?:number; earfcn?:number; isIot?:boolean; cellType?:string; isNew?:boolean; }
 export interface Operator { name:string; color?:string; bands:Band[]; stationIds?:string[]; ukePermitId?:string; }
 export interface PemReportSummary { count:number; partial:boolean; checkedAt:string; }
-export interface Tower { id:string; stationId?:string; address:string; province:string; lat:number; lng:number; operators:Operator[]; source:'BTMAP' | 'UKE' | string; notes?:string; height?:number; mastType?:string; createdAt?:string; pemReportsByOperator?:Record<string,PemReportSummary>; azimuths?:number[]; isNew?:boolean; }
+export interface Tower { id:string; stationId?:string; address:string; province:string; lat:number; lng:number; operators:Operator[]; source:'BTMAP' | 'UKE' | string; notes?:string; height?:number; mastType?:string; createdAt?:string; pemReportsByOperator?:Record<string,PemReportSummary>; azimuths?:number[]; azimuthsSource?:'si2pem'|'verified'|'station'|'unknown'; isNew?:boolean; }
 export interface Filters { operators:string[]; techs:string[]; bands:string[]; province:string; source?:'ALL'|'BTMAP'|'UKE'; modes5g?:('NSA'|'SA')[]; onlyNew?:boolean; }
 export interface TowerResult { items:Tower[]; total:number; limit:number; hasMore:boolean; }
 export interface Bounds { minLat:number; maxLat:number; minLng:number; maxLng:number; zoom:number; }

@@ -418,6 +418,11 @@ export default function DetailsPanel({
       return m ? 2000 + parseInt(m[1], 10) : 0;
     }) || [])
     .reduce((max, y) => Math.max(max, y), 0);
+  const azimuthSourceLabel = tower.azimuthsSource === 'si2pem'
+    ? (isPl ? 'z raportu SI2PEM' : 'from SI2PEM report')
+    : tower.azimuthsSource === 'verified'
+    ? (isPl ? 'zweryfikowane w terenie' : 'verified on site')
+    : (isPl ? 'z danych stacji' : 'from station record');
   const newPermitsCount = tower.operators
     .flatMap(op => op.bands || [])
     .filter(b => b.isNew).length;
@@ -552,7 +557,7 @@ export default function DetailsPanel({
             <span key={t}>{technologyNames[t] || t}</span>
           ))}
           {tower.azimuths && tower.azimuths.length > 0 && (
-            <div className="station-azimuths-group" title="Kierunki sektorów anten nadawczych (kliknij, aby podświetlić na mapie)">
+            <div className="station-azimuths-group" title={`${isPl ? 'Kierunki sektorów anten nadawczych' : 'Antenna sector directions'} · ${azimuthSourceLabel} (${isPl ? 'kliknij, aby podświetlić na mapie' : 'click to highlight on the map'})`}>
               <Compass size={11} aria-hidden="true" />
               {tower.azimuths.map((a, idx) => (
                 <button
@@ -565,6 +570,13 @@ export default function DetailsPanel({
                   S{idx + 1}: {a}°
                 </button>
               ))}
+              <small style={{ opacity: 0.75, marginLeft: '4px' }}>{azimuthSourceLabel}</small>
+            </div>
+          )}
+          {tower.azimuthsSource === 'unknown' && (
+            <div className="station-azimuths-group" title={isPl ? 'Azymuty pokazujemy tylko wtedy, gdy pochodzą z raportu SI2PEM, wykazu lub zgłoszenia terenowego. Nie są szacowane.' : 'Azimuths are shown only when they come from an SI2PEM report, the registry or a field submission. They are never estimated.'}>
+              <Compass size={11} aria-hidden="true" />
+              <small style={{ opacity: 0.75 }}>{isPl ? 'Azymuty: brak danych' : 'Azimuths: no data'}</small>
             </div>
           )}
         </div>
