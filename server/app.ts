@@ -375,6 +375,76 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
   });
 
   app.get('/api/towers/:id/photos', (req, res) => res.json(db.prepare('SELECT * FROM photos WHERE towerId=? ORDER BY createdAt DESC').all(String(req.params.id))));
+  type StationData = {
+    operator: string; stationId: string; address: string; province: string; lat: number; lng: number;
+    mastType: string; owner: string; height: number | null; notes: string; cells: unknown; sourceTowerId: string | null;
+  };
+  // Publishes a reviewed station as a BTMap record. The UKE permit row it was based on is never modified.
+  const publishStation = (clean: StationData, userNick: string, titles: { updated: string; created: string }) => {
+    if (!clean.operator || !Number.isFinite(clean.lat) || !Number.isFinite(clean.lng)) {
+      throw new Error('Zgłoszenie nie zawiera operatora lub poprawnych współrzędnych stacji.');
+    }
+    const newId = clean.sourceTowerId ? ('BTMAP_' + clean.sourceTowerId.replace(/^UKE_/, '')) : ('BTMAP_' + randomUUID().slice(0, 12));
+    const ops = [{
+      name: clean.operator,
+      stationIds: clean.stationId ? [clean.stationId] : [],
+      bands: Array.isArray(clean.cells) ? clean.cells.map((c: any) => ({
+        tech: c.tech,
+        band: c.band,
+        pci: c.pci,
+        earfcn: c.earfcn,
+        azimuth: c.azimuth,
+        mode: c.mode || (c.tech === '5G' ? 'NSA' : undefined),
+        isIot: Boolean(c.isIot),
+        cellType: c.cellType || 'macro'
+      })) : []
+    }];
+    db.prepare(`
+      INSERT INTO towers (
+        id, stationId, address, province, lat, lng, operators,
+        mastType, owner, height, notes, source, addedBy, status, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'BTMAP', ?, 'APPROVED', ?)
+      ON CONFLICT(id) DO UPDATE SET
+        stationId = excluded.stationId,
+        address = excluded.address,
+        province = excluded.province,
+        lat = excluded.lat,
+        lng = excluded.lng,
+        operators = excluded.operators,
+        mastType = excluded.mastType,
+        owner = excluded.owner,
+        height = excluded.height,
+        notes = excluded.notes,
+        source = 'BTMAP'
+    `).run(
+      newId,
+      clean.stationId || null,
+      clean.address || '',
+      clean.province || '',
+      clean.lat,
+      clean.lng,
+      JSON.stringify(ops),
+      clean.mastType || null,
+      clean.owner || null,
+      clean.height || null,
+      clean.notes || null,
+      userNick,
+      new Date().toISOString()
+    );
+    recordTowerChange(db, {
+      towerId: newId,
+      userNick,
+      changeType: clean.sourceTowerId ? 'UPDATED' : 'CREATED',
+      title: clean.sourceTowerId ? titles.updated : titles.created,
+      description: clean.notes || 'Zaktualizowano dane stacji w bazie BTMap.',
+      diff: {
+        mastType: { old: null, new: clean.mastType || null },
+        height: { old: null, new: clean.height || null },
+        owner: { old: null, new: clean.owner || null }
+      }
+    });
+    return newId;
+  };
   app.post('/api/submit',requireUser,(req,res)=>{
     const type=req.body.type, data=req.body.data || {};
     if(type==='NEW_STATION'){
@@ -417,66 +487,11 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
       };
       const id=randomUUID();
       if (res.locals.user.role === 'ADMIN') {
-        const newId = clean.sourceTowerId ? ('BTMAP_' + clean.sourceTowerId.replace(/^UKE_/, '')) : ('BTMAP_' + randomUUID().slice(0, 12));
-        const ops = [{
-          name: clean.operator,
-          stationIds: clean.stationId ? [clean.stationId] : [],
-          bands: Array.isArray(clean.cells) ? clean.cells.map((c: any) => ({
-            tech: c.tech,
-            band: c.band,
-            pci: c.pci,
-            earfcn: c.earfcn,
-            azimuth: c.azimuth,
-            mode: c.mode || (c.tech === '5G' ? 'NSA' : undefined),
-            isIot: Boolean(c.isIot),
-            cellType: c.cellType || 'macro'
-          })) : []
-        }];
-        db.prepare(`
-          INSERT INTO towers (
-            id, stationId, address, province, lat, lng, operators,
-            mastType, owner, height, notes, source, addedBy, status, createdAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'BTMAP', ?, 'APPROVED', ?)
-          ON CONFLICT(id) DO UPDATE SET
-            stationId = excluded.stationId,
-            address = excluded.address,
-            province = excluded.province,
-            lat = excluded.lat,
-            lng = excluded.lng,
-            operators = excluded.operators,
-            mastType = excluded.mastType,
-            owner = excluded.owner,
-            height = excluded.height,
-            notes = excluded.notes,
-            source = 'BTMAP'
-        `).run(
-          newId,
-          clean.stationId || null,
-          clean.address || '',
-          clean.province || '',
-          clean.lat,
-          clean.lng,
-          JSON.stringify(ops),
-          clean.mastType || null,
-          clean.owner || null,
-          clean.height || null,
-          clean.notes || null,
-          res.locals.user.nick || 'BTMAP',
-          new Date().toISOString()
-        );
-        db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId,status) VALUES(?,?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id,'APPROVED');
-        recordTowerChange(db, {
-          towerId: newId,
-          userNick: res.locals.user.nick || 'BTMAP',
-          changeType: clean.sourceTowerId ? 'UPDATED' : 'CREATED',
-          title: clean.sourceTowerId ? 'Weryfikacja parametrów stacji w BTMap' : 'Utworzenie stacji w bazie BTMap',
-          description: clean.notes || 'Zaktualizowano dane stacji w bazie BTMap.',
-          diff: {
-            mastType: { old: null, new: clean.mastType || null },
-            height: { old: null, new: clean.height || null },
-            owner: { old: null, new: clean.owner || null }
-          }
+        const newId = publishStation(clean, res.locals.user.nick || 'BTMAP', {
+          updated: 'Weryfikacja parametrów stacji w BTMap',
+          created: 'Utworzenie stacji w bazie BTMap',
         });
+        db.prepare('INSERT INTO queue(id,type,data,userNick,createdAt,userId,status) VALUES(?,?,?,?,?,?,?)').run(id,'NEW_STATION',JSON.stringify(clean),res.locals.user.nick,new Date().toISOString(),res.locals.user.id,'APPROVED');
         log(res.locals.user.nick,'NOWA_STACJA_AUTO_APPROVE',id);
         cachedStats=null; invalidateStatsCache();
         return res.status(201).json({id,status:'APPROVED',towerId:newId});
@@ -506,32 +521,36 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     if(!['APPROVE','REJECT'].includes(req.body.action))return res.status(400).json({error:'Nieprawidłowa decyzja.'});
     db.exec('BEGIN');
     try {
-      // Reviewing a report never changes UKE permit data or creates community stations.
+      // Reviewing a REPORT never changes station data. Approving a NEW_STATION publishes it as a BTMap record.
+      let towerId: string | undefined;
       if(req.body.action==='APPROVE'){
         if(item.type==='TOWER') throw new Error('Starsze zgłoszenie nie jest już obsługiwane.');
         if(item.type==='NEW_STATION'){
           const stData=JSON.parse(String(item.data));
-          if(stData.sourceTowerId){
-            db.prepare('UPDATE towers SET mastType=COALESCE(?, mastType), owner=COALESCE(?, owner), notes=COALESCE(?, notes), source="BTMAP" WHERE id=?').run(stData.mastType||null, stData.owner||null, stData.notes||null, stData.sourceTowerId);
-            recordTowerChange(db, {
-              towerId: stData.sourceTowerId,
-              userNick: String(item.userNick || 'Moderator'),
-              changeType: 'UPDATED',
-              title: 'Zatwierdzenie aktualizacji stacji przez moderatora',
-              description: stData.notes || 'Zaktualizowano parametry stacji w bazie BTMap.',
-              diff: {
-                mastType: { old: null, new: stData.mastType || null },
-                owner: { old: null, new: stData.owner || null }
-              }
-            });
-          }
+          towerId=publishStation({
+            operator:text(stData.operator,50),
+            stationId:text(stData.stationId,50),
+            address:text(stData.address,300),
+            province:text(stData.province,50),
+            lat:Number(stData.lat),
+            lng:Number(stData.lng),
+            mastType:text(stData.mastType,100),
+            owner:text(stData.owner,100),
+            height:Number(stData.height)||null,
+            notes:text(stData.notes,2000),
+            cells:stData.cells,
+            sourceTowerId:text(stData.sourceTowerId,200)||null,
+          }, String(item.userNick || 'Moderator'), {
+            updated: 'Zatwierdzenie aktualizacji stacji przez moderatora',
+            created: 'Zatwierdzenie nowej stacji przez moderatora',
+          });
           if(item.userId){
             db.prepare('UPDATE users SET points=points+10 WHERE id=?').run(item.userId);
           }
         }
       }
       db.prepare('UPDATE queue SET status=? WHERE id=?').run(req.body.action==='APPROVE'?'APPROVED':'REJECTED',item.id);
-      log(res.locals.user.nick,req.body.action,String(item.id));db.exec('COMMIT');cachedStats=null;invalidateStatsCache();res.json({ok:true});
+      log(res.locals.user.nick,req.body.action,String(item.id));db.exec('COMMIT');cachedStats=null;invalidateStatsCache();res.json(towerId?{ok:true,towerId}:{ok:true});
     } catch(e){db.exec('ROLLBACK');res.status(400).json({error:(e as Error).message});}
   });
   app.use('/api',(_req,res)=>res.status(404).json({error:'Nie znaleziono tej funkcji API.'}));

@@ -116,3 +116,43 @@ test('real session, validation, comments and admin moderation work end to end',a
     const login=await request('/auth/login',{email:'test@example.com',password:'long-password-123'});assert.equal(login.status,200);
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));db.close();}
 });
+
+test('approving a submitted station publishes it as a BTMap record and leaves the UKE row untouched',async()=>{
+  const db=fixture(),server=createApp(db).listen(0,'127.0.0.1');await once(server,'listening');
+  const address=server.address() as {port:number},base=`http://127.0.0.1:${address.port}/api`;
+  let cookie='';
+  const request=(path:string,body?:unknown)=>fetch(base+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',cookie},body:body?JSON.stringify(body):undefined});
+  const station={operator:'Play',stationId:'WAW1234',address:'Warszawa, Testowa 1',province:'Mazowieckie',lat:52.2,lng:21.0,mastType:'Wieża kratowa',owner:'Play',height:40,notes:'Nowa stacja zgłoszona z terenu.',cells:[{tech:'LTE',band:'b3',pci:100,earfcn:1374,cellId:1,azimuth:120}]};
+  try{
+    const registration=await request('/auth/register',{email:'mod@example.com',nick:'Zglaszajacy',password:'long-password-123'});
+    assert.equal(registration.status,201);const user=await registration.json() as {id:string};cookie=registration.headers.get('set-cookie')!.split(';')[0];
+    const created=await request('/submit',{type:'NEW_STATION',data:station});assert.equal(created.status,201);
+    const createdBody=await created.json();assert.equal(createdBody.status,'PENDING');
+    const updated=await request('/submit',{type:'NEW_STATION',data:{...station,stationId:'LOD0001',address:'Łódź, Piękna 1',lat:51.75,lng:19.46,sourceTowerId:'rare'}});assert.equal(updated.status,201);
+    const rejected=await request('/submit',{type:'NEW_STATION',data:{...station,stationId:'WAW9999'}});assert.equal(rejected.status,201);
+    const count=()=>Number(db.prepare('SELECT COUNT(*) AS count FROM towers').get()!.count);
+    assert.equal(count(),123);
+    const ukeBefore=JSON.stringify(db.prepare("SELECT * FROM towers WHERE id='rare'").get());
+    db.prepare("UPDATE users SET role='ADMIN' WHERE id=?").run(user.id);
+
+    const approveNew=await request('/admin/moderate',{id:createdBody.id,action:'APPROVE'});assert.equal(approveNew.status,200);
+    const newId=(await approveNew.json()).towerId as string;assert.match(newId,/^BTMAP_/);
+    const row=db.prepare('SELECT * FROM towers WHERE id=?').get(newId)!;
+    assert.equal(row.source,'BTMAP');assert.equal(row.status,'APPROVED');assert.equal(row.stationId,'WAW1234');assert.equal(row.addedBy,'Zglaszajacy');
+    const operators=JSON.parse(String(row.operators));
+    assert.equal(operators[0].name,'Play');assert.equal(operators[0].bands.length,1);assert.equal(operators[0].bands[0].earfcn,1374);
+    assert.equal((await request(`/towers/${newId}`)).status,200);
+    assert.ok(getTowers(db,{source:'BTMAP'}).items.some(t=>t.id===newId));
+
+    const approveUpdate=await request('/admin/moderate',{id:(await updated.json()).id,action:'APPROVE'});assert.equal(approveUpdate.status,200);
+    assert.equal((await approveUpdate.json()).towerId,'BTMAP_rare');
+    assert.equal(db.prepare("SELECT source FROM towers WHERE id='BTMAP_rare'").get()!.source,'BTMAP');
+    assert.equal(JSON.stringify(db.prepare("SELECT * FROM towers WHERE id='rare'").get()),ukeBefore);
+
+    assert.equal((await request('/admin/moderate',{id:(await rejected.json()).id,action:'REJECT'})).status,200);
+    assert.equal(count(),125);
+    assert.equal(db.prepare('SELECT points FROM users WHERE id=?').get(user.id)!.points,20);
+    assert.equal(Number(db.prepare("SELECT COUNT(*) AS count FROM tower_history WHERE towerId IN (?, 'BTMAP_rare')").get(newId)!.count),2);
+    assert.equal((await (await request('/admin/queue')).json()).length,0);
+  }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));db.close();}
+});
