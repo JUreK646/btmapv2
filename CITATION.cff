@@ -9,12 +9,17 @@ date-released: "2026-11-08"
 license: "MIT"
 url: "https://github.com/JUreK646/btmapv2"
 repository-code: "https://github.com/JUreK646/btmapv2"
-abstract: "A nationwide open-source telecommunications intelligence platform and data pipeline aggregating official Polish Office of Electronic Communications (UKE) radio permits, 5G/LTE cellular deployments, and environmental electromagnetic field (SI2PEM) measurements."
+abstract: "A nationwide open-source telecommunications intelligence platform and data pipeline aggregating official Polish Office of Electronic Communications (UKE) radio permits, 5G Standalone and C-band deployments, microwave backhaul radiolines, and environmental electromagnetic field (SI2PEM) laboratory measurements."
 keywords:
   - telecommunications
   - base-transceiver-station
   - 5g-nr
+  - 5g-standalone
+  - c-band
   - lte
   - rf-engineering
   - open-data
   - electromagnetic-fields
+  - microwave-radiolines
+  - civic-tech
+  - open-science

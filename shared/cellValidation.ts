@@ -335,6 +335,10 @@ export function findBandAllocation(tech: string, bandStr: string): BandAllocatio
   // 4. Match pure frequency if only one band of that tech has that freq
   const num = raw.replace(/\D/g, '');
   if (num) {
+    if (normalizedTech === '5G' && (num === '3600' || num === '3700' || num === '3800')) {
+      const n78 = POLISH_BAND_PLAN.find(b => b.tech === '5G' && b.bandCode === 'n78');
+      if (n78) return n78;
+    }
     const candidates = POLISH_BAND_PLAN.filter(b => b.tech === normalizedTech && String(b.freqMhz) === num);
     if (candidates.length === 1) return candidates[0];
     if (candidates.length > 1) {

@@ -313,6 +313,19 @@ export const i18n = {
     guidesQ4: 'Co oznaczają pasma?',
     guidesA4: 'Wartość w MHz identyfikuje częstotliwość przypisaną do danej technologii. Parametry urządzenia, warunki radiowe i obciążenie sieci wpływają na faktyczne działanie połączenia. Mapa nie wylicza prędkości ani zasięgu na podstawie samego pozwolenia.',
 
+    // Open Source & Civic RF Data
+    guidesCivicTitle: 'Open Source & Obywatelskie Dane Radiowe (Civic RF)',
+    guidesCivicSubtitle: 'Projekt tworzony na licencji open-source w służbie dobra publicznego i przejrzystości naukowej.',
+    guidesLicenseBadge: 'Licencja MIT',
+    guidesCrowdsourcingTitle: 'Społecznościowy crowdsourcing',
+    guidesCrowdsourcingDesc: 'Weryfikacja stacji bazowych, parametrów anten, azymutów sektorów i pasm 5G C-Band przez społeczność pasjonatów i inżynierów RF.',
+    guidesSi2pemTitle: 'Pomiary PEM z SI2PEM',
+    guidesSi2pemDesc: 'Automatyczna synchronizacja z państwowym systemem SI2PEM (Instytut Łączności) – akredytowane sprawozdania laboratoryjne z pomiarów PEM.',
+    guidesUkeTitle: 'Wykazy pozwoleń UKE',
+    guidesUkeDesc: 'Bieżąca integracja z oficjalnymi rejestrami UKE dla stacji bazowych (GSM/LTE/5G) oraz radiolinii mikrofalowych.',
+    guidesGithubBtn: 'Repozytorium GitHub',
+    guidesIssuesBtn: 'Zgłoś błąd / Issue Tracker',
+
     // Admin View
     adminTitle: 'Moderacja zgłoszeń',
     adminSubtitle: (nick: string) => `Zalogowano jako ${nick}. Sprawdź treść przed zatwierdzeniem.`,
@@ -732,6 +745,19 @@ export const i18n = {
     guidesA3: 'The primary source is the nationwide BTMap base station database curated by the community and team, integrated with the state SI2PEM radiation registry and the official UKE radio permit directory.',
     guidesQ4: 'What do the bands mean?',
     guidesA4: 'The MHz value identifies the radio frequency assigned to each technology. Device hardware, RF propagation, and network load determine actual user performance. The map does not estimate speed or range solely from permits.',
+
+    // Open Source & Civic RF Data
+    guidesCivicTitle: 'Open Source & Civic RF Data',
+    guidesCivicSubtitle: 'An open-source initiative dedicated to public civic good and scientific transparency.',
+    guidesLicenseBadge: 'MIT License',
+    guidesCrowdsourcingTitle: 'Community Crowdsourcing',
+    guidesCrowdsourcingDesc: 'Crowdsourced verification of base stations, antenna parameters, sector azimuths, and 5G C-Band allocations by RF enthusiasts and engineers.',
+    guidesSi2pemTitle: 'SI2PEM EMF Lab Measurements',
+    guidesSi2pemDesc: 'Automated synchronization with Poland\'s state SI2PEM system (National Institute of Telecommunications) — accredited laboratory EMF radiation reports.',
+    guidesUkeTitle: 'UKE Regulatory Permits',
+    guidesUkeDesc: 'Continuous integration with UKE telecom registry for cellular base stations (GSM/LTE/5G) and microwave radiolines.',
+    guidesGithubBtn: 'GitHub Repository',
+    guidesIssuesBtn: 'Report Issue / Issue Tracker',
 
     // Admin View
     adminTitle: 'Submissions Moderation',

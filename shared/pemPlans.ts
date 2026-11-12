@@ -1,5 +1,5 @@
-export const SI2PEM_REFRESH_MS=2*60*60*1000;
-export const PEM_RETENTION_DAYS=2;
+export const SI2PEM_REFRESH_MS=2*24*60*60*1000;
+export const PEM_RETENTION_DAYS=7;
 export interface PemPlan {
   id:string;stationId:string;operator:string;operatorName:string;lab:string;accreditation:string;
   address:string;city:string;province:string;lat:number;lng:number;

@@ -62,8 +62,8 @@ export function parseCellSearch(input: string | null | undefined): ParsedCellId 
   const tacMatch = raw.match(/(?:\b|_)(?:tac|lac)(?:\b|_|\s*[:=]?\s*)(\d{1,6})/i);
   const rncMatch = raw.match(/(?:\b|_)(?:rnc)(?:\b|_|\s*[:=]?\s*)(\d{1,5})/i);
 
-  // Common pattern like "24102-1" or "24102/1" or "24102:1" or "26002-24102-1"
-  const dashPattern = !gnbCidMatch ? raw.match(/^(?:260\d{2}[-\s])?(\d{3,6})[-\/:_](\d{1,3})$/) : null;
+  // Common pattern like "24102-1" or "24102/1" or "24102:1" or "26002-24102-1" or "56680:35 5G"
+  const dashPattern = !gnbCidMatch ? raw.match(/^(?:(?:5g|nr|sa)\s+)?(?:260\d{2}[-\s])?(\d{3,6})[-\/:_](\d{1,3})(?:\s+(?:5g|nr|sa))?$/i) : null;
 
   // Standalone large 7-8 digit number -> probable ECI or 5G CI
   const plainEciMatch = !enbMatch && !gnbMatch && !gnbCidMatch && !eciMatch && raw.match(/^(\d{7,9})$/);

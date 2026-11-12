@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {ArrowDownToLine,ArrowLeft,ArrowRight,Check,Database,Info,Radio,Search,ShieldCheck,X} from 'lucide-react';
+import {Activity,ArrowDownToLine,ArrowLeft,ArrowRight,Check,Database,ExternalLink,Github,Info,Radio,Scale,Search,ShieldCheck,X} from 'lucide-react';
 import type {Submission,Tower,TowerResult,User} from '../types';
 import {api,formatDate,formatNumber,post} from '../lib/api';
 import {operatorColor,towerTechs} from '../lib/constants';
@@ -112,6 +112,41 @@ export function GuidesView(){
       <div>
         <h1>{t.guidesTitle}</h1>
         <p>{t.guidesSubtitle}</p>
+      </div>
+    </div>
+    <div className="civic-card">
+      <div className="civic-header">
+        <div className="civic-title-group">
+          <ShieldCheck size={26} className="guide-symbol" />
+          <h2>{t.guidesCivicTitle}</h2>
+        </div>
+        <span className="civic-license-pill"><Scale size={13}/> {t.guidesLicenseBadge}</span>
+      </div>
+      <p className="civic-subtitle">{t.guidesCivicSubtitle}</p>
+      <div className="civic-features-grid">
+        <div className="civic-feature-item">
+          <h3><Radio size={16}/> {t.guidesCrowdsourcingTitle}</h3>
+          <p>{t.guidesCrowdsourcingDesc}</p>
+        </div>
+        <div className="civic-feature-item">
+          <h3><Activity size={16}/> {t.guidesSi2pemTitle}</h3>
+          <p>{t.guidesSi2pemDesc}</p>
+        </div>
+        <div className="civic-feature-item">
+          <h3><Database size={16}/> {t.guidesUkeTitle}</h3>
+          <p>{t.guidesUkeDesc}</p>
+        </div>
+      </div>
+      <div className="civic-actions">
+        <a href="https://github.com/JUreK646/btmapv2" target="_blank" rel="noopener noreferrer" className="civic-button civic-button-primary">
+          <Github size={16}/>
+          <span>{t.guidesGithubBtn}</span>
+          <ExternalLink size={13}/>
+        </a>
+        <a href="https://github.com/JUreK646/btmapv2/issues" target="_blank" rel="noopener noreferrer" className="civic-button civic-button-secondary">
+          <span>{t.guidesIssuesBtn}</span>
+          <ExternalLink size={13}/>
+        </a>
       </div>
     </div>
     <article>
