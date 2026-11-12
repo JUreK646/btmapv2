@@ -27,6 +27,8 @@ type User = { id: string; email: string; nick: string; role: string; points: num
 const publicUser = (user: Record<string, unknown>) => ({ id:user.id, email:user.email, nick:user.nick, role:user.role, points:user.points, level:user.level });
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0,max) : '';
+/** Optional numeric cell field: a finite number, or undefined so it is left out of the stored record. */
+const cellNumber = (value: unknown) => value === null || value === undefined || String(value).trim() === '' || !Number.isFinite(Number(value)) ? undefined : Number(value);
 
 export function createApp(
   db: DatabaseSync,
@@ -70,15 +72,26 @@ export function createApp(
     db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(digest(token),id,Date.now()+7*86400000);
     res.cookie('btmap_session',token,{httpOnly:true,sameSite:'strict',secure:process.env.NODE_ENV==='production',maxAge:7*86400000,path:'/'});
   };
-  const attempts = new Map<string,{count:number;until:number}>();
-  const rateLimit = (req:Request,res:Response,next:NextFunction) => {
-    const key=req.ip || 'local'; const now=Date.now();
-    if(attempts.size>1000) for(const [ip,entry] of attempts) if(entry.until<now) attempts.delete(ip);
-    let entry=attempts.get(key); if(!entry || entry.until<now) entry={count:0,until:now+600000};
-    entry.count++; attempts.set(key,entry);
-    if(entry.count>30) return res.status(429).json({error:'Za dużo prób. Spróbuj ponownie za 10 minut.'});
-    next();
+  // Fixed-window limiter. Each use has its own counters; the key is the client IP unless a route keys by account.
+  const limiter = (max:number,windowMs:number,keyOf:(req:Request,res:Response)=>string=req=>req.ip || 'local') => {
+    const attempts = new Map<string,{count:number;until:number}>();
+    return (req:Request,res:Response,next:NextFunction) => {
+      const key=keyOf(req,res); const now=Date.now();
+      if(attempts.size>1000) for(const [id,entry] of attempts) if(entry.until<now) attempts.delete(id);
+      let entry=attempts.get(key); if(!entry || entry.until<now) entry={count:0,until:now+windowMs};
+      entry.count++; attempts.set(key,entry);
+      if(entry.count>max) return res.status(429).json({error:`Za dużo prób. Spróbuj ponownie za ${Math.max(1,Math.ceil((entry.until-now)/60000))} min.`});
+      next();
+    };
   };
+  const byAccount = (req:Request,res:Response) => String(res.locals.user?.id || req.ip || 'local');
+  const rateLimit = limiter(30,600000);
+  // Comments award points and store photos; submissions fill the moderation queue.
+  const commentLimit = limiter(20,600000,byAccount);
+  const submitLimit = limiter(30,3600000,byAccount);
+  // These call external elevation services for every request.
+  const terrainLimit = limiter(120,600000);
+  const areaLimit = limiter(30,600000);
   app.get('/api/auth/me',(req,res)=>{ const user=currentUser(req); res.json(user?publicUser(user):null); });
   app.post('/api/auth/register',rateLimit,async(req,res)=>{
     const email=text(req.body.email,254).toLowerCase(), nick=text(req.body.nick,40), password=text(req.body.password,128);
@@ -149,7 +162,7 @@ export function createApp(
   });
   app.get('/api/towers',(req,res)=>{try{res.json(getTowers(db,req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
   app.get('/api/pem-plans',(req,res)=>{try{res.json(pemPlans.query(req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
-  app.get('/api/terrain-profile', async (req, res) => {
+  app.get('/api/terrain-profile', terrainLimit, async (req, res) => {
     try {
       const lat1 = Number(req.query.lat1);
       const lng1 = Number(req.query.lng1);
@@ -186,7 +199,7 @@ export function createApp(
       res.status(500).json({ error: (e as Error).message || 'Błąd wyliczania profilu terenu.' });
     }
   });
-  app.get('/api/area-evaluation', async (req, res) => {
+  app.get('/api/area-evaluation', areaLimit, async (req, res) => {
     try {
       const lat = Number(req.query.lat ?? req.query.centerLat);
       const lng = Number(req.query.lng ?? req.query.centerLng);
@@ -206,7 +219,7 @@ export function createApp(
       res.status(400).json({ error: (e as Error).message || 'Błąd analizy terenu i oceny operatorów.' });
     }
   });
-  app.post('/api/area-evaluation', async (req, res) => {
+  app.post('/api/area-evaluation', areaLimit, async (req, res) => {
     try {
       const result = await evaluateAreaCoverage(db, req.body);
       res.json(result);
@@ -299,7 +312,7 @@ export function createApp(
     res.json(comments);
   });
 
-  app.post('/api/towers/:id/comments', requireUser, async (req, res) => {
+  app.post('/api/towers/:id/comments', requireUser, commentLimit, async (req, res) => {
     try {
       const towerId = String(req.params.id);
       const tower = db.prepare('SELECT id, source FROM towers WHERE id=?').get(towerId) as { id: string; source: string } | undefined;
@@ -415,7 +428,15 @@ export function createApp(
         azimuth: c.azimuth,
         mode: c.mode || (c.tech === '5G' ? 'NSA' : undefined),
         isIot: Boolean(c.isIot),
-        cellType: c.cellType || 'macro'
+        cellType: c.cellType || 'macro',
+        // Cell identity reported from the field. Without these a published station cannot be found by eNB/gNB or cell id.
+        nodeId: cellNumber(c.nodeId),
+        cellId: cellNumber(c.cellId),
+        lac: cellNumber(c.lac),
+        tac: cellNumber(c.tac),
+        rnc: cellNumber(c.rnc),
+        bsic: cellNumber(c.bsic),
+        bandwidth: cellNumber(c.bandwidth),
       })) : []
     }];
     db.prepare(`
@@ -464,7 +485,7 @@ export function createApp(
     });
     return newId;
   };
-  app.post('/api/submit',requireUser,(req,res)=>{
+  app.post('/api/submit',requireUser,submitLimit,(req,res)=>{
     const type=req.body.type, data=req.body.data || {};
     if(type==='NEW_STATION'){
       const validation=validateStationSubmission({
