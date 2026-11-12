@@ -28,8 +28,17 @@ const publicUser = (user: Record<string, unknown>) => ({ id:user.id, email:user.
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0,max) : '';
 
-export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pemSync>) {
+export function createApp(
+  db: DatabaseSync,
+  si2pem?: ReturnType<typeof createSi2pemSync>,
+  { trustProxy = process.env.TRUST_PROXY }: { trustProxy?: string } = {},
+) {
   const app = express();
+  // Behind a reverse proxy req.ip is the proxy itself, so every visitor would share one rate-limit bucket.
+  // TRUST_PROXY is the number of proxies in front of the API (1 for the bundled nginx) or an Express
+  // "trust proxy" value such as "loopback". Leave it unset when the API is reachable directly:
+  // otherwise clients could forge X-Forwarded-For and dodge the limit.
+  if (trustProxy) app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy === 'true' ? true : trustProxy);
   const getPem=createPemService();
   const getPemReports=si2pem?.reports||createPemReportsService(fetch,db);
   const pemPlans=si2pem?.plans||createPemPlansService(db);
