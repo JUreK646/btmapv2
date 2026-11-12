@@ -12,7 +12,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import type { AreaEvaluationResult, OperatorEvaluation } from '../../server/areaEvaluation';
+import type { AreaEvaluationResult, OperatorEvaluation } from '../types';
 import type { Tower } from '../types';
 import { useI18n } from '../lib/i18n';
 

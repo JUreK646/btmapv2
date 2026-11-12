@@ -59,8 +59,8 @@ test('SI2PEM counts stay attached to their operator and unknown remains distinct
     db.prepare("INSERT INTO towers(id,address,lat,lng,source,status) VALUES('known','A',52,21,'UKE','APPROVED'),('unknown','B',52,21,'UKE','APPROVED')").run();
     db.prepare('INSERT INTO pem_report_operator_counts VALUES(?,?,?,?,?)').run('known','Plus',2,0,'2026-10-19T12:00:00Z');
     const result=getTowers(db,{});
-    assert.equal(result.items[0].pemReportsByOperator?.Plus.count,2);assert.equal('pemReportsByOperator' in result.items[1],false);
-    assert.equal(withPemCounts(db,[{id:'known'}])[0].pemReportsByOperator?.Plus.count,2);
+    assert.equal((result.items[0] as any).pemReportsByOperator?.Plus.count,2);assert.equal('pemReportsByOperator' in result.items[1],false);
+    assert.equal((withPemCounts(db,[{id:'known'}]) as any)[0].pemReportsByOperator?.Plus.count,2);
   }finally{db.close();}
 });
 

@@ -11,64 +11,8 @@ export interface AreaEvaluationRequest {
   targetName?: string; // Optional building, parcel or address label
 }
 
-export interface ServingStationInfo {
-  id: string;
-  stationId: string;
-  address: string;
-  operator: string;
-  isNetworks?: boolean;
-  networksPartner?: string;
-  distanceKm: number;
-  antennaHeightM: number;
-  mastType?: string;
-  bestSectorAzimuth: number;
-  bearingDeg: number;
-  sectorDeviationDeg: number;
-  isMainLobe: boolean;
-  isBacklobe: boolean;
-  bands: string[];
-  hasCband5G: boolean;
-  hasLowBand: boolean;
-  hasMidBand: boolean;
-  hasSi2pem: boolean;
-  pemReportDate?: string;
-  pemReportNumber?: string;
-  isLosClear: boolean;
-  obstructionM: number;
-  pathLossDb: number;
-}
-
-export interface OperatorEvaluation {
-  operator: 'Orange' | 'Play' | 'Plus' | 'T-Mobile';
-  isNetworks?: boolean;
-  score: number; // 0 - 100
-  rank: number; // 1, 2, 3, 4
-  grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
-  isWinner: boolean;
-  scoreBreakdown: {
-    terrainLos: number;      // max 30: LiDAR LOS clearance, path loss, distance
-    spectrumBands: number;   // max 30: low bands (penetration) + mid bands (CA) + 5G C-Band n78
-    sectorAlignment: number; // max 20: physical sector angle deviation from target
-    infrastructure: number;  // max 20: antenna height, SI2PEM verification, station density
-  };
-  servingStation: ServingStationInfo | null;
-  si2pemStationsCount: number;
-  unverifiedStationsCount: number;
-  pros: string[];
-  cons: string[];
-  verdict: string;
-}
-
-export interface AreaEvaluationResult {
-  center: [number, number];
-  radiusM: number;
-  areaKm2: number;
-  targetName?: string;
-  evaluatedAt: string;
-  bestOperator: 'Orange' | 'Play' | 'Plus' | 'T-Mobile';
-  operators: OperatorEvaluation[];
-  summaryRecommendation: string;
-}
+import type { ServingStationInfo, OperatorEvaluation, AreaEvaluationResult } from '../src/types.ts';
+export type { ServingStationInfo, OperatorEvaluation, AreaEvaluationResult };
 
 const MAJOR_OPERATORS = ['Orange', 'Play', 'Plus', 'T-Mobile'] as const;
 type MajorOperator = typeof MAJOR_OPERATORS[number];

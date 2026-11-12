@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '15 5 * * 1'
   push:
-    branches: [ "develop", "main" ]
+    branches: [ "main" ]
 
 permissions: read-all
 
@@ -29,7 +29,7 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish_results: true
+          publish_results: ${{ github.ref == 'refs/heads/main' }}
 
       - name: "Upload artifact"
         uses: actions/upload-artifact@v4

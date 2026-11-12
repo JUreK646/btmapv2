@@ -227,3 +227,104 @@ export interface TowerHistoryData {
   };
   pem: PemTimelineItem[];
 }
+
+export interface ServingStationInfo {
+  id: string;
+  stationId: string;
+  address: string;
+  operator: string;
+  isNetworks?: boolean;
+  networksPartner?: string;
+  distanceKm: number;
+  antennaHeightM: number;
+  mastType?: string;
+  bestSectorAzimuth: number;
+  bearingDeg: number;
+  sectorDeviationDeg: number;
+  isMainLobe: boolean;
+  isBacklobe: boolean;
+  bands: string[];
+  hasCband5G: boolean;
+  hasLowBand: boolean;
+  hasMidBand: boolean;
+  hasSi2pem: boolean;
+  pemReportDate?: string;
+  pemReportNumber?: string;
+  isLosClear: boolean;
+  obstructionM: number;
+  pathLossDb: number;
+}
+
+export interface OperatorEvaluation {
+  operator: 'Orange' | 'Play' | 'Plus' | 'T-Mobile';
+  isNetworks?: boolean;
+  score: number;
+  rank: number;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+  isWinner: boolean;
+  scoreBreakdown: {
+    terrainLos: number;
+    spectrumBands: number;
+    sectorAlignment: number;
+    infrastructure: number;
+  };
+  servingStation: ServingStationInfo | null;
+  si2pemStationsCount: number;
+  unverifiedStationsCount: number;
+  pros: string[];
+  cons: string[];
+  verdict: string;
+}
+
+export interface AreaEvaluationResult {
+  center: [number, number];
+  radiusM: number;
+  areaKm2: number;
+  targetName?: string;
+  evaluatedAt: string;
+  bestOperator: 'Orange' | 'Play' | 'Plus' | 'T-Mobile';
+  operators: OperatorEvaluation[];
+  summaryRecommendation: string;
+}
+
+export interface TerrainProfilePoint {
+  distanceKm: number;
+  lat: number;
+  lng: number;
+  elevation: number;
+  clutter: number;
+  curvDrop: number;
+  totalGround: number;
+  rayHeight: number;
+  fresnelRadius: number;
+  isObstacle: boolean;
+}
+
+export interface TerrainProfileResult {
+  distanceKm: number;
+  azimuthDeg: number;
+  elevationAngleDeg: number;
+  txElevation: number;
+  rxElevation: number;
+  txHeight: number;
+  rxHeight: number;
+  txTotalAlt: number;
+  rxTotalAlt: number;
+  points: TerrainProfilePoint[];
+  minElevation: number;
+  maxElevation: number;
+  isObstructed: boolean;
+  obstructionMaxM: number;
+  obstructionDistKm: number;
+  isTerrainObstructed: boolean;
+  isClutterObstructed: boolean;
+  pathLossDb: number;
+  fieldStrengthDbUvM: number;
+  verticalDeviationDeg: number | null;
+  horizontalDeviationDeg: number | null;
+  antennaLossDb?: number;
+  isBacklobe?: boolean;
+  source: string;
+  nmptAvailable: boolean;
+  stepM: number;
+}

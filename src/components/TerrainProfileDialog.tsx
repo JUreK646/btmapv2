@@ -25,7 +25,7 @@ import { api } from '../lib/api';
 import { cachedPemReports, loadPemReports, loadPemPdf } from '../lib/pemCache';
 import type { PemReport } from '../../shared/pem';
 import { operatorColor } from '../../shared/operators';
-import type { TerrainProfileResult, TerrainProfilePoint } from '../../server/terrainProfile';
+import type { TerrainProfileResult, TerrainProfilePoint } from '../types';
 import { useI18n } from '../lib/i18n';
 
 interface Props {

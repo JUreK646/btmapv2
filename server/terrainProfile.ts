@@ -1,44 +1,5 @@
-export interface TerrainProfilePoint {
-  distanceKm: number;
-  lat: number;
-  lng: number;
-  elevation: number;
-  clutter: number;
-  curvDrop: number;
-  totalGround: number;
-  rayHeight: number;
-  fresnelRadius: number;
-  isObstacle: boolean;
-}
-
-export interface TerrainProfileResult {
-  distanceKm: number;
-  azimuthDeg: number;
-  elevationAngleDeg: number;
-  txElevation: number;
-  rxElevation: number;
-  txHeight: number;
-  rxHeight: number;
-  txTotalAlt: number;
-  rxTotalAlt: number;
-  points: TerrainProfilePoint[];
-  minElevation: number;
-  maxElevation: number;
-  isObstructed: boolean;
-  obstructionMaxM: number;
-  obstructionDistKm: number;
-  isTerrainObstructed: boolean;
-  isClutterObstructed: boolean;
-  pathLossDb: number;
-  fieldStrengthDbUvM: number;
-  verticalDeviationDeg: number | null;
-  horizontalDeviationDeg: number | null;
-  antennaLossDb?: number;
-  isBacklobe?: boolean;
-  source: string;
-  nmptAvailable: boolean;
-  stepM: number;
-}
+import type { TerrainProfilePoint, TerrainProfileResult } from '../src/types.ts';
+export type { TerrainProfilePoint, TerrainProfileResult };
 
 const R_EFF = 8495000; // 4/3 * 6371 km in meters (ITU-R standard effective Earth radius)
 
