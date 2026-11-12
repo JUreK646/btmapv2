@@ -67,6 +67,7 @@ export function openDatabase(
     CREATE TABLE IF NOT EXISTS pem_report_counts (towerId TEXT PRIMARY KEY,count INTEGER NOT NULL,partial INTEGER NOT NULL,checkedAt TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS pem_report_operator_counts (towerId TEXT NOT NULL,operator TEXT NOT NULL,count INTEGER NOT NULL,partial INTEGER NOT NULL,checkedAt TEXT NOT NULL,PRIMARY KEY(towerId,operator));
     CREATE TABLE IF NOT EXISTS pem_pdf_cache (key TEXT PRIMARY KEY,data TEXT NOT NULL,checkedAt INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS registry_snapshots (date TEXT NOT NULL,source TEXT NOT NULL,data TEXT NOT NULL,createdAt TEXT NOT NULL,PRIMARY KEY(date,source));
   `);
   try {
     db.exec('ALTER TABLE comments ADD COLUMN photoUrl TEXT');
@@ -81,11 +82,15 @@ export function openDatabase(
     ['mode', 'TEXT'],
     ['capacityText', 'TEXT'],
     ['channelsJson', 'TEXT'],
+    // Read by /api/stats and /api/radiolines, so they must exist before the first radioline sync or KMZ export.
+    ['province', 'TEXT'],
+    ['isNew', 'INTEGER DEFAULT 0'],
   ]) {
     if (!rlColumns.some(c => c.name === col[0])) {
       db.exec(`ALTER TABLE radiolines ADD COLUMN ${col[0]} ${col[1]}`);
     }
   }
+  db.exec('CREATE INDEX IF NOT EXISTS radiolines_province ON radiolines(province); CREATE INDEX IF NOT EXISTS radiolines_isNew ON radiolines(isNew);');
   if (!db.prepare("SELECT value FROM metadata WHERE key='radiolineOperatorsV2'").get()) {
     db.exec(`BEGIN;
       UPDATE radiolines SET operator='Plus', operatorRaw='Plus (Towerlink)' WHERE operatorRaw LIKE '%Towerlink%' OR operatorRaw LIKE '%POLKOMTEL%' OR operatorRaw LIKE '%Cellnex%';

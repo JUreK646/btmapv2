@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import readXlsxFile from 'read-excel-file/node';
 import { operatorColor, operatorName as canonicalOperatorName } from '../shared/operators.ts';
+import { ensureRegistrySnapshot, recordRegistrySnapshot } from './stats.ts';
 
 const BIP_UKE_URL = 'https://bip.uke.gov.pl/pozwolenia-radiowe/wykaz-pozwolen-radiowych-tresci/stacje-gsm-umts-lte-5gnr-oraz-cdma,12,0.html';
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -373,6 +374,9 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
       }
     }
 
+    // Keep the pre-sync state as a baseline if this database has no snapshot yet.
+    try { ensureRegistrySnapshot(db); } catch (snapshotErr) { console.warn('[UKE Sync] Nie zapisano migawki bazowej:', (snapshotErr as Error).message); }
+
     db.exec('BEGIN TRANSACTION;');
     try {
       const insertOrUpdate = db.prepare(`
@@ -406,6 +410,8 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
 
       db.exec('COMMIT;');
       console.log(`[UKE Sync] Baza pomyślnie zaktualizowana na stan ${date}.`);
+      // Growth statistics are the difference between this snapshot and the previous registry's.
+      try { recordRegistrySnapshot(db, date); } catch (snapshotErr) { console.warn('[UKE Sync] Nie zapisano migawki statystyk:', (snapshotErr as Error).message); }
     } catch (dbErr) {
       db.exec('ROLLBACK;');
       throw dbErr;

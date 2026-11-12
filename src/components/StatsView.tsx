@@ -61,6 +61,8 @@ interface StatsPeriodReport {
   id: string;
   title: string;
   dateRange: string;
+  /** Registry date the report is compared with; null until a second registry has been synced. */
+  comparedTo?: string | null;
   source: 'UKE' | 'BTMAP' | 'ALL';
   metrics: {
     stations: StatsGrowthMetricCard;
@@ -778,18 +780,24 @@ export function StatsView({
                 </div>
                 <h1>
                   {isPl
-                    ? `Raport wykazów: ${activeReport?.title || 'Listopad / Październik 2026'}`
-                    : `Registry Report: ${activeReport?.title || 'November / October 2026'}`}
+                    ? `Raport wykazów${activeReport?.title ? `: ${activeReport.title}` : ''}`
+                    : `Registry Report${activeReport?.title ? `: ${activeReport.title}` : ''}`}
                 </h1>
-                <span className="growth-period-badge">
-                  <Calendar size={13} />
-                  {activeReport?.dateRange || 'Dane z wykazów BIP UKE do 2026-11-06'}
-                </span>
+                {activeReport?.dateRange && (
+                  <span className="growth-period-badge">
+                    <Calendar size={13} />
+                    {activeReport.dateRange}
+                  </span>
+                )}
               </div>
               <span className="growth-subtitle">
                 {growthSource === 'UKE'
-                  ? (isPl ? 'Oficjalny Rejestr Urządzeń i Pozwoleń Radiowych BIP UKE (stan na 06.11.2026 / 04.11.2026 / 28.10.2026 / 26.10.2026)' : 'Official BIP UKE Device & Radio Permit Registry (as of 2026-11-06)')
-                  : (isPl ? 'Zweryfikowana baza stacji BTMap zsynchronizowana z Rejestrem Urządzeń BIP UKE (stan na 06.11.2026)' : 'Verified BTMap Station Database synced with BIP UKE (as of 2026-11-06)')}
+                  ? (isPl ? 'Oficjalny Rejestr Urządzeń i Pozwoleń Radiowych BIP UKE' : 'Official BIP UKE Device & Radio Permit Registry')
+                  : (isPl ? 'Zweryfikowana baza stacji BTMap zsynchronizowana z Rejestrem Urządzeń BIP UKE' : 'Verified BTMap Station Database synced with BIP UKE')}
+                {stats?.dataQuality?.ukeWykazDate ? (isPl ? ` (stan na ${stats.dataQuality.ukeWykazDate})` : ` (as of ${stats.dataQuality.ukeWykazDate})`) : ''}
+                {activeReport && !activeReport.comparedTo && (isPl
+                  ? ' · Przyrosty są liczone jako różnica między kolejnymi wykazami – pojawią się po następnej synchronizacji.'
+                  : ' · Growth is the difference between consecutive registries – it will appear after the next sync.')}
               </span>
             </div>
           </div>

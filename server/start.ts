@@ -3,8 +3,11 @@ import { openDatabase } from './database.ts';
 import { createSi2pemSync } from './si2pemSync.ts';
 import { createUkeSync } from './ukeSync.ts';
 import { createRadiolineSync } from './radiolineSync.ts';
+import { ensureRegistrySnapshot } from './stats.ts';
 
 const db = openDatabase();
+// Baseline for growth statistics: the next UKE registry sync is compared against it.
+try { ensureRegistrySnapshot(db); } catch (err) { console.warn('[stats] Nie zapisano migawki bazowej:', (err as Error).message); }
 const si2pem = createSi2pemSync(db);
 const ukeSync = createUkeSync(db);
 const radiolineSync = createRadiolineSync(db);

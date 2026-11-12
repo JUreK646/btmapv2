@@ -85,6 +85,8 @@ export interface StatsPeriodReport {
   id: string;
   title: string;
   dateRange: string;
+  /** Registry date this report is compared with; null when there is no earlier registry yet. */
+  comparedTo: string | null;
   source: 'UKE' | 'BTMAP' | 'ALL';
   metrics: {
     stations: StatsGrowthMetricCard;
@@ -398,68 +400,42 @@ function matchesGrowthBand(b: any, target: { key: string; tech: string; band: st
   return rawBand === tBand;
 }
 
-type DeltaMode = 'NONE' | 'NOV_MONTH' | 'WYKAZ_11_06' | 'WYKAZ_11_04' | 'WYKAZ_10_28' | 'WYKAZ_10_26';
+type GrowthSource = 'ALL' | 'BTMAP' | 'UKE';
 
-function computeDynamicReport(
-  db: DatabaseSync,
-  source: 'ALL' | 'BTMAP' | 'UKE',
-  title: string,
-  dateRange: string,
-  id: string,
-  deltaMode: DeltaMode = 'NONE'
-): StatsPeriodReport {
+/** Per-operator counters of everything the growth view reports on, for one data source at one moment. */
+export interface GrowthCounters {
+  totals: { stations: number; cells: number; permits: number; cBand: number; fourCa: number; radiolines: number };
+  stations: Record<string, number>;
+  cells: Record<string, number>;
+  permits: Record<string, number>;
+  cBand: Record<string, number>;
+  fourCa: Record<string, number>;
+  radiolines: Record<string, number>;
+  bands: Record<string, { totalCells: number; totalStations: number; cells: Record<string, number>; stations: Record<string, number> }>;
+}
+
+export interface RegistrySnapshot {
+  date: string;
+  counters: GrowthCounters;
+}
+
+const bump = (record: Record<string, number>, key: string, by = 1) => { record[key] = (record[key] || 0) + by; };
+
+/** Counts the current state of the database. Growth is never estimated: it only comes from comparing two of these. */
+export function computeGrowthCounters(db: DatabaseSync, source: GrowthSource): GrowthCounters {
   const sql = source === 'ALL'
     ? "SELECT operators FROM towers WHERE status='APPROVED'"
     : source === 'UKE'
     ? "SELECT operators FROM towers WHERE status='APPROVED' AND (source='UKE' OR addedBy='Import KML' OR operators LIKE '%Plus%' OR operators LIKE '%/26%')"
     : "SELECT operators FROM towers WHERE status='APPROVED' AND source=?";
-  
+
   const rows = (source === 'ALL' || source === 'UKE' ? db.prepare(sql).all() : db.prepare(sql).all(source)) as Array<{ operators: string }>;
 
-  const totalStations = rows.length;
-  let totalCells = 0;
-  let totalPermits = 0;
-
-  const opStationsMap = new Map<string, number>();
-  const opCellsMap = new Map<string, number>();
-  const opCBandStationsMap = new Map<string, number>();
-  const opFourCaStationsMap = new Map<string, number>();
-  const opPermitsMap = new Map<string, number>();
-
-  let totalCBandStations = 0;
-  let totalFourCaStations = 0;
-
-  const bandTrackers = new Map<string, {
-    target: typeof STANDARD_GROWTH_BANDS[0];
-    opCells: Map<string, number>;
-    opStations: Map<string, number>;
-    newOpCells: Map<string, number>;
-    newOpStations: Map<string, number>;
-    totalCells: number;
-    totalStations: number;
-  }>();
-
-  for (const b of STANDARD_GROWTH_BANDS) {
-    bandTrackers.set(b.key, {
-      target: b,
-      opCells: new Map(),
-      opStations: new Map(),
-      newOpCells: new Map(),
-      newOpStations: new Map(),
-      totalCells: 0,
-      totalStations: 0,
-    });
-  }
-
-  const isEntryDateInMode = (ed: string): boolean => {
-    if (!ed) return false;
-    if (deltaMode === 'NOV_MONTH') return ed >= '2026-10-01';
-    if (deltaMode === 'WYKAZ_11_06') return ed >= '2026-10-30';
-    if (deltaMode === 'WYKAZ_11_04') return ed >= '2026-10-29' && ed <= '2026-11-04';
-    if (deltaMode === 'WYKAZ_10_28') return ed >= '2026-10-22' && ed <= '2026-10-28';
-    if (deltaMode === 'WYKAZ_10_26') return ed >= '2026-10-15' && ed <= '2026-10-26';
-    return false;
+  const counters: GrowthCounters = {
+    totals: { stations: rows.length, cells: 0, permits: 0, cBand: 0, fourCa: 0, radiolines: 0 },
+    stations: {}, cells: {}, permits: {}, cBand: {}, fourCa: {}, radiolines: {}, bands: {},
   };
+  for (const b of STANDARD_GROWTH_BANDS) counters.bands[b.key] = { totalCells: 0, totalStations: 0, cells: {}, stations: {} };
 
   for (const row of rows) {
     let ops: any[] = [];
@@ -476,344 +452,193 @@ function computeDynamicReport(
 
     for (const op of ops) {
       const opName = (op.name || 'Inne').trim();
-      opStationsMap.set(opName, (opStationsMap.get(opName) || 0) + 1);
+      bump(counters.stations, opName);
 
       const bList = Array.isArray(op.bands) ? op.bands : (Array.isArray(op.cells) ? op.cells : []);
-      const opSectorsSum = bList.reduce((acc: number, b: any) => {
-        const s = Number(b.sectors) || (Array.isArray(b.azimuths) && b.azimuths.length > 0 ? b.azimuths.length : 3);
-        return acc + s;
-      }, 0);
-      const permitsCountForOp = bList.length;
+      const sectorsOf = (b: any) => Number(b.sectors) || (Array.isArray(b.azimuths) && b.azimuths.length > 0 ? b.azimuths.length : 3);
+      const opSectorsSum = bList.reduce((acc: number, b: any) => acc + sectorsOf(b), 0);
 
-      totalCells += opSectorsSum;
-      totalPermits += permitsCountForOp;
-      opCellsMap.set(opName, (opCellsMap.get(opName) || 0) + opSectorsSum);
-      opPermitsMap.set(opName, (opPermitsMap.get(opName) || 0) + permitsCountForOp);
+      counters.totals.cells += opSectorsSum;
+      counters.totals.permits += bList.length;
+      bump(counters.cells, opName, opSectorsSum);
+      bump(counters.permits, opName, bList.length);
 
       const lteBands = new Set<string>();
       let opHasCBand = false;
       const opMatchedBandsOnTower = new Set<string>();
-      const opNewMatchedBandsOnTower = new Set<string>();
 
       for (const b of bList) {
         let tech = String(b.tech || 'Inne').toUpperCase();
         if (tech === 'NR') tech = '5G';
         const bandNum = String(b.band || '').replace(/MHz/i, '').trim();
-        const bSectors = Number(b.sectors) || (Array.isArray(b.azimuths) && b.azimuths.length > 0 ? b.azimuths.length : 3);
-        const isNewBand = isEntryDateInMode(String(b.entryDate || ''));
 
-        if (tech === 'LTE' && bandNum) {
-          lteBands.add(bandNum);
-        }
+        if (tech === 'LTE' && bandNum) lteBands.add(bandNum);
         if (tech === '5G' && (bandNum === '3500' || bandNum === '3600' || bandNum === 'n78' || bandNum === '78')) {
           opHasCBand = true;
           towerHasCBand = true;
         }
 
-        for (const tracker of bandTrackers.values()) {
-          if (matchesGrowthBand(b, tracker.target)) {
-            tracker.totalCells += bSectors;
-            tracker.opCells.set(opName, (tracker.opCells.get(opName) || 0) + bSectors);
-            opMatchedBandsOnTower.add(tracker.target.key);
-            towerMatchedBands.add(tracker.target.key);
-            if (isNewBand) {
-              tracker.newOpCells.set(opName, (tracker.newOpCells.get(opName) || 0) + bSectors);
-              opNewMatchedBandsOnTower.add(tracker.target.key);
-            }
+        for (const target of STANDARD_GROWTH_BANDS) {
+          if (matchesGrowthBand(b, target)) {
+            const tracker = counters.bands[target.key];
+            tracker.totalCells += sectorsOf(b);
+            bump(tracker.cells, opName, sectorsOf(b));
+            opMatchedBandsOnTower.add(target.key);
+            towerMatchedBands.add(target.key);
           }
         }
       }
 
-      for (const bandKey of opMatchedBandsOnTower) {
-        const tracker = bandTrackers.get(bandKey);
-        if (tracker) {
-          tracker.opStations.set(opName, (tracker.opStations.get(opName) || 0) + 1);
-        }
-      }
-      for (const bandKey of opNewMatchedBandsOnTower) {
-        const tracker = bandTrackers.get(bandKey);
-        if (tracker) {
-          tracker.newOpStations.set(opName, (tracker.newOpStations.get(opName) || 0) + 1);
-        }
-      }
-
-      if (opHasCBand) {
-        opCBandStationsMap.set(opName, (opCBandStationsMap.get(opName) || 0) + 1);
-      }
+      for (const bandKey of opMatchedBandsOnTower) bump(counters.bands[bandKey].stations, opName);
+      if (opHasCBand) bump(counters.cBand, opName);
       if (lteBands.size >= 4) {
-        opFourCaStationsMap.set(opName, (opFourCaStationsMap.get(opName) || 0) + 1);
+        bump(counters.fourCa, opName);
         towerHasFourCa = true;
       }
     }
 
-    if (towerHasCBand) totalCBandStations++;
-    if (towerHasFourCa) totalFourCaStations++;
-    for (const bandKey of towerMatchedBands) {
-      const tracker = bandTrackers.get(bandKey);
-      if (tracker) tracker.totalStations++;
-    }
+    if (towerHasCBand) counters.totals.cBand++;
+    if (towerHasFourCa) counters.totals.fourCa++;
+    for (const bandKey of towerMatchedBands) counters.bands[bandKey].totalStations++;
   }
 
-  // Operators order
+  const rlRows = db.prepare('SELECT operator, COUNT(*) AS cnt FROM radiolines GROUP BY operator').all() as Array<{ operator: string | null; cnt: number }>;
+  for (const r of rlRows) {
+    bump(counters.radiolines, r.operator || 'Inne', Number(r.cnt));
+    counters.totals.radiolines += Number(r.cnt);
+  }
+  return counters;
+}
+
+const isoDate = (value: unknown) => {
+  const day = String(value ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+};
+
+/**
+ * Stores the current counters for the UKE and BTMap sources under the given registry date.
+ * Called after every UKE registry sync; two consecutive snapshots are what a growth report compares.
+ */
+export function recordRegistrySnapshot(db: DatabaseSync, date?: string): string {
+  const meta = (key: string) => (db.prepare('SELECT value FROM metadata WHERE key=?').get(key) as { value?: string } | undefined)?.value;
+  const day = isoDate(date) || isoDate(meta('ukeWykazDate')) || isoDate(meta('importedAt')) || new Date().toISOString().slice(0, 10);
+  const save = db.prepare('INSERT OR REPLACE INTO registry_snapshots(date, source, data, createdAt) VALUES (?, ?, ?, ?)');
+  const now = new Date().toISOString();
+  for (const source of ['UKE', 'BTMAP'] as const) save.run(day, source, JSON.stringify(computeGrowthCounters(db, source)), now);
+  cache.clear();
+  return day;
+}
+
+/** Records a baseline for databases that predate snapshots, so the next sync has something to compare with. */
+export function ensureRegistrySnapshot(db: DatabaseSync): void {
+  if (!db.prepare('SELECT 1 FROM registry_snapshots LIMIT 1').get()) recordRegistrySnapshot(db);
+}
+
+/** Newest first. */
+export function loadRegistrySnapshots(db: DatabaseSync, source: GrowthSource, limit = 13): RegistrySnapshot[] {
+  const rows = db.prepare('SELECT date, data FROM registry_snapshots WHERE source=? ORDER BY createdAt DESC, date DESC LIMIT ?')
+    .all(source === 'BTMAP' ? 'BTMAP' : 'UKE', limit) as Array<{ date: string; data: string }>;
+  const snapshots: RegistrySnapshot[] = [];
+  for (const row of rows) {
+    try { snapshots.push({ date: row.date, counters: JSON.parse(row.data) }); } catch { /* A corrupt snapshot is skipped, not guessed. */ }
+  }
+  return snapshots;
+}
+
+const plDate = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}.${day.slice(0, 4)}`;
+
+function buildGrowthReport(source: GrowthSource, current: RegistrySnapshot, previous: RegistrySnapshot | null): StatsPeriodReport {
+  const cur = current.counters;
+  const prev = previous?.counters || null;
   const PRIMARY_OPS = ['Plus', 'T-Mobile', 'Orange', 'Play'];
-  const allOps = Array.from(new Set([
-    ...PRIMARY_OPS,
-    ...opStationsMap.keys(),
-  ])).filter(op => {
-    if (PRIMARY_OPS.includes(op)) return true;
-    return (opStationsMap.get(op) || 0) > 0;
+  const allOps = Array.from(new Set([...PRIMARY_OPS, ...Object.keys(cur.stations).filter(op => cur.stations[op] > 0)]));
+
+  // Net growth since the previous snapshot. Without one there is nothing to compare, so growth stays 0.
+  const bars = (now: Record<string, number> = {}, before?: Record<string, number>): StatsGrowthOperatorBar[] => allOps.map(op => {
+    const total = now[op] || 0;
+    const newCount = before ? Math.max(0, total - (before[op] || 0)) : 0;
+    return { operator: op, total, newCount, newPercent: total > 0 ? Number(((newCount / total) * 100).toFixed(2)) : 0 };
   });
-
-  // Dynamic Deltas based on official BIP UKE Wykaz releases (Oct-Nov 2026)
-  let stationDeltas: Record<string, number> = {};
-  let cellDeltas: Record<string, number> = {};
-  let permitDeltas: Record<string, number> = {};
-  let cBandDeltas: Record<string, number> = {};
-  let fourCaDeltas: Record<string, number> = {};
-
-  if (deltaMode === 'NOV_MONTH') {
-    stationDeltas = { Plus: 186, 'T-Mobile': 206, Orange: 145, Play: 231, 'PKP PLK': 7, 'PGE Systemy': 7 };
-    cellDeltas = { Plus: 4820, 'T-Mobile': 5037, Orange: 4062, Play: 9059, 'PKP PLK': 21, 'PGE Systemy': 21 };
-    permitDeltas = { Plus: 1610, 'T-Mobile': 1806, Orange: 1355, Play: 2833, 'PKP PLK': 7, 'PGE Systemy': 7 };
-    cBandDeltas = { Plus: 142, 'T-Mobile': 135, Orange: 119, Play: 262 };
-    fourCaDeltas = { Plus: 128, 'T-Mobile': 206, Orange: 142, Play: 231 };
-  } else if (deltaMode === 'WYKAZ_11_06') {
-    stationDeltas = { Plus: 18, 'T-Mobile': 68, Orange: 74, Play: 42 };
-    cellDeltas = { Plus: 186, 'T-Mobile': 1400, Orange: 1335, Play: 890 };
-    permitDeltas = { Plus: 62, 'T-Mobile': 467, Orange: 445, Play: 297 };
-    cBandDeltas = { Plus: 12, 'T-Mobile': 54, Orange: 58, Play: 35 };
-    fourCaDeltas = { Plus: 15, 'T-Mobile': 64, Orange: 68, Play: 38 };
-  } else if (deltaMode === 'WYKAZ_11_04') {
-    stationDeltas = { Plus: 24, 'T-Mobile': 32, Orange: 29, Play: 118 };
-    cellDeltas = { Plus: 340, 'T-Mobile': 520, Orange: 609, Play: 2745 };
-    permitDeltas = { Plus: 114, 'T-Mobile': 174, Orange: 203, Play: 915 };
-    cBandDeltas = { Plus: 18, 'T-Mobile': 28, Orange: 25, Play: 112 };
-    fourCaDeltas = { Plus: 22, 'T-Mobile': 30, Orange: 28, Play: 108 };
-  } else if (deltaMode === 'WYKAZ_10_28') {
-    stationDeltas = { Plus: 112, 'T-Mobile': 38, Orange: 35, Play: 64 };
-    cellDeltas = { Plus: 2848, 'T-Mobile': 850, Orange: 653, Play: 2278 };
-    permitDeltas = { Plus: 949, 'T-Mobile': 283, Orange: 218, Play: 759 };
-    cBandDeltas = { Plus: 85, 'T-Mobile': 26, Orange: 22, Play: 68 };
-    fourCaDeltas = { Plus: 74, 'T-Mobile': 35, Orange: 32, Play: 58 };
-  } else if (deltaMode === 'WYKAZ_10_26') {
-    stationDeltas = { Plus: 32, 'T-Mobile': 68, Orange: 52, Play: 75, 'PKP PLK': 7, 'PGE Systemy': 7 };
-    cellDeltas = { Plus: 1446, 'T-Mobile': 2064, Orange: 1167, Play: 1283, 'PKP PLK': 21, 'PGE Systemy': 21 };
-    permitDeltas = { Plus: 482, 'T-Mobile': 688, Orange: 389, Play: 428, 'PKP PLK': 7, 'PGE Systemy': 7 };
-    cBandDeltas = { Plus: 27, 'T-Mobile': 27, Orange: 14, Play: 47 };
-    fourCaDeltas = { Plus: 17, 'T-Mobile': 77, Orange: 44, Play: 27 };
-  }
-
-  const buildBars = (map: Map<string, number>, deltas: Record<string, number> = {}): StatsGrowthOperatorBar[] => allOps.map(op => {
-    const total = map.get(op) || 0;
-    const newCount = deltas[op] || 0;
-    return {
-      operator: op,
-      total,
-      newCount,
-      newPercent: total > 0 ? Number(((newCount / total) * 100).toFixed(2)) : 0,
-    };
-  });
-
-  // Radiolines (from BIP UKE 2026-10-26 registry)
-  type RlRow = { operator: string; cnt: number; newCnt: number };
-  const rlRows = db.prepare('SELECT operator, count(*) as cnt, sum(CASE WHEN isNew = 1 THEN 1 ELSE 0 END) as newCnt FROM radiolines GROUP BY operator').all() as RlRow[];
-  const rlTotal = rlRows.reduce((s, r) => s + Number(r.cnt), 0);
-  
-  const rlDeltas: Record<string, number> = deltaMode === 'NOV_MONTH'
-    ? { Plus: 186, 'T-Mobile': 174, Orange: 62, Play: 289 }
-    : deltaMode === 'WYKAZ_10_26'
-    ? { Plus: 94, 'T-Mobile': 88, Orange: 32, Play: 148 }
-    : deltaMode === 'WYKAZ_11_06'
-    ? { Plus: 28, 'T-Mobile': 34, Orange: 14, Play: 46 }
-    : deltaMode === 'WYKAZ_11_04'
-    ? { Plus: 24, 'T-Mobile': 26, Orange: 8, Play: 55 }
-    : deltaMode === 'WYKAZ_10_28'
-    ? { Plus: 40, 'T-Mobile': 26, Orange: 8, Play: 40 }
-    : {};
-  const rlNewTotal = Object.values(rlDeltas).reduce((a, b) => a + b, 0);
-
-  const rlBars = allOps.map(op => {
-    const row = rlRows.find(r => r.operator === op);
-    const tot = row ? Number(row.cnt) : 0;
-    const nw = rlDeltas[op] || 0;
-    return {
-      operator: op,
-      total: tot,
-      newCount: nw,
-      newPercent: tot > 0 ? Number(((nw / tot) * 100).toFixed(2)) : 0,
-    };
-  });
-  const radiolinesMetric: StatsGrowthMetricCard = {
-    key: 'radiolines',
-    label: 'Linie radiowe',
-    total: rlTotal,
-    newTotal: rlNewTotal,
-    operators: rlBars,
-  };
-
-  const stationBars = buildBars(opStationsMap, stationDeltas);
-  const cellBars = buildBars(opCellsMap, cellDeltas);
-  const cBandBars = buildBars(opCBandStationsMap, cBandDeltas);
-  const fourCaBars = buildBars(opFourCaStationsMap, fourCaDeltas);
-  const permitsBars = buildBars(opPermitsMap, permitDeltas);
-
-  const isMonthly = deltaMode === 'NOV_MONTH';
-  const isBatch = deltaMode !== 'NONE' && !isMonthly;
+  const metric = (key: string, label: string, total: number, operators: StatsGrowthOperatorBar[]): StatsGrowthMetricCard =>
+    ({ key, label, total, newTotal: operators.reduce((sum, o) => sum + o.newCount, 0), operators });
 
   const bands: StatsGrowthBandCard[] = STANDARD_GROWTH_BANDS.map(tb => {
-    const tr = bandTrackers.get(tb.key)!;
-    const opCells = allOps.map(op => {
-      const tot = tr.opCells.get(op) || 0;
-      const realNew = tr.newOpCells.get(op) || 0;
-      let nw = realNew;
-      if (tot > 0 && nw === 0) {
-        if (isMonthly) {
-          nw = Math.max(3, Math.round(tot * (tb.tech === '5G' ? 0.032 : tb.tech === 'LTE' ? 0.014 : 0.004)));
-        } else if (isBatch) {
-          nw = Math.max(3, Math.round(tot * (tb.tech === '5G' ? 0.008 : tb.tech === 'LTE' ? 0.0035 : 0.001)));
-        }
-      } else if (tot > 0 && nw > Math.round(tot * 0.18)) {
-        // Cap bulk re-registration spikes so growth bars show net newly deployed cells
-        nw = Math.max(6, Math.round(tot * (isMonthly ? 0.035 : 0.012)));
-      }
-      return {
-        operator: op,
-        total: tot,
-        newCount: nw,
-        newPercent: tot > 0 ? Number(((nw / tot) * 100).toFixed(2)) : 0
-      };
-    });
-
-    const opStations = allOps.map(op => {
-      const tot = tr.opStations.get(op) || 0;
-      const realNew = tr.newOpStations.get(op) || 0;
-      let nw = realNew;
-      if (tot > 0 && nw === 0) {
-        if (isMonthly) {
-          nw = Math.max(1, Math.round(tot * (tb.tech === '5G' ? 0.032 : tb.tech === 'LTE' ? 0.014 : 0.004)));
-        } else if (isBatch) {
-          nw = Math.max(1, Math.round(tot * (tb.tech === '5G' ? 0.008 : tb.tech === 'LTE' ? 0.0035 : 0.001)));
-        }
-      } else if (tot > 0 && nw > Math.round(tot * 0.18)) {
-        nw = Math.max(2, Math.round(tot * (isMonthly ? 0.035 : 0.012)));
-      }
-      return {
-        operator: op,
-        total: tot,
-        newCount: nw,
-        newPercent: tot > 0 ? Number(((nw / tot) * 100).toFixed(2)) : 0
-      };
-    });
-
-    const newCells = isMonthly || isBatch ? opCells.reduce((s, o) => s + o.newCount, 0) : 0;
-    const newStations = isMonthly || isBatch ? opStations.reduce((s, o) => s + o.newCount, 0) : 0;
-
+    const now = cur.bands?.[tb.key] || { totalCells: 0, totalStations: 0, cells: {}, stations: {} };
+    const before = prev ? prev.bands?.[tb.key] || { totalCells: 0, totalStations: 0, cells: {}, stations: {} } : undefined;
+    const operatorCells = bars(now.cells, before?.cells);
+    const operatorStations = bars(now.stations, before?.stations);
     return {
       key: tb.key,
       tech: tb.tech,
       band: tb.band,
       duplex: tb.duplex,
-      totalCells: tr.totalCells,
-      newCells,
-      totalStations: tr.totalStations,
-      newStations,
-      operatorCells: opCells,
-      operatorStations: opStations,
+      totalCells: now.totalCells,
+      newCells: operatorCells.reduce((sum, o) => sum + o.newCount, 0),
+      totalStations: now.totalStations,
+      newStations: operatorStations.reduce((sum, o) => sum + o.newCount, 0),
+      operatorCells,
+      operatorStations,
     };
   });
 
   return {
-    id,
-    title,
-    dateRange,
+    id: `${source.toLowerCase()}-${current.date}`,
+    title: previous ? `Wykaz z ${plDate(current.date)}` : `Stan na ${plDate(current.date)}`,
+    dateRange: previous
+      ? `Przyrost netto względem wykazu z ${plDate(previous.date)}`
+      : 'Brak danych porównawczych – przyrost pojawi się po kolejnej synchronizacji wykazu UKE',
+    comparedTo: previous?.date || null,
     source,
     metrics: {
-      stations: {
-        key: 'stations',
-        label: 'Stacje bazowe',
-        total: totalStations,
-        newTotal: stationBars.reduce((s, o) => s + o.newCount, 0),
-        operators: stationBars,
-      },
-      cells: {
-        key: 'cells',
-        label: 'Komórki / Sektory',
-        total: totalCells,
-        newTotal: cellBars.reduce((s, o) => s + o.newCount, 0),
-        operators: cellBars,
-      },
-      cBand: {
-        key: 'cBand',
-        label: 'Stacje 5G C-Band (3.6 GHz)',
-        total: totalCBandStations,
-        newTotal: cBandBars.reduce((s, o) => s + o.newCount, 0),
-        operators: cBandBars,
-      },
-      fourBandLte: {
-        key: 'fourBandLte',
-        label: 'Agregacja 4CA LTE',
-        total: totalFourCaStations,
-        newTotal: fourCaBars.reduce((s, o) => s + o.newCount, 0),
-        operators: fourCaBars,
-      },
-      radiolines: radiolinesMetric,
-      permits: {
-        key: 'permits',
-        label: source === 'BTMAP' ? 'Pozwolenia radiowe / PCI' : 'Pozwolenia radiowe / Wpisy',
-        total: totalPermits,
-        newTotal: permitsBars.reduce((s, o) => s + o.newCount, 0),
-        operators: permitsBars,
-      },
+      stations: metric('stations', 'Stacje bazowe', cur.totals.stations, bars(cur.stations, prev?.stations)),
+      cells: metric('cells', 'Komórki / Sektory', cur.totals.cells, bars(cur.cells, prev?.cells)),
+      cBand: metric('cBand', 'Stacje 5G C-Band (3.6 GHz)', cur.totals.cBand, bars(cur.cBand, prev?.cBand)),
+      fourBandLte: metric('fourBandLte', 'Agregacja 4CA LTE', cur.totals.fourCa, bars(cur.fourCa, prev?.fourCa)),
+      radiolines: metric('radiolines', 'Linie radiowe', cur.totals.radiolines, bars(cur.radiolines, prev?.radiolines)),
+      permits: metric('permits', source === 'BTMAP' ? 'Pozwolenia radiowe / PCI' : 'Pozwolenia radiowe / Wpisy', cur.totals.permits, bars(cur.permits, prev?.permits)),
     },
     bands,
   };
 }
 
-function computeMonthlyReports(db: DatabaseSync, source: 'ALL' | 'BTMAP' | 'UKE'): StatsPeriodReport[] {
-  const targetSrc = source === 'BTMAP' ? 'BTMAP' : 'UKE';
-  return [
-    computeDynamicReport(
-      db,
-      targetSrc,
-      'Listopad / Październik 2026 (stan 06.11.2026)',
-      'Dane z wykazów BIP UKE od 2026-10-06 do 2026-11-06',
-      `${targetSrc.toLowerCase()}-2026-11-month`,
-      'NOV_MONTH'
-    ),
-    computeDynamicReport(
-      db,
-      targetSrc,
-      'Wykaz z 06.11.2026 (Orange, T-Mobile)',
-      'BIP UKE Rejestr Urządzeń – stan na 6 listopada 2026',
-      `${targetSrc.toLowerCase()}-2026-11-06`,
-      'WYKAZ_11_06'
-    ),
-    computeDynamicReport(
-      db,
-      targetSrc,
-      'Wykaz z 04.11.2026 (Play / P4 + 5G)',
-      'BIP UKE Rejestr Urządzeń P4 + Sieci 5G – stan na 4 listopada 2026',
-      `${targetSrc.toLowerCase()}-2026-11-04`,
-      'WYKAZ_11_04'
-    ),
-    computeDynamicReport(
-      db,
-      targetSrc,
-      'Wykaz z 28.10.2026 (Plus / Polkomtel)',
-      'BIP UKE Rejestr Urządzeń Polkomtel – stan na 28 października 2026',
-      `${targetSrc.toLowerCase()}-2026-10-28`,
-      'WYKAZ_10_28'
-    ),
-    computeDynamicReport(
-      db,
-      targetSrc,
-      'Wykaz z 26.10.2026 (Pozwolenia + Radiolinie)',
-      'BIP UKE Wykaz Pozwoleń Radiowych i Linii Radiowych – stan na 26 października 2026',
-      `${targetSrc.toLowerCase()}-2026-10-26`,
-      'WYKAZ_10_26'
-    ),
-  ];
+/**
+ * One report per synced registry, newest first, each compared with the registry before it.
+ * Until two registries have been synced there is a single report with totals and no growth figures.
+ */
+export function computeMonthlyReports(db: DatabaseSync, source: GrowthSource): StatsPeriodReport[] {
+  const targetSrc: GrowthSource = source === 'BTMAP' ? 'BTMAP' : 'UKE';
+  const snapshots = loadRegistrySnapshots(db, targetSrc);
+  if (snapshots.length < 2) {
+    const live: RegistrySnapshot = { date: snapshots[0]?.date || recordDate(db), counters: computeGrowthCounters(db, targetSrc) };
+    return [buildGrowthReport(targetSrc, live, null)];
+  }
+  return snapshots.slice(0, -1).map((snapshot, idx) => buildGrowthReport(targetSrc, snapshot, snapshots[idx + 1]));
 }
+
+function recordDate(db: DatabaseSync): string {
+  const row = db.prepare("SELECT value FROM metadata WHERE key='ukeWykazDate'").get() as { value?: string } | undefined;
+  return isoDate(row?.value) || new Date().toISOString().slice(0, 10);
+}
+
+/** New stations per synced registry, oldest first. Empty until there are two registries to compare. */
+function buildGrowthTimeline(db: DatabaseSync, source: GrowthSource): StatsTimelineItem[] {
+  const reports = computeMonthlyReports(db, source).filter(report => report.comparedTo);
+  return reports.reverse().map(report => {
+    const period = report.id.slice(report.id.indexOf('-') + 1);
+    const bandCounts = new Map<string, number>();
+    for (const b of report.bands) {
+      if (b.newStations > 0) bandCounts.set(`${b.tech} ${b.band}`, (bandCounts.get(`${b.tech} ${b.band}`) || 0) + b.newStations);
+    }
+    return {
+      period,
+      label: `${new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${period}T00:00:00Z`))} (wykaz UKE)`,
+      totalNew: report.metrics.stations.newTotal,
+      operators: report.metrics.stations.operators.filter(o => o.newCount > 0).map(o => ({ operator: o.operator, count: o.newCount })).sort((a, b) => b.count - a.count),
+      topBands: Array.from(bandCounts, ([band, count]) => ({ band, count })).sort((a, b) => b.count - a.count).slice(0, 6),
+    };
+  });
+}
+
 
 export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomStats {
   const source = rawSource === 'BTMAP' ? 'BTMAP' : rawSource === 'UKE' ? 'UKE' : 'ALL';
@@ -1050,110 +875,9 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   ).get() as { withReports: number | null; sumReports: number | null } | undefined;
   const ukeDateRow = db.prepare("SELECT value FROM metadata WHERE key = 'ukeWykazDate'").get() as { value?: string } | undefined;
 
-  const officialUkeDate = ukeDateRow?.value || '2026-11-06';
-  const timeline: StatsTimelineItem[] = [
-    {
-      period: '2026-09-30',
-      label: '30 września 2026 (Wykaz UKE)',
-      totalNew: 312,
-      operators: [
-        { operator: 'Play', count: 110 },
-        { operator: 'Orange', count: 74 },
-        { operator: 'T-Mobile', count: 70 },
-        { operator: 'Plus', count: 54 },
-        { operator: 'PKP PLK', count: 4 },
-      ],
-      topBands: [
-        { band: '5G 3500', count: 142 },
-        { band: 'LTE 2100', count: 104 },
-        { band: 'LTE 1800', count: 91 },
-        { band: 'LTE 2600', count: 85 },
-        { band: 'LTE 800', count: 68 },
-        { band: '5G 2100', count: 62 },
-      ],
-    },
-    {
-      period: '2026-10-26',
-      label: '26 października 2026 (Pozwolenia + Radiolinie UKE)',
-      totalNew: 234,
-      operators: [
-        { operator: 'Play', count: 75 },
-        { operator: 'T-Mobile', count: 68 },
-        { operator: 'Orange', count: 52 },
-        { operator: 'Plus', count: 32 },
-        { operator: 'PKP PLK', count: 7 },
-      ],
-      topBands: [
-        { band: '5G 3500', count: 115 },
-        { band: 'LTE 1800', count: 96 },
-        { band: 'LTE 2100', count: 92 },
-        { band: 'LTE 2600', count: 84 },
-        { band: '5G 700', count: 64 },
-        { band: '5G 2100', count: 58 },
-      ],
-    },
-    {
-      period: '2026-10-28',
-      label: '28 października 2026 (Rejestr Urządzeń: Plus / Polkomtel)',
-      totalNew: 249,
-      operators: [
-        { operator: 'Plus', count: 112 },
-        { operator: 'Play', count: 64 },
-        { operator: 'T-Mobile', count: 38 },
-        { operator: 'Orange', count: 35 },
-      ],
-      topBands: [
-        { band: '5G 2600', count: 148 },
-        { band: '5G 2100', count: 112 },
-        { band: 'LTE 1800', count: 104 },
-        { band: '5G 3500', count: 85 },
-        { band: 'LTE 2600', count: 76 },
-        { band: '5G 700', count: 68 },
-      ],
-    },
-    {
-      period: '2026-11-04',
-      label: '4 listopada 2026 (Rejestr Urządzeń: Play / P4 + Sieci 5G)',
-      totalNew: 203,
-      operators: [
-        { operator: 'Play', count: 118 },
-        { operator: 'T-Mobile', count: 32 },
-        { operator: 'Orange', count: 29 },
-        { operator: 'Plus', count: 24 },
-      ],
-      topBands: [
-        { band: '5G 3500', count: 138 },
-        { band: 'LTE 1800', count: 114 },
-        { band: 'LTE 2100', count: 108 },
-        { band: 'LTE 2600', count: 95 },
-        { band: '5G 2100', count: 86 },
-        { band: 'LTE 800', count: 72 },
-      ],
-    },
-    {
-      period: officialUkeDate,
-      label: '6 listopada 2026 (Rejestr Urządzeń: Orange i T-Mobile)',
-      totalNew: 202,
-      operators: [
-        { operator: 'Orange', count: 74 },
-        { operator: 'T-Mobile', count: 68 },
-        { operator: 'Play', count: 42 },
-        { operator: 'Plus', count: 18 },
-      ],
-      topBands: [
-        { band: '5G 3500', count: 159 },
-        { band: '5G 700', count: 124 },
-        { band: 'LTE 700', count: 118 },
-        { band: 'LTE 900', count: 96 },
-        { band: '5G 2100', count: 88 },
-        { band: 'LTE 1800', count: 82 },
-      ],
-    },
-  ];
-
-  const latestTimeline = timeline[timeline.length - 1];
-  const latestNewTowers = 775;
-  const latestNewDate = officialUkeDate;
+  const timeline = buildGrowthTimeline(db, source);
+  const latestNewTowers = timeline[timeline.length - 1]?.totalNew ?? 0;
+  const latestNewDate = loadRegistrySnapshots(db, source, 1)[0]?.date || ukeDateRow?.value || null;
 
   // Cached comparison between UKE and BTMAP bands
   let comparisonBands: StatsComparisonBandItem[];
