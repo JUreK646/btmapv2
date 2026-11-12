@@ -1,5 +1,7 @@
 export async function api<T>(path:string,init:RequestInit = {}):Promise<T> {
-  const timeout=AbortSignal.timeout(path.includes('/pem-reports') || path.includes('/terrain-profile') || path.includes('/area-evaluation') ? 45000 : 12000);
+  // A 15 MB photo is a ~20 MB upload, which needs far longer than a regular request on a mobile uplink.
+  const isPhotoUpload=init.method==='POST'&&path.endsWith('/comments');
+  const timeout=AbortSignal.timeout(isPhotoUpload ? 180000 : path.includes('/pem-reports') || path.includes('/terrain-profile') || path.includes('/area-evaluation') ? 45000 : 12000);
   const signal=init.signal?AbortSignal.any([init.signal,timeout]):timeout;
   let response:Response;
   try{response=await fetch(`/api${path}`,{credentials:'same-origin',...init,signal,headers:{...(init.body?{'Content-Type':'application/json'}:{}),...init.headers}});}

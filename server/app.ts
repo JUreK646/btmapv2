@@ -16,6 +16,7 @@ import type {createSi2pemSync} from './si2pemSync.ts';
 import type {Tower} from '../src/types.ts';
 import {validateStationSubmission} from '../shared/cellValidation.ts';
 import { MAP_RADIOLINE_LIMIT } from '../shared/mapLimits.ts';
+import { MAX_JSON_BODY_BYTES, MAX_PHOTO_BODY_BYTES, MAX_PHOTO_BYTES } from '../shared/uploadLimits.ts';
 import {calculateTerrainProfile} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
 import {getTelecomStats, invalidateStatsCache, warmStatsCache} from './stats.ts';
@@ -34,7 +35,10 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
   const pemPlans=si2pem?.plans||createPemPlansService(db);
   const getPemPdf=createPemPdfService(getPemReports,db);
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '15mb' }));
+  // Only the photo comment endpoint accepts large bodies; everything else stays small.
+  const jsonBody = express.json({ limit: MAX_JSON_BODY_BYTES });
+  const photoBody = express.json({ limit: MAX_PHOTO_BODY_BYTES });
+  app.use((req, res, next) => (/^\/api\/towers\/[^/]+\/comments\/?$/.test(req.path) ? photoBody : jsonBody)(req, res, next));
   app.use((req,res,next) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Cache-Control','no-store');
@@ -307,7 +311,7 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
         const rawData = match ? match[1] : imageBase64;
         const buffer = Buffer.from(rawData, 'base64');
 
-        if (buffer.length > 15 * 1024 * 1024) {
+        if (buffer.length > MAX_PHOTO_BYTES) {
           return res.status(400).json({ error: 'Zdjęcie przekracza dopuszczalny rozmiar 15 MB.' });
         }
 
@@ -554,6 +558,8 @@ export function createApp(db: DatabaseSync,si2pem?:ReturnType<typeof createSi2pe
     } catch(e){db.exec('ROLLBACK');res.status(400).json({error:(e as Error).message});}
   });
   app.use('/api',(_req,res)=>res.status(404).json({error:'Nie znaleziono tej funkcji API.'}));
-  app.use((error:Error,_req:Request,res:Response,_next:NextFunction)=>{console.error(error.message);res.status(500).json({error:'Nie udało się wykonać operacji. Spróbuj ponownie.'});});
+  app.use((error:Error&{type?:string},_req:Request,res:Response,_next:NextFunction)=>{
+    if(error.type==='entity.too.large')return res.status(413).json({error:'Przesyłane dane są za duże. Zdjęcie może mieć maksymalnie 15 MB.'});
+    console.error(error.message);res.status(500).json({error:'Nie udało się wykonać operacji. Spróbuj ponownie.'});});
   return app;
 }

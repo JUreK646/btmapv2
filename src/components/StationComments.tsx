@@ -18,6 +18,7 @@ import {
 import type { Tower, Comment, User } from '../types';
 import { api, post, del, formatDate } from '../lib/api';
 import { useI18n } from '../lib/i18n';
+import { MAX_PHOTO_BYTES } from '../../shared/uploadLimits';
 
 interface Props {
   tower: Tower;
@@ -90,7 +91,7 @@ export default function StationComments({
       return;
     }
 
-    if (file.size > 15 * 1024 * 1024) {
+    if (file.size > MAX_PHOTO_BYTES) {
       onNotice(isPl ? 'Zdjęcie jest za duże (maksymalnie 15 MB).' : 'Image is too large (maximum 15 MB).');
       return;
     }
