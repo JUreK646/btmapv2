@@ -336,18 +336,30 @@ export default function AreaEvaluationDialog({
                                 >
                                   {s.hasCband5G ? '5G 3.6 GHz' : 'LTE-A'}
                                 </span>
-                                <span
-                                  className={`ae-metric-chip ${s.isLosClear ? 'chip-ok' : 'chip-warn'}`}
-                                  title={s.isLosClear ? (isEn ? 'Line of sight (LOS) clear' : 'Widoczność optyczna LOS czysta') : (isEn ? `Obstruction ${s.obstructionM.toFixed(1)}m` : `Przeszkoda ${s.obstructionM.toFixed(1)}m`)}
-                                >
-                                  {s.isLosClear ? (isEn ? 'LOS Clear' : 'LOS Czysty') : `LOS -${s.obstructionM.toFixed(1)}m`}
-                                </span>
-                                <span
-                                  className={`ae-metric-chip ${s.isMainLobe ? 'chip-ok' : s.isBacklobe ? 'chip-err' : 'chip-dim'}`}
-                                  title={isEn ? `Sector ${s.bestSectorAzimuth}° (deviation ${s.sectorDeviationDeg.toFixed(0)}°)` : `Sektor ${s.bestSectorAzimuth}° (odchylenie ${s.sectorDeviationDeg.toFixed(0)}°)`}
-                                >
-                                  {s.bestSectorAzimuth}° ({s.sectorDeviationDeg.toFixed(0)}°)
-                                </span>
+                                {s.losKnown === false ? (
+                                  <span className="ae-metric-chip chip-dim" title={isEn ? 'Terrain data unavailable – line of sight was not checked' : 'Brak danych wysokościowych – widoczność nie została sprawdzona'}>
+                                    {isEn ? 'LOS unknown' : 'LOS nieznany'}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`ae-metric-chip ${s.isLosClear ? 'chip-ok' : 'chip-warn'}`}
+                                    title={s.isLosClear ? (isEn ? 'Line of sight (LOS) clear' : 'Widoczność optyczna LOS czysta') : (isEn ? `Obstruction ${s.obstructionM.toFixed(1)}m` : `Przeszkoda ${s.obstructionM.toFixed(1)}m`)}
+                                  >
+                                    {s.isLosClear ? (isEn ? 'LOS Clear' : 'LOS Czysty') : `LOS -${s.obstructionM.toFixed(1)}m`}
+                                  </span>
+                                )}
+                                {s.sectorKnown === false ? (
+                                  <span className="ae-metric-chip chip-dim" title={isEn ? 'No antenna azimuths for this station (SI2PEM / UKE)' : 'Brak danych o azymutach anten tej stacji (SI2PEM / UKE)'}>
+                                    {isEn ? 'Sector unknown' : 'Sektor nieznany'}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`ae-metric-chip ${s.isMainLobe ? 'chip-ok' : s.isBacklobe ? 'chip-err' : 'chip-dim'}`}
+                                    title={isEn ? `Sector ${s.bestSectorAzimuth}° (deviation ${s.sectorDeviationDeg.toFixed(0)}°)` : `Sektor ${s.bestSectorAzimuth}° (odchylenie ${s.sectorDeviationDeg.toFixed(0)}°)`}
+                                  >
+                                    {s.bestSectorAzimuth}° ({s.sectorDeviationDeg.toFixed(0)}°)
+                                  </span>
+                                )}
                               </>
                             ) : (
                               <span className="ae-no-station-label">{isEn ? 'No SI2PEM' : 'Brak SI2PEM'}</span>
@@ -425,18 +437,21 @@ export default function AreaEvaluationDialog({
                           <span className="ae-tel-k">{isEn ? 'Antenna height' : 'Wysokość anteny'}</span>
                           <span className="ae-tel-v">
                             {selectedOp.servingStation.antennaHeightM} {isEn ? 'm AGL' : 'm n.p.t.'}
+                            {selectedOp.servingStation.heightKnown === false && (isEn ? ' (assumed)' : ' (przyjęto)')}
                           </span>
                         </div>
                         <div className="ae-tel-cell">
                           <span className="ae-tel-k">{isEn ? 'Antenna sector' : 'Sektor antenowy'}</span>
                           <span className="ae-tel-v">
-                            {selectedOp.servingStation.bestSectorAzimuth}° ({isEn ? 'dev.' : 'odch.'} {selectedOp.servingStation.sectorDeviationDeg.toFixed(1)}°)
+                            {selectedOp.servingStation.sectorKnown === false
+                              ? (isEn ? 'No data' : 'Brak danych')
+                              : <>{selectedOp.servingStation.bestSectorAzimuth}° ({isEn ? 'dev.' : 'odch.'} {selectedOp.servingStation.sectorDeviationDeg.toFixed(1)}°)</>}
                           </span>
                         </div>
                         <div className="ae-tel-cell">
                           <span className="ae-tel-k">{isEn ? 'LiDAR Visibility' : 'Widoczność LiDAR'}</span>
-                          <span className={`ae-tel-v ${selectedOp.servingStation.isLosClear ? 'text-ok' : 'text-warn'}`}>
-                            {selectedOp.servingStation.isLosClear ? (isEn ? 'Clear path (LOS)' : 'Czysty tor (LOS)') : (isEn ? `Obstruction ${selectedOp.servingStation.obstructionM.toFixed(1)}m` : `Przesłonięcie ${selectedOp.servingStation.obstructionM.toFixed(1)}m`)}
+                          <span className={`ae-tel-v ${selectedOp.servingStation.losKnown === false ? '' : selectedOp.servingStation.isLosClear ? 'text-ok' : 'text-warn'}`}>
+                            {selectedOp.servingStation.losKnown === false ? (isEn ? 'Not checked (no terrain data)' : 'Nie sprawdzono (brak danych terenu)') : selectedOp.servingStation.isLosClear ? (isEn ? 'Clear path (LOS)' : 'Czysty tor (LOS)') : (isEn ? `Obstruction ${selectedOp.servingStation.obstructionM.toFixed(1)}m` : `Przesłonięcie ${selectedOp.servingStation.obstructionM.toFixed(1)}m`)}
                           </span>
                         </div>
                         <div className="ae-tel-cell">

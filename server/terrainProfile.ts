@@ -70,6 +70,17 @@ export function wgs84ToPuwg1992(lat: number, lng: number): { x: number; y: numbe
   return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
 }
 
+/** Raised when neither elevation source returned usable data for the whole route. */
+export class TerrainDataUnavailableError extends Error {
+  constructor() {
+    super('Nie udało się pobrać danych wysokościowych terenu (GUGiK NMT ani Copernicus DEM). Spróbuj ponownie za chwilę.');
+    this.name = 'TerrainDataUnavailableError';
+  }
+}
+
+const isPlausibleElevation = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > -500 && value < 9000;
+
 /** In-memory cache for terrain bare-earth elevations (NMT) */
 const elevationCache = new Map<string, { elevations: number[]; source: string }>();
 
@@ -109,12 +120,13 @@ export async function fetchLidarElevations(
       if (res.ok) {
         const text = await res.text();
         const parts = text.split(',').filter(Boolean);
-        if (parts.length === points.length) {
-          const elevations = parts.map(part => {
-            const tokens = part.trim().split(/\s+/);
-            const val = parseFloat(tokens[tokens.length - 1]?.replace(',', '.') || '0');
-            return Number.isFinite(val) ? val : 100;
-          });
+        const elevations = parts.map(part => {
+          const tokens = part.trim().split(/\s+/);
+          return parseFloat(tokens[tokens.length - 1]?.replace(',', '.') ?? '');
+        });
+        // A response with a missing or unreadable point is not patched up with a made-up height:
+        // the whole route falls back to the second source instead.
+        if (parts.length === points.length && elevations.every(isPlausibleElevation)) {
           const result = { elevations, source: 'GUGiK NMT (LiDAR 1 m)' };
           if (elevationCache.size > 250) elevationCache.delete(elevationCache.keys().next().value!);
           elevationCache.set(cacheKey, result);
@@ -134,7 +146,7 @@ export async function fetchLidarElevations(
     const res = await fetcher(url, { signal: AbortSignal.timeout(9000) });
     if (res.ok) {
       const data = (await res.json()) as { elevation?: number[] };
-      if (Array.isArray(data.elevation) && data.elevation.length === points.length) {
+      if (Array.isArray(data.elevation) && data.elevation.length === points.length && data.elevation.every(isPlausibleElevation)) {
         const result = { elevations: data.elevation, source: 'Copernicus DEM (90 m)' };
         if (elevationCache.size > 250) elevationCache.delete(elevationCache.keys().next().value!);
         elevationCache.set(cacheKey, result);
@@ -142,11 +154,12 @@ export async function fetchLidarElevations(
       }
     }
   } catch {
-    /* fallback to flat reference if offline */
+    /* handled below */
   }
 
-  const elevations = points.map(() => 115);
-  return { elevations, source: 'Brak połączenia z GUGiK NMT' };
+  // Without real elevations there is no profile to compute. Inventing flat terrain would report
+  // a clear line of sight that nobody measured.
+  throw new TerrainDataUnavailableError();
 }
 
 /**

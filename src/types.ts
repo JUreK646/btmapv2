@@ -253,6 +253,12 @@ export interface ServingStationInfo {
   isLosClear: boolean;
   obstructionM: number;
   pathLossDb: number;
+  /** False when the station has no azimuths from a real source; sector fields are then not meaningful. */
+  sectorKnown?: boolean;
+  /** False when the antenna height was assumed for the line-of-sight calculation. */
+  heightKnown?: boolean;
+  /** False when terrain data was unavailable and line of sight could not be checked. */
+  losKnown?: boolean;
 }
 
 export interface OperatorEvaluation {

@@ -17,7 +17,7 @@ import type {Tower} from '../src/types.ts';
 import {validateStationSubmission} from '../shared/cellValidation.ts';
 import { MAP_RADIOLINE_LIMIT } from '../shared/mapLimits.ts';
 import { MAX_JSON_BODY_BYTES, MAX_PHOTO_BODY_BYTES, MAX_PHOTO_BYTES } from '../shared/uploadLimits.ts';
-import {calculateTerrainProfile} from './terrainProfile.ts';
+import {calculateTerrainProfile, TerrainDataUnavailableError} from './terrainProfile.ts';
 import {evaluateAreaCoverage} from './areaEvaluation.ts';
 import {getTelecomStats, invalidateStatsCache, warmStatsCache} from './stats.ts';
 import {getTowerHistory, recordTowerChange} from './towerHistory.ts';
@@ -181,6 +181,8 @@ export function createApp(
       });
       res.json(result);
     } catch (e) {
+      // No elevation data is an upstream outage, reported as such instead of a profile over invented terrain.
+      if (e instanceof TerrainDataUnavailableError) return res.status(502).json({ error: e.message });
       res.status(500).json({ error: (e as Error).message || 'Błąd wyliczania profilu terenu.' });
     }
   });
