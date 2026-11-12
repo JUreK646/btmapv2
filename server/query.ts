@@ -2,10 +2,30 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { MAP_STATION_LIMIT } from '../shared/mapLimits.ts';
 import { withAzimuths } from './azimuths.ts';
 import { parseCellSearch, type ParsedCellId } from '../shared/cellSearch.ts';
+import { isNewBand, newEntryWindow, type NewEntryWindow } from '../shared/newEntries.ts';
 
 const majorOperators = ['Orange', 'T-Mobile', 'Play', 'Plus', 'PKP PLK'];
 
-export function towerWhere(query: Record<string, unknown>) {
+/** The "new" window anchored to the latest UKE registry this database has synced. */
+export function getNewEntryWindow(db: DatabaseSync): NewEntryWindow {
+  const row = db.prepare("SELECT value FROM metadata WHERE key='ukeWykazDate'").get() as { value?: string } | undefined;
+  return newEntryWindow(row?.value);
+}
+
+// SQL twin of isNewTower() below - keep the two in sync (tests/new-entries.test.ts compares them).
+const BAND_ENTRY_DATE_SQL = `COALESCE(
+  json_extract(nb.value, '$.entryDate'),
+  CASE WHEN instr(json_extract(nb.value, '$.permit'), 'wpis ') > 0
+    THEN substr(json_extract(nb.value, '$.permit'), instr(json_extract(nb.value, '$.permit'), 'wpis ') + 5, 10) END
+)`;
+
+function isNewTower(t: Record<string, unknown>, operators: unknown, window: NewEntryWindow) {
+  if (t.createdAt && String(t.createdAt).slice(0, 10) >= window.since) return true;
+  if (!Array.isArray(operators)) return false;
+  return operators.some(op => Array.isArray(op?.bands) && op.bands.some((b: Record<string, unknown>) => b && isNewBand(b, window, { newPermitsOnly: true })));
+}
+
+export function towerWhere(query: Record<string, unknown>, window: NewEntryWindow = newEntryWindow()) {
   const clauses = ["t.status = 'APPROVED'", 't.lat BETWEEN -90 AND 90', 't.lng BETWEEN -180 AND 180'];
   const params: SQLInputValue[] = [];
   const list = (value: unknown) => typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 20) : [];
@@ -21,7 +41,15 @@ export function towerWhere(query: Record<string, unknown>) {
     }
   }
   if (query.onlyNew === '1' || query.onlyNew === 'true') {
-    clauses.push("(t.createdAt LIKE '2026-11-%' OR t.createdAt LIKE '2026-10-%' OR t.operators LIKE '%wpis 2026-11-%' OR t.operators LIKE '%wpis 2026-10-%' OR t.operators LIKE '%/26 [P]%')");
+    clauses.push(`(
+      substr(t.createdAt, 1, 10) >= ?
+      OR EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) nop, json_each(nop.value, '$.bands') nb
+        WHERE (${BAND_ENTRY_DATE_SQL} >= ? AND ${BAND_ENTRY_DATE_SQL} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')
+          OR json_extract(nb.value, '$.permit') GLOB '*/' || ? || ' [[]P]*'
+      )
+    )`);
+    params.push(window.since, window.since, window.year);
   }
   if (query.province) { clauses.push('fold(t.province) = fold(?)'); params.push(String(query.province)); }
 
@@ -126,7 +154,7 @@ const bandMhz = (band: unknown) => {
   return m ? Number(m[0]) : 0;
 };
 
-export function normalizeTower(t: Record<string, unknown>): Record<string, unknown> & { source:unknown; operators:unknown[] } {
+export function normalizeTower(t: Record<string, unknown>, window: NewEntryWindow = newEntryWindow()): Record<string, unknown> & { source:unknown; operators:unknown[] } {
   let operators: Array<Record<string, unknown>> = [];
   try { operators = JSON.parse(String(t.operators || '[]')); } catch { /* Corrupt legacy rows remain viewable. */ }
   if (Array.isArray(operators)) {
@@ -138,14 +166,12 @@ export function normalizeTower(t: Record<string, unknown>): Record<string, unkno
           if (fa !== fb) return fa - fb;
           return String(a?.tech ?? '').localeCompare(String(b?.tech ?? ''));
         });
+        // The details panel marks individual permits; amendments issued this year count there too.
+        for (const band of op.bands) if (band && typeof band === 'object' && isNewBand(band, window)) band.isNew = true;
       }
     }
   }
-  const isNew = Boolean(
-    (t.createdAt && (String(t.createdAt).startsWith('2026-11-') || String(t.createdAt).startsWith('2026-10-2') || String(t.createdAt).startsWith('2026-10-3'))) ||
-    (typeof t.operators === 'string' && (t.operators.includes('wpis 2026-11-') || t.operators.includes('wpis 2026-10-28') || t.operators.includes('wpis 2026-10-26') || t.operators.includes('/26 [P]')))
-  );
-  return { ...t, source: (t.source === 'User' || t.source === 'BTMAP') ? 'BTMAP' : (t.source || 'UKE'), operators, isNew };
+  return { ...t, source: (t.source === 'User' || t.source === 'BTMAP') ? 'BTMAP' : (t.source || 'UKE'), operators, isNew: isNewTower(t, operators, window) };
 }
 
 export function withPemCounts<T extends Record<string,unknown>>(db:DatabaseSync,towers:T[]):Array<T&{pemReportsByOperator?:Record<string,{count:number;partial:boolean;checkedAt:string}>}>{
@@ -164,7 +190,8 @@ export function withPemCounts<T extends Record<string,unknown>>(db:DatabaseSync,
 }
 
 export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
-  const { sql, params, cellSearch } = towerWhere(query);
+  const window = getNewEntryWindow(db);
+  const { sql, params, cellSearch } = towerWhere(query, window);
   const isMinimal = query.minimal === '1';
   const total = isMinimal ? 0 : Number(db.prepare(`SELECT COUNT(*) AS count FROM towers t WHERE ${sql}`).get(...params)!.count);
   const zoom = Number(query.zoom ?? 14);
@@ -231,7 +258,7 @@ export function getTowers(db: DatabaseSync, query: Record<string, unknown>) {
   const items = db
     .prepare(`SELECT t.* FROM towers t WHERE ${sql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`)
     .all(...params, ...orderParams, Math.floor(limit), Math.floor(offset))
-    .map(normalizeTower);
+    .map(row => normalizeTower(row, window));
 
   const cappedTotal = isMap ? Math.min(total, mapStationLimit) : total;
 

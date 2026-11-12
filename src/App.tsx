@@ -454,7 +454,8 @@ export default function App(){
                     onClick={() => setOnlyNewRadiolines(prev => !prev)}
                     title={lang === 'pl' ? 'Przełącz widok: tylko nowe radiolinie z ostatniego wykazu UKE' : 'Toggle only new microwave links from latest UKE registry'}
                   >
-                    {onlyNewRadiolines ? (lang === 'pl' ? '★ Tylko nowe (774)' : '★ Only new (774)') : (lang === 'pl' ? 'Wszystkie (38k)' : 'All (38k)')}
+                    {onlyNewRadiolines ? (lang === 'pl' ? '★ Tylko nowe' : '★ Only new') : (lang === 'pl' ? 'Wszystkie' : 'All')}
+                    {health?.stats.radiolines && ` (${new Intl.NumberFormat(lang === 'pl' ? 'pl-PL' : 'en', { notation: 'compact' }).format(onlyNewRadiolines ? health.stats.radiolines.new : health.stats.radiolines.total)})`}
                   </button>
                 </div>
               )}

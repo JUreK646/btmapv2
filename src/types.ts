@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark';
 export type View = 'map' | 'database' | 'stats' | 'kmz' | 'guides' | 'admin' | 'changelog' | 'coverage';
-export interface Band { tech:string; band:string; duplex?:'FDD'|'TDD'|string; status?:string; permit?:string; entryDate?:string; sectors?:number; azimuth?:number; azimuths?:number[]; mode?:'NSA'|'SA'; pci?:number; earfcn?:number; isIot?:boolean; cellType?:string; }
+export interface Band { tech:string; band:string; duplex?:'FDD'|'TDD'|string; status?:string; permit?:string; entryDate?:string; sectors?:number; azimuth?:number; azimuths?:number[]; mode?:'NSA'|'SA'; pci?:number; earfcn?:number; isIot?:boolean; cellType?:string; isNew?:boolean; }
 export interface Operator { name:string; color?:string; bands:Band[]; stationIds?:string[]; ukePermitId?:string; }
 export interface PemReportSummary { count:number; partial:boolean; checkedAt:string; }
 export interface Tower { id:string; stationId?:string; address:string; province:string; lat:number; lng:number; operators:Operator[]; source:'BTMAP' | 'UKE' | string; notes?:string; height?:number; mastType?:string; createdAt?:string; pemReportsByOperator?:Record<string,PemReportSummary>; azimuths?:number[]; isNew?:boolean; }
@@ -11,7 +11,7 @@ export interface User { id:string; email:string; nick:string; role:string; point
 export interface Comment { id:string; towerId:string; userNick:string; text:string; photoUrl?:string; createdAt:string; }
 export interface Photo { id:string; towerId:string; userNick:string; url:string; caption?:string; createdAt:string; }
 export interface Count { name:string; count:number; }
-export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[] }; metadata:Record<string,string>; }
+export interface Health { status:string; version:string; stats:{ towers:number; btmapTowers?:number; ukeTowers?:number; operators:Count[]; technologies:Count[]; provinces:Count[]; radiolines?:{ total:number; new:number } }; metadata:Record<string,string>; newEntries?:{ referenceDate:string; since:string; year:string }; }
 export interface Submission { id:string; type:string; status:string; createdAt:string; userNick?:string; data?:any; }
 export interface RadiolineChannel {
   dir: string;

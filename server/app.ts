@@ -6,7 +6,7 @@ import { resolve, basename } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import sharp from 'sharp';
-import { getTowers, normalizeTower,withPemCounts } from './query.ts';
+import { getNewEntryWindow, getTowers, normalizeTower,withPemCounts } from './query.ts';
 import { withAzimuths } from './azimuths.ts';
 import {createPemService,towerForPemOperator} from './pem.ts';
 import {createPemReportsService} from './pemReports.ts';
@@ -107,7 +107,11 @@ export function createApp(
     const btmapTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='BTMAP'");
     const ukeTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED' AND source='UKE'");
     const totalTowers=count("SELECT COUNT(*) AS count FROM towers WHERE status='APPROVED'");
-    const data={status:'ok',version:'2.0.3',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces},metadata};
+    // The isNew column is added by the radioline sync, so a database that never synced has none.
+    let radiolines={total:0,new:0};
+    try{const row=db.prepare('SELECT COUNT(*) AS total,COALESCE(SUM(isNew),0) AS fresh FROM radiolines').get()!;radiolines={total:Number(row.total),new:Number(row.fresh)};}
+    catch{radiolines={total:count('SELECT COUNT(*) AS count FROM radiolines'),new:0};}
+    const data={status:'ok',version:'2.0.3',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces,radiolines},metadata,newEntries:getNewEntryWindow(db)};
     cachedStats={at:Date.now(),data}; res.json(data);
   });
   app.get('/api/stats', (req, res) => {
@@ -212,7 +216,7 @@ export function createApp(
     if(!db.prepare("SELECT id FROM towers WHERE id=?  AND status='APPROVED'").get(String(req.params.id))) return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});
     next();
   });
-  app.get('/api/towers/:id',(req,res)=>{const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id)); if(!row)return res.status(404).json({error:'Nie znaleziono stacji.'});res.json(withAzimuths(db,withPemCounts(db,[normalizeTower(row)]))[0]);});
+  app.get('/api/towers/:id',(req,res)=>{const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id)); if(!row)return res.status(404).json({error:'Nie znaleziono stacji.'});res.json(withAzimuths(db,withPemCounts(db,[normalizeTower(row,getNewEntryWindow(db))]))[0]);});
   app.get('/api/towers/:id/pem-reports',async(req,res)=>{
     const row=db.prepare("SELECT * FROM towers WHERE id=? AND status='APPROVED' ").get(String(req.params.id));
     if(!row)return res.status(404).json({error:'Nie znaleziono stacji w bazie.'});

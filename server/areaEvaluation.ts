@@ -76,7 +76,7 @@ export async function evaluateAreaCoverage(
       AND lng BETWEEN ? AND ?
   `).all(minLat, maxLat, minLng, maxLng) as Record<string, unknown>[];
 
-  const towers = withPemCounts(db, rawRows.map(normalizeTower)) as unknown as Tower[];
+  const towers = withPemCounts(db, rawRows.map(row => normalizeTower(row))) as unknown as Tower[];
 
   // Group candidate stations by operator and evaluate in parallel
   const evaluations: OperatorEvaluation[] = await Promise.all(

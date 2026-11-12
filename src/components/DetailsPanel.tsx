@@ -243,10 +243,9 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                       const permitType = b.permit?.match(/\[([^\]]+)\]/)?.[1] || null;
                       const expMatch = b.permit?.match(/expires\s+(\d{4}-\d{2}-\d{2})/);
                       const wpisMatch = b.entryDate || b.permit?.match(/wpis\s+(\d{4}-\d{2}-\d{2})/)?.[1] || null;
-                      const isNewPermit = Boolean(
-                        (wpisMatch && wpisMatch >= '2026-10-01') ||
-                        (b.permit && (b.permit.includes('/26 [P]') || b.permit.includes('/26 [zmP]') || b.permit.includes('/26 ')))
-                      );
+                      // The server decides what is new, relative to the latest synced UKE registry.
+                      const isNewPermit = Boolean(b.isNew);
+                      const permitYear = b.permit?.match(/\/(\d{2})\s/)?.[1];
                       const expiryDate = expMatch
                         ? expMatch[1].startsWith('2099')
                           ? (isPl ? 'Bezterminowo' : 'Indefinite')
@@ -291,8 +290,8 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                                   <span className="cell-badge-type">[{permitType}]</span>
                                 )}
                                 {isNewPermit && (
-                                  <span className="cell-badge-new-2026" title={isPl ? 'Nowy wpis / pozwolenie BIP UKE (X–XI 2026)' : 'New BIP UKE entry / permit (Oct–Nov 2026)'}>
-                                    ★ {wpisMatch && wpisMatch >= '2026-10-01' ? wpisMatch : (isPl ? 'Nowe 2026' : 'New 2026')}
+                                  <span className="cell-badge-new-2026" title={isPl ? 'Nowy wpis / pozwolenie w rejestrze BIP UKE' : 'New BIP UKE registry entry / permit'}>
+                                    ★ {wpisMatch || (isPl ? `Nowe${permitYear ? ` 20${permitYear}` : ''}` : `New${permitYear ? ` 20${permitYear}` : ''}`)}
                                   </span>
                                 )}
                                 {b.status && (
@@ -419,9 +418,9 @@ export default function DetailsPanel({
       return m ? 2000 + parseInt(m[1], 10) : 0;
     }) || [])
     .reduce((max, y) => Math.max(max, y), 0);
-  const new2026PermitsCount = tower.operators
+  const newPermitsCount = tower.operators
     .flatMap(op => op.bands || [])
-    .filter(b => b.permit && (b.permit.includes('/26 [P]') || b.permit.includes('/26 [zmP]') || b.permit.includes('/26 '))).length;
+    .filter(b => b.isNew).length;
 
   return (
     <aside className="details-panel station-sheet" aria-labelledby="station-sheet-title">
@@ -445,9 +444,9 @@ export default function DetailsPanel({
               <Database size={12} aria-hidden="true" />
               {tower.source === 'BTMAP' ? t.detailsSourceBtmap : t.detailsSourceUke}
             </span>
-            {new2026PermitsCount > 0 && (
-              <span className="station-sheet-new-badge" title={isPl ? `${new2026PermitsCount} nowych pozwoleń UKE / Rejestr z 2026 roku` : `${new2026PermitsCount} new 2026 permits`}>
-                ★ {isPl ? `${new2026PermitsCount} nowych pozwoleń (2026)` : `${new2026PermitsCount} new permits (2026)`}
+            {newPermitsCount > 0 && (
+              <span className="station-sheet-new-badge" title={isPl ? `${newPermitsCount} nowych pozwoleń / wpisów w rejestrze UKE` : `${newPermitsCount} new UKE permits / registry entries`}>
+                ★ {isPl ? `${newPermitsCount} nowych pozwoleń` : `${newPermitsCount} new permits`}
               </span>
             )}
             {tower.operators.some(o => o.name === 'Orange' || o.name === 'T-Mobile') && (
