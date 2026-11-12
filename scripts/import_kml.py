@@ -55,6 +55,14 @@ for event, element in ET.iterparse(stream, events=('start', 'end')):
                     row['operators'].append(op)
                 if station_id not in op['stationIds']:
                     op['stationIds'].append(station_id)
+                # Antenna azimuths from the permit, whole degrees 0-359 (360 is the same direction as 0).
+                azimuths = set(op.get('azimuths', []))
+                for raw in field('Azimuths').split(','):
+                    digits = re.sub(r'[^\d.]', '', raw)
+                    if digits and 0 <= float(digits) <= 360:
+                        azimuths.add(round(float(digits)) % 360)
+                if azimuths:
+                    op['azimuths'] = sorted(azimuths)
                 for raw in field('Bands').split(','):
                     match = re.match(r'\s*([A-Za-z0-9]+)\s+(\d+)', raw)
                     if not match:

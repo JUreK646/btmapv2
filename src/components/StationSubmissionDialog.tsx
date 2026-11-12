@@ -714,7 +714,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     }
     const angles = ukeAzimuths.length > 0 ? ukeAzimuths : (activeSourceTower.azimuths || []);
     if (!angles.length) {
-      setSectorNotice('Dla tej stacji nie ma znanych azymutów (brak w wykazie UKE i w raportach SI2PEM). Wpisz je ręcznie na podstawie obserwacji w terenie.');
+      setSectorNotice('Dla tej stacji nie ma znanych azymutów (brak w pozwoleniach UKE i w raportach SI2PEM). Wpisz je ręcznie na podstawie obserwacji w terenie.');
       return;
     }
     const ukeSectors: SectorConfig[] = angles.slice(0, MAX_AZIMUTHS).map((az, i) => ({
@@ -723,7 +723,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
       freqs: sectors[i]?.freqs?.length ? sectors[i].freqs : [...ukeUniqueFreqs],
     }));
     applySectorsAndSyncCells(ukeSectors);
-    setSectorNotice(`Wczytano ${ukeSectors.length} ${plural(ukeSectors.length, 'sektor', 'sektory', 'sektorów')} ${ukeAzimuths.length > 0 ? 'z wykazu UKE' : activeSourceTower.azimuthsSource === 'si2pem' ? 'z raportu SI2PEM' : 'z danych stacji'} (${angles.join('°, ')}°).`);
+    setSectorNotice(`Wczytano ${ukeSectors.length} ${plural(ukeSectors.length, 'sektor', 'sektory', 'sektorów')} ${ukeAzimuths.length > 0 || activeSourceTower.azimuthsSource === 'uke' ? 'z pozwoleń UKE' : activeSourceTower.azimuthsSource === 'si2pem' ? 'z raportu SI2PEM' : 'z danych stacji'} (${angles.join('°, ')}°).`);
   };
 
   const handleLoadSi2pemSectors = async () => {

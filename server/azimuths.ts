@@ -5,10 +5,11 @@ import type { Tower } from '../src/types.ts';
  * Where a station's antenna azimuths come from:
  * - `si2pem`   – antenna table of an accredited SI2PEM measurement report (parsed PDF)
  * - `verified` – ground truth checked on site for a specific station
- * - `station`  – azimuths stored with the station record (UKE/KML import or a community submission)
+ * - `uke`      – azimuths the UKE registry holds for the station (permit KML or a registry file with an azimuth column)
+ * - `station`  – azimuths entered per cell in a community submission
  * - `unknown`  – no source has them; the list is empty. Directions are never guessed.
  */
-export type AzimuthSource = 'si2pem' | 'verified' | 'station' | 'unknown';
+export type AzimuthSource = 'si2pem' | 'verified' | 'uke' | 'station' | 'unknown';
 export interface TowerAzimuths { azimuths: number[]; source: AzimuthSource }
 
 // Known specific stations (e.g. from user screenshots or official ground truth audits)
@@ -51,12 +52,19 @@ export function getCachedPdfAzimuths(db: DatabaseSync): Map<string, number[]> {
   return map;
 }
 
-/** Azimuths recorded on the station itself: per operator (registry import) or per band/cell (community submission). */
+/** Azimuths the UKE registry holds for the station's operators (KML/registry import). */
+function ukeAzimuths(tower: Tower): number[] {
+  const values: unknown[] = [];
+  for (const op of Array.isArray(tower.operators) ? tower.operators : []) {
+    if (Array.isArray(op?.azimuths)) values.push(...op.azimuths);
+  }
+  return cleanAzimuths(values);
+}
+
+/** Azimuths recorded per band/cell on the station record (community submission). */
 function stationRecordAzimuths(tower: Tower): number[] {
   const values: unknown[] = [];
   for (const op of Array.isArray(tower.operators) ? tower.operators : []) {
-    const opAzimuths = (op as { azimuths?: unknown }).azimuths;
-    if (Array.isArray(opAzimuths)) values.push(...opAzimuths);
     for (const band of Array.isArray(op?.bands) ? op.bands : []) {
       if (Array.isArray(band?.azimuths)) values.push(...band.azimuths);
       else if (band?.azimuth !== undefined) values.push(band.azimuth);
@@ -67,7 +75,8 @@ function stationRecordAzimuths(tower: Tower): number[] {
 
 /**
  * Resolves the antenna azimuths for a given tower from real sources only:
- * 1. station-specific ground truth, 2. parsed SI2PEM reports, 3. azimuths stored with the station.
+ * 1. station-specific ground truth, 2. parsed SI2PEM reports (measured on site), 3. the UKE registry,
+ * 4. azimuths entered in a community submission.
  * When none of them has data the result is an empty list marked `unknown`.
  */
 export function resolveTowerAzimuths(tower: Tower, pdfMap: Map<string, number[]>): TowerAzimuths {
@@ -76,6 +85,9 @@ export function resolveTowerAzimuths(tower: Tower, pdfMap: Map<string, number[]>
 
   for (const id of ids) if (KNOWN_STATION_AZIMUTHS[id]) return { azimuths: KNOWN_STATION_AZIMUTHS[id], source: 'verified' };
   for (const id of ids) if (pdfMap.has(id)) return { azimuths: pdfMap.get(id)!, source: 'si2pem' };
+
+  const registry = ukeAzimuths(tower);
+  if (registry.length > 0) return { azimuths: registry, source: 'uke' };
 
   const recorded = stationRecordAzimuths(tower);
   if (recorded.length > 0) return { azimuths: recorded, source: 'station' };

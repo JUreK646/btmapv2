@@ -31,8 +31,17 @@ test('azimuths come from SI2PEM reports, verified ground truth or the station re
   ]}]});
   assert.deepEqual(resolveTowerAzimuths(submitted, none), {azimuths: [0, 120, 240], source: 'station'});
 
-  const imported = tower({operators: [{name: 'Plus', bands: [{tech: 'GSM', band: '900', azimuths: [90, 210]}], azimuths: [330, 90]} as Tower['operators'][number]]});
-  assert.deepEqual(resolveTowerAzimuths(imported, none), {azimuths: [90, 210, 330], source: 'station'});
+  const perBand = tower({source: 'BTMAP', operators: [{name: 'Plus', bands: [{tech: 'GSM', band: '900', azimuths: [210, 90]}]}]});
+  assert.deepEqual(resolveTowerAzimuths(perBand, none), {azimuths: [90, 210], source: 'station'});
+
+  // UKE permit azimuths are stored per operator; co-located operators are combined.
+  const fromUke = tower({operators: [
+    {name: 'Orange', bands: [{tech: 'LTE', band: '800'}], azimuths: [330, 90]},
+    {name: 'T-Mobile', bands: [{tech: 'LTE', band: '1800', azimuth: 45}], azimuths: [90, 210]},
+  ]});
+  assert.deepEqual(resolveTowerAzimuths(fromUke, none), {azimuths: [90, 210, 330], source: 'uke'});
+  // A measured SI2PEM report still wins over the permit.
+  assert.deepEqual(resolveTowerAzimuths(fromUke, pdf), {azimuths: [20, 140, 260], source: 'si2pem'});
 
   // Out-of-range and non-numeric values are dropped rather than repaired.
   const messy = tower({operators: [{name: 'Play', bands: [{tech: 'LTE', band: '1800', azimuth: 400}, {tech: 'LTE', band: '800', azimuth: Number.NaN}]}]});

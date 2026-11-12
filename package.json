@@ -38,7 +38,8 @@
     "sync:uke": "node --experimental-strip-types scripts/sync_uke.ts",
     "sync:si2pem": "node --experimental-strip-types scripts/sync_si2pem.ts",
     "sync:radiolines": "node --experimental-strip-types scripts/sync_radiolines.ts",
-    "import:kml": "python scripts/import_kml.py"
+    "import:kml": "python scripts/import_kml.py",
+    "import:azimuths": "node --experimental-strip-types scripts/import_kml_azimuths.ts"
   },
   "dependencies": {
     "@fontsource/manrope": "^5.2.8",

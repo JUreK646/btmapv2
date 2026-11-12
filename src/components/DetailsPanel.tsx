@@ -422,7 +422,9 @@ export default function DetailsPanel({
     ? (isPl ? 'z raportu SI2PEM' : 'from SI2PEM report')
     : tower.azimuthsSource === 'verified'
     ? (isPl ? 'zweryfikowane w terenie' : 'verified on site')
-    : (isPl ? 'z danych stacji' : 'from station record');
+    : tower.azimuthsSource === 'uke'
+    ? (isPl ? 'z pozwoleń UKE' : 'from UKE permits')
+    : (isPl ? 'ze zgłoszenia terenowego' : 'from field submission');
   const newPermitsCount = tower.operators
     .flatMap(op => op.bands || [])
     .filter(b => b.isNew).length;
@@ -574,7 +576,7 @@ export default function DetailsPanel({
             </div>
           )}
           {tower.azimuthsSource === 'unknown' && (
-            <div className="station-azimuths-group" title={isPl ? 'Azymuty pokazujemy tylko wtedy, gdy pochodzą z raportu SI2PEM, wykazu lub zgłoszenia terenowego. Nie są szacowane.' : 'Azimuths are shown only when they come from an SI2PEM report, the registry or a field submission. They are never estimated.'}>
+            <div className="station-azimuths-group" title={isPl ? 'Azymuty pokazujemy tylko wtedy, gdy pochodzą z raportu SI2PEM, pozwoleń UKE lub zgłoszenia terenowego. Nie są szacowane.' : 'Azimuths are shown only when they come from an SI2PEM report, UKE permits or a field submission. They are never estimated.'}>
               <Compass size={11} aria-hidden="true" />
               <small style={{ opacity: 0.75 }}>{isPl ? 'Azymuty: brak danych' : 'Azimuths: no data'}</small>
             </div>

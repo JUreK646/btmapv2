@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import readXlsxFile from 'read-excel-file/node';
 import { operatorColor, operatorName as canonicalOperatorName } from '../shared/operators.ts';
 import { ensureRegistrySnapshot, recordRegistrySnapshot } from './stats.ts';
+import { carryOverAzimuths, normalizeAzimuths } from './kmlAzimuths.ts';
 
 const BIP_UKE_URL = 'https://bip.uke.gov.pl/pozwolenia-radiowe/wykaz-pozwolen-radiowych-tresci/stacje-gsm-umts-lte-5gnr-oraz-cdma,12,0.html';
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -175,6 +176,7 @@ type StationEntry = {
     color: string;
     stationIds: string[];
     bands: { tech: string; band: string; status: string; permit: string }[];
+    azimuths?: number[];
   }[];
 };
 
@@ -209,6 +211,8 @@ export async function parseUkeXlsx(filePath: string, defaultTech: string, defaul
   const locCol = col('lokalizacja');
   const idCol = col('idstacji') >= 0 ? col('idstacji') : col('id stacji');
   const terytCol = col('teryt');
+  // Not every registry file has antenna azimuths; when a column is present they are kept with the operator.
+  const azimuthCol = col('azymut');
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -275,6 +279,11 @@ export async function parseUkeXlsx(filePath: string, defaultTech: string, defaul
 
     if (stationId && !op.stationIds.includes(stationId)) {
       op.stationIds.push(stationId);
+    }
+
+    if (azimuthCol >= 0 && row[azimuthCol] !== null && row[azimuthCol] !== undefined) {
+      const azimuths = normalizeAzimuths([...(op.azimuths || []), ...String(row[azimuthCol]).split(/[;,/|\s]+/)]);
+      if (azimuths.length > 0) op.azimuths = azimuths;
     }
 
     const bandEntry = {
@@ -389,7 +398,11 @@ export async function syncUkeWykaz(db: DatabaseSync, options: { force?: boolean 
           operators = excluded.operators
       `);
 
+      const storedOperators = db.prepare('SELECT operators FROM towers WHERE id = ?');
       for (const st of stations.values()) {
+        // The sync overwrites operators; azimuths this registry does not carry stay with the station.
+        const stored = storedOperators.get(st.id) as { operators?: string } | undefined;
+        if (stored?.operators) carryOverAzimuths(st.operators, stored.operators);
         insertOrUpdate.run(
           st.id,
           st.stationId,
