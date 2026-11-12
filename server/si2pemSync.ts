@@ -4,8 +4,8 @@ import {SI2PEM_REFRESH_MS} from '../shared/pemPlans.ts';
 import {createPemPlansService,prunePlans} from './pemPlans.ts';
 import {createPemReportsService} from './pemReports.ts';
 
-export function createSi2pemSync(db:DatabaseSync){
-  const plans=createPemPlansService(db),reports=createPemReportsService(fetch,db);
+export function createSi2pemSync(db:DatabaseSync,fetcher:typeof fetch=fetch){
+  const plans=createPemPlansService(db,fetcher),reports=createPemReportsService(fetcher,db);
   let timer:ReturnType<typeof setInterval>|undefined,running:Promise<void>|null=null,stopped=false,lastReportAttempt=0;
   async function run(){
     if(stopped||running)return running;
@@ -13,7 +13,7 @@ export function createSi2pemSync(db:DatabaseSync){
       try {
       prunePlans(db);
       if(plans.due())try{
-        console.log('[SI2PEM Sync] Rozpoczynanie cyklicznego odświeżania harmonogramu SI2PEM (co 2h)...');
+        console.log(`[SI2PEM Sync] Odświeżanie harmonogramu pomiarów SI2PEM (co ${SI2PEM_REFRESH_MS/3600000} h)...`);
         await plans.sync();
       }catch(e){console.error('SI2PEM: synchronizacja harmonogramu nie powiodła się.',(e as Error).message);}
       if(Date.now()-lastReportAttempt<15*60000)return;
@@ -37,7 +37,7 @@ export function createSi2pemSync(db:DatabaseSync){
       void run();
       timer=setInterval(()=>void run(),60000);
       timer.unref();
-      console.log('[SI2PEM Sync] Usługa automatycznego odświeżania pomiarów SI2PEM co 2h została uruchomiona.');
+      console.log(`[SI2PEM Sync] Usługa odświeżania pomiarów SI2PEM została uruchomiona (harmonogram co ${SI2PEM_REFRESH_MS/3600000} h, sprawdzanie co minutę).`);
     },
     async stop(){
       stopped=true;
@@ -49,6 +49,16 @@ export function createSi2pemSync(db:DatabaseSync){
         db.prepare("DELETE FROM metadata WHERE key IN ('pemPlansCheckedAt','pemPlansAttemptAt')").run();
       }
       return run();
+    },
+    /**
+     * Downloads the measurement schedule now and reports the outcome to the caller: unlike the
+     * background cycle, a failure is thrown instead of only being logged.
+     * Returns false when the saved schedule is still fresh and `force` was not given.
+     */
+    async syncPlans(force=false){
+      if(!force&&!plans.due())return false;
+      await plans.sync();
+      return true;
     }
   };
 }

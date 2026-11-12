@@ -39,29 +39,32 @@ export function createPemPlansService(db:DatabaseSync,fetcher:typeof fetch=fetch
       const text=await response.text();if(text.length>2_000_000)throw new Error('Zbyt duża odpowiedź SI2PEM.');
       const data=JSON.parse(text) as {count:unknown;results:unknown[]};
       if(!Number.isSafeInteger(data.count)||Number(data.count)<0||!Array.isArray(data.results)||data.results.length>PAGE_SIZE)throw new Error('Nieprawidłowy harmonogram SI2PEM.');
-      let validCount=0;
+      let expired=0;
       for(const row of data.results){
         const item=parsePlan(row,cutoff);
-        if(item){
-          items.set(item.id,item);
-          validCount++;
+        if(item)items.set(item.id,item);
+        else{
+          const dateTo=planDate((row as Record<string,unknown>|null)?.date_to);
+          if(dateTo&&dateTo<cutoff)expired++;
         }
       }
-      return {total:Number(data.count),validCount,resultsLen:data.results.length};
+      // "All expired" is about dates only. A page of entries rejected for another reason (status, missing
+      // coordinates) says nothing about how far back the list has reached.
+      return {total:Number(data.count),resultsLen:data.results.length,allExpired:data.results.length>0&&expired===data.results.length};
     };
 
     const first=await readPage(1);
     const count=first.total;
     const pages=Math.min(Math.ceil(count/PAGE_SIZE),MAX_PAGES);
 
-    let emptyStreak=first.validCount===0?1:0;
-    for(let p=2;p<=pages&&emptyStreak<2;p++){
+    // SI2PEM lists the newest measurements first, so once two pages in a row hold only expired entries the
+    // rest is older still and is not downloaded. That shortcut is trusted only after current entries have
+    // been seen: if the very first page is already all expired, the order may have changed and every page is read.
+    let sawCurrent=!first.allExpired&&first.resultsLen>0,expiredStreak=0;
+    for(let p=2;p<=pages&&!(sawCurrent&&expiredStreak>=2);p++){
       const res=await readPage(p);
-      if(res.resultsLen===0||res.validCount===0){
-        emptyStreak++;
-      }else{
-        emptyStreak=0;
-      }
+      if(res.resultsLen===0||res.allExpired)expiredStreak++;
+      else{expiredStreak=0;sawCurrent=true;}
     }
 
     db.exec('BEGIN');
