@@ -1,3 +1,4 @@
+import {Fragment} from 'react';
 import {Check,ChevronDown,Compass,Database,FileText,Layers,Radio} from 'lucide-react';
 import type {Filters as FilterState} from '../types';
 import {BANDS,OPERATORS,PROVINCES} from '../lib/constants';
@@ -40,19 +41,39 @@ export default function Filters({
   onOnlyNewRadiolinesChange?:(enabled:boolean)=>void;
 }){
   const {t} = useI18n();
-  const toggle=(key:'operators'|'techs'|'bands',value:string)=>onChange({
+  // The 5G mode is only recorded for BTMap cells, so the switch exists only for that source with 5G NR selected.
+  // Leaving that state clears the mode, so no hidden filter keeps narrowing the results.
+  const modeAvailable = (f: FilterState) => f.source === 'BTMAP' && f.techs.includes('5G');
+  const emit = (next: FilterState) => onChange(!modeAvailable(next) && next.modes5g?.length ? { ...next, modes5g: [] } : next);
+  const toggle=(key:'operators'|'techs'|'bands',value:string)=>emit({
     ...filters,
     [key]:filters[key].includes(value)?filters[key].filter(item=>item!==value):[...filters[key],value],
   });
 
-  const modeFilterUnavailable = filters.source === 'UKE';
+  const showModes = modeAvailable(filters);
   const toggle5gMode = (mode: 'NSA' | 'SA') => {
     const current = filters.modes5g || [];
     const next = current.includes(mode)
       ? current.filter(m => m !== mode)
       : [...current, mode];
-    onChange({ ...filters, modes5g: next });
+    emit({ ...filters, modes5g: next });
   };
+  const modeRow = <div className="mode-5g-row" role="group" aria-label={t.filter5gMode} title={t.filter5gModeDesc}>
+    <span className="mode-5g-row-label">{t.filter5gMode}</span>
+    <div className="mode-5g-segment">
+      {(['NSA', 'SA'] as const).map(mode => {
+        const selected = Boolean(filters.modes5g?.includes(mode));
+        return <button
+          key={mode}
+          type="button"
+          className={`mode-5g-chip ${selected ? 'is-selected' : ''}`}
+          aria-pressed={selected}
+          onClick={() => toggle5gMode(mode)}
+          title={mode === 'SA' ? t.filter5gModeSaDesc : t.filter5gModeNsaDesc}
+        >{mode}</button>;
+      })}
+    </div>
+  </div>;
 
   return <div className="station-filters">
     {(onPemChange || onAzimuthsChange || onRadiolinesChange) && (
@@ -93,7 +114,7 @@ export default function Filters({
         <button
           type="button"
           className={`filter-option ${(!filters.source || filters.source === 'ALL') ? 'is-selected' : ''}`}
-          onClick={() => onChange({ ...filters, source: 'ALL' })}
+          onClick={() => emit({ ...filters, source: 'ALL' })}
           aria-pressed={!filters.source || filters.source === 'ALL'}
           title={t.filterSourceAllDesc}
         >
@@ -103,7 +124,7 @@ export default function Filters({
         <button
           type="button"
           className={`filter-option ${filters.source === 'BTMAP' ? 'is-selected' : ''}`}
-          onClick={() => onChange({ ...filters, source: 'BTMAP' })}
+          onClick={() => emit({ ...filters, source: 'BTMAP' })}
           aria-pressed={filters.source === 'BTMAP'}
           title={t.filterSourceDbDesc}
         >
@@ -113,49 +134,12 @@ export default function Filters({
         <button
           type="button"
           className={`filter-option ${filters.source === 'UKE' ? 'is-selected' : ''}`}
-          // The UKE registry has no 5G mode, so a mode filter would leave the UKE view empty.
-          onClick={() => onChange({ ...filters, source: 'UKE', modes5g: [] })}
+          onClick={() => emit({ ...filters, source: 'UKE' })}
           aria-pressed={filters.source === 'UKE'}
           title={t.filterSourceUkeDesc}
         >
           <FileText size={13} />
           <span>{t.filterSourceUke}</span>
-        </button>
-      </div>
-    </fieldset>
-
-    <fieldset className="filter-group filter-group-5g-mode">
-      <legend>
-        {t.filter5gMode}{' '}
-        <span>
-          {filters.modes5g?.length
-            ? filters.modes5g.join(', ')
-            : t.filterAll}
-        </span>
-      </legend>
-      <p className="pem-layer-status">{modeFilterUnavailable ? t.filter5gModeUkeHint : t.filter5gModeDesc}</p>
-      <div className="filter-options mode-5g-filters">
-        <button
-          type="button"
-          className={`filter-option ${filters.modes5g?.includes('NSA') ? 'is-selected' : ''}`}
-          aria-pressed={Boolean(filters.modes5g?.includes('NSA'))}
-          onClick={() => toggle5gMode('NSA')}
-          title={t.filter5gModeNsaDesc}
-          disabled={modeFilterUnavailable}
-        >
-          <span className="mode-5g-tag">NSA</span>
-          <span>{t.filter5gModeNsa}</span>
-        </button>
-        <button
-          type="button"
-          className={`filter-option ${filters.modes5g?.includes('SA') ? 'is-selected' : ''}`}
-          aria-pressed={Boolean(filters.modes5g?.includes('SA'))}
-          onClick={() => toggle5gMode('SA')}
-          title={t.filter5gModeSaDesc}
-          disabled={modeFilterUnavailable}
-        >
-          <span className="mode-5g-tag">SA</span>
-          <span>{t.filter5gModeSa}</span>
         </button>
       </div>
     </fieldset>
@@ -176,10 +160,14 @@ export default function Filters({
     <fieldset className="filter-group">
       <legend>{t.filterTechs} <span>{filters.techs.length ? t.filterSelectedCount(filters.techs.length) : t.filterAllFmt}</span></legend>
       <div className="filter-options technology-filters">
-        {technologies.map(technology=><button type="button" key={technology.value} className={`filter-option technology-filter ${filters.techs.includes(technology.value)?'is-selected':''}`} aria-label={`Technologia ${technology.generation} ${technology.label}`.trim()} aria-pressed={filters.techs.includes(technology.value)} onClick={()=>toggle('techs',technology.value)}>
-          {technology.generation&&<span className="filter-generation" aria-hidden="true">{technology.generation}</span>}
-          <span>{technology.label}</span>
-        </button>)}
+        {technologies.map((technology,index)=><Fragment key={technology.value}>
+          <button type="button" className={`filter-option technology-filter ${filters.techs.includes(technology.value)?'is-selected':''}`} aria-label={`Technologia ${technology.generation} ${technology.label}`.trim()} aria-pressed={filters.techs.includes(technology.value)} onClick={()=>toggle('techs',technology.value)}>
+            {technology.generation&&<span className="filter-generation" aria-hidden="true">{technology.generation}</span>}
+            <span>{technology.label}</span>
+          </button>
+          {/* Directly under the row that holds 5G NR (the first row of the grid). */}
+          {showModes&&index===2&&modeRow}
+        </Fragment>)}
       </div>
     </fieldset>
 

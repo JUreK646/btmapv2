@@ -219,43 +219,62 @@
 }
 
 
-/* 5G NSA / SA mode filter (BTMap community database only) */
-.filter-group-5g-mode {
-  animation: fadeInFilter 0.2s ease-out;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--surface-alt) 60%, transparent);
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-}
-.mode-5g-filters {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  width: 100%;
-}
-.mode-5g-filters .filter-option {
-  width: 100%;
-  padding: 7px 10px;
-  gap: 7px;
-  justify-content: center;
-  font-size: 11px;
-}
-.mode-5g-tag {
-  display: inline-flex;
+/* 5G NSA / SA switch: a sub-row of the technology grid, under the row holding 5G NR.
+   Shown only for the BTMap source with 5G NR selected. */
+.mode-5g-row {
+  position: relative;
+  grid-column: 1 / -1;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  font-weight: 800;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: var(--surface);
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  animation: fadeInFilter 0.18s ease-out;
+}
+/* Notch pointing up at the 5G NR button (centre of the first of three columns). */
+.mode-5g-row::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: calc(100% / 6 - 5px);
+  width: 10px;
+  height: 10px;
+  background: var(--surface-alt);
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+.mode-5g-row-label {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--muted);
-  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
-.is-selected .mode-5g-tag {
-  background: var(--accent);
-  color: var(--on-accent);
+.mode-5g-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface);
 }
+.mode-5g-chip {
+  min-width: 48px;
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  transition: background-color .15s ease, color .15s ease;
+}
+.mode-5g-chip:hover { color: var(--text); }
+.mode-5g-chip.is-selected { background: var(--accent); color: var(--on-accent); }
+.mode-5g-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @keyframes fadeInFilter {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
