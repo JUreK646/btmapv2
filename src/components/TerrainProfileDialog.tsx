@@ -13,7 +13,6 @@ import {
   Radio,
   Compass,
   Activity,
-  Layers,
   Trees,
   AlertTriangle,
   FileX,
@@ -1109,10 +1108,12 @@ export default function TerrainProfileDialog({
           <span className="tp-badge-icon">
             <Mountain size={17} />
           </span>
-          <div className="tp-header-titles">
-            <span className="tp-title">{isEn ? 'LiDAR Terrain Profile' : 'Przekrój terenu LiDAR'}</span>
-            <span className="tp-operator-badge" style={{ background: opColor }}>
-              {primaryOp}
+          <div className="tp-header-titles is-stacked">
+            <span className="tp-title-row">
+              <span className="tp-title">{isEn ? 'LiDAR Terrain Profile' : 'Przekrój terenu LiDAR'}</span>
+              <span className="tp-operator-badge" style={{ background: opColor }}>
+                {primaryOp}
+              </span>
             </span>
             <span className="tp-station-meta">
               <strong>{tower.stationId || tower.id}</strong> · {tower.address}
@@ -1122,10 +1123,6 @@ export default function TerrainProfileDialog({
         </div>
 
         <div className="tp-header-CenterPills">
-          <span className="tp-top-pill">
-            <Compass size={13} />
-            <strong>{formatPl(profile?.distanceKm ?? directDistanceKm, 2)} km</strong> · {formatPl(profile?.azimuthDeg ?? targetBearing, 1)}° ({getCardinalDirection(profile?.azimuthDeg ?? targetBearing)})
-          </span>
           {pemLoading ? (
             <span className="tp-top-pill status-loading">
               <RefreshCw size={12} className="tp-spin" />
@@ -1149,12 +1146,6 @@ export default function TerrainProfileDialog({
                 : (isEn ? 'Clear LOS ray' : 'Czysty promień LOS')}
             </span>
           ) : null}
-          {!pemNotFound && (
-            <span className="tp-top-pill source-pill">
-              <Layers size={13} />
-              {loading ? (isEn ? 'Fetching GUGiK LiDAR…' : 'Pobieranie LiDAR GUGiK…') : profile?.source || 'GUGiK LiDAR'}
-            </span>
-          )}
         </div>
 
         <div className="tp-header-right">
@@ -1245,33 +1236,8 @@ export default function TerrainProfileDialog({
             {/* Left Column: Link Status, Sector & Band Selection, Receiver Config */}
             <section className="tp-sidebar">
               {/* Link Status Card */}
-              {loading ? (
-                <div className="tp-status-card calculating">
-                  <div className="tp-status-head">
-                    <span className="tp-status-badge-icon calculating">
-                      <RefreshCw size={20} className="tp-spin" />
-                    </span>
-                    <div className="tp-status-text">
-                      <h4>Obliczanie profilu terenu i przeszkód…</h4>
-                      <p className="tp-status-sub">
-                        Odległość {formatPl(directDistanceKm, 2)} km · kierunek {formatPl(targetBearing, 1)}°
-                      </p>
-                    </div>
-                  </div>
-                  <div className="tp-status-details">
-                    <div className="tp-status-metric calculating">
-                      <span>Status toru:</span>
-                      <strong>Analiza linii wzroku (LOS) i strefy Fresnela…</strong>
-                    </div>
-                    <div className="tp-status-note">
-                      <Info size={13} className="tp-notice-icon" />
-                      <span>
-                        Pobieranie dokładnych rzędnych gruntu (NMT 1 m) oraz pokrycia koronami drzew i budynkami (NMPT) z państwowych zasobów Geoportalu GUGiK.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : profile ? (
+              {/* While loading, the chart shows the progress; the verdict card appears with the result. */}
+              {!loading && profile ? (
                 <div className={`tp-status-card ${profile.isObstructed ? 'obstructed' : 'clear'}`}>
                   <div className="tp-status-head">
                     <span className={`tp-status-badge-icon ${profile.isObstructed ? 'error' : 'ok'}`}>
@@ -1531,18 +1497,13 @@ export default function TerrainProfileDialog({
                 </span>
               </div>
 
-              <div className="tp-head-right-badges">
-                {loading ? (
-                  <span className="tp-surface-loading-pill">
-                    <RefreshCw size={12} className="tp-spin" />
-                    <span>{isEn ? 'Fetching LiDAR from Geoportal…' : 'Pobieranie LiDAR z Geoportalu…'}</span>
-                  </span>
-                ) : (
+              {!loading && profile && (
+                <div className="tp-head-right-badges">
                   <span className="tp-scale-tag">
-                    Skala pionowa ×{exaggeration} · krok {profile?.stepM || 15} m
+                    Skala pionowa ×{exaggeration} · krok {profile.stepM || 15} m
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Interactive LiDAR Canvas Elevation Chart */}
@@ -1550,10 +1511,12 @@ export default function TerrainProfileDialog({
               {loading && (
                 <div className="tp-chart-loading">
                   <div className="tp-chart-loading-inner">
-                    <RefreshCw size={28} className="tp-spin" />
-                    <span className="tp-chart-loading-title">Trwa analiza profilu wysokościowego LiDAR…</span>
+                    <span className="tp-loading-ring"><RefreshCw size={20} className="tp-spin" /></span>
+                    <span className="tp-chart-loading-title">{isEn ? 'Analysing the LiDAR profile…' : 'Analiza profilu LiDAR…'}</span>
                     <span className="tp-chart-loading-sub">
-                      Pobieranie rzeźby gruntu (NMT 1 m) oraz koron drzew i budynków (NMPT) z państwowych zasobów Geoportalu GUGiK
+                      {isEn
+                        ? `Ground (NMT 1 m) and trees & buildings (NMPT) from GUGiK · ${formatPl(directDistanceKm, 2)} km, ${formatPl(targetBearing, 1)}°`
+                        : `Grunt (NMT 1 m) oraz drzewa i budynki (NMPT) z Geoportalu GUGiK · ${formatPl(directDistanceKm, 2)} km, kierunek ${formatPl(targetBearing, 1)}°`}
                     </span>
                   </div>
                 </div>
@@ -1663,161 +1626,108 @@ export default function TerrainProfileDialog({
               )}
             </div>
 
-            {/* 5-Card Statistics Row */}
-            <div className="tp-stats-grid">
-              <div className="tp-stats-card">
-                <span className="tp-stats-label">
-                  <Compass size={13} /> {isEn ? 'Distance' : 'Dystans'}
-                </span>
-                <strong className="tp-stats-value">
-                  {profile ? `${formatPl(profile.distanceKm, 2)} km` : `${formatPl(directDistanceKm, 2)} km`}
-                </strong>
-                <small className="tp-stats-sub">
-                  {isEn ? 'Azimuth' : 'Azymut'} {formatPl(profile?.azimuthDeg ?? targetBearing, 1)}° ({getCardinalDirection(profile?.azimuthDeg ?? targetBearing)})
-                </small>
-              </div>
-
-              <div className="tp-stats-card">
-                <span className="tp-stats-label">
-                  <Mountain size={13} /> {isEn ? 'Elevation diff' : 'Przewyższenie'}
-                </span>
-                <strong className="tp-stats-value">
-                  {!loading && profile ? `${profile.rxElevation - profile.txElevation >= 0 ? '+' : ''}${formatPl(profile.rxElevation - profile.txElevation, 1)} m` : '—'}
-                </strong>
-                <small className="tp-stats-sub">
-                  {!loading && profile ? `${formatPl(profile.txElevation, 0)} m → ${formatPl(profile.rxElevation, 0)} m n.p.m.` : 'Różnica terenu'}
-                </small>
-              </div>
-
-              <div className="tp-stats-card">
-                <span className="tp-stats-label">
-                  <Radio size={13} /> {isEn ? 'TX Mast' : 'Maszt TX'}
-                </span>
-                <strong className="tp-stats-value">
-                  {formatPl(activeAntenna.height, 1)} m n.p.t.
-                </strong>
-                <small className="tp-stats-sub">
-                  {tower.stationId || 'BTS'} · tilt {activeAntenna.tilt}°
-                </small>
-              </div>
-
-              <div className="tp-stats-card">
-                <span className="tp-stats-label">
-                  <Crosshair size={13} /> {isEn ? 'RX Receiver' : 'Odbiornik RX'}
-                </span>
-                <strong className="tp-stats-value">
-                  {formatPl(rxHeight, 1)} m n.p.t.
-                </strong>
-                <small className="tp-stats-sub">
-                  Punkt pomiarowy
-                </small>
-              </div>
-
-              <div
-                className={`tp-stats-card tp-stats-card-los ${
-                  loading ? 'is-loading' : profile?.isObstructed ? 'is-obstructed' : 'is-clear'
-                }`}
-              >
-                <span className="tp-stats-label">
-                  {loading ? (
-                    <RefreshCw size={13} className="tp-spin" />
-                  ) : profile?.isObstructed ? (
-                    <XCircle size={13} />
-                  ) : (
-                    <CheckCircle2 size={13} />
-                  )}
-                  {isEn ? 'LOS Obstacle' : 'Przeszkoda LOS'}
-                </span>
-                <strong
-                  className={`tp-stats-value ${
-                    loading ? '' : profile?.isObstructed ? 'tp-text-err' : 'tp-text-ok'
-                  }`}
-                >
-                  {loading
-                    ? 'Analiza…'
-                    : profile?.isObstructed
-                    ? `Kolizja -${formatPl(profile.obstructionMaxM, 1)} m`
-                    : (isEn ? 'Clear LOS' : 'Czysty LOS')}
-                </strong>
-                <small className="tp-stats-sub">
-                  {loading
-                    ? 'Pobieranie LiDAR…'
-                    : profile?.isObstructed
-                    ? `${formatPl(profile.obstructionDistKm, 2)} km od BTS (${profile.isClutterObstructed && !profile.isTerrainObstructed ? 'Lasy/budynki' : 'Grunt'})`
-                    : (isEn ? '100% clear zone' : '100% strefa wolna')}
-                </small>
-              </div>
-            </div>
-
-            {/* 4-Card Telemetry Strip */}
-            <div className="tp-telemetry-grid">
-              <div className="tp-telemetry-card">
-                <span className="tp-tel-label">
-                  <Activity size={13} /> Tłumienie trasy (ITU-R)
-                </span>
-                <strong className="tp-tel-value">
-                  {!loading && profile ? `${formatPl(profile.pathLossDb, 1)} dB` : '—'}
-                </strong>
-                <small className="tp-tel-sub">
-                  Pasmo {activeAntenna.bandFreq} MHz · FSPL + dyfrakcja
-                </small>
-              </div>
-
-              <div className="tp-telemetry-card">
-                <span className="tp-tel-label">
-                  <Radio size={13} /> Natężenie pola (1 kW ERP)
-                </span>
-                <strong className="tp-tel-value">
-                  {!loading && profile ? `${formatPl(profile.fieldStrengthDbUvM, 1)} dBµV/m` : '—'}
-                </strong>
-                <small className="tp-tel-sub">
-                  Wartość odniesienia w punkcie odbioru
-                </small>
-              </div>
-
-              <div className={`tp-telemetry-card ${profile?.isBacklobe ? 'is-backlobe' : ''}`}>
-                <span className="tp-tel-label">
-                  <Compass size={13} /> {profile?.isBacklobe ? 'Listek wsteczny (Tył)' : 'Wiązka anteny'}
-                </span>
-                <strong className={`tp-tel-value ${profile?.isBacklobe ? 'tp-val-warn' : ''}`}>
-                  {!loading && profile?.horizontalDeviationDeg !== null && profile?.horizontalDeviationDeg !== undefined
-                    ? `${formatPl(profile.horizontalDeviationDeg, 1)}° off-axis`
-                    : '—'}
-                </strong>
-                <small className="tp-tel-sub">
-                  {!loading && profile?.antennaLossDb !== null && profile?.antennaLossDb !== undefined
-                    ? `Tłumienie anteny: -${formatPl(profile.antennaLossDb, 1)} dB${profile.isBacklobe ? ' (F/B)' : ''}`
-                    : `Pion: ${profile?.verticalDeviationDeg !== null && profile?.verticalDeviationDeg !== undefined ? `${formatPl(profile.verticalDeviationDeg, 1)}°` : '—'} (tilt ${activeAntenna.tilt}°)`}
-                </small>
-              </div>
-
-              <div className="tp-telemetry-card">
-                <span className="tp-tel-label">
-                  <Trees size={13} /> Źródło danych wysokościowych
-                </span>
-                <strong className="tp-tel-value tp-tel-source">
-                  {loading
-                    ? 'Pobieranie…'
-                    : profile?.nmptAvailable
-                    ? 'GUGiK NMT + NMPT'
-                    : profile?.source || 'GUGiK NMT (1 m)'}
-                </strong>
-                <small className="tp-tel-sub">
-                  {pemReport?.downloadUrl ? (
-                    <a
-                      href={pemReport.downloadUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="tp-pem-link"
-                    >
-                      Raport SI2PEM ({pemReport.date || 'PDF'}) <ArrowUpRight size={11} />
-                    </a>
-                  ) : (
-                    <span>Geoportal PZGiK (EPSG:2180)</span>
-                  )}
-                </small>
-              </div>
-            </div>
+            {/* One grid of link metrics; values still being computed show a placeholder bar. */}
+            {(() => {
+              const ready = !loading && Boolean(profile);
+              const skel = <span className="tp-skel" aria-hidden="true" />;
+              const elevDiff = profile ? profile.rxElevation - profile.txElevation : 0;
+              const metrics: Array<{ key: string; icon: React.ReactNode; label: string; value: React.ReactNode; sub: React.ReactNode; tone?: 'ok' | 'err' | 'warn' }> = [
+                {
+                  key: 'distance',
+                  icon: <Compass size={13} />,
+                  label: isEn ? 'Distance' : 'Dystans',
+                  value: `${formatPl(profile?.distanceKm ?? directDistanceKm, 2)} km`,
+                  sub: `${isEn ? 'Azimuth' : 'Azymut'} ${formatPl(profile?.azimuthDeg ?? targetBearing, 1)}° (${getCardinalDirection(profile?.azimuthDeg ?? targetBearing)})`,
+                },
+                {
+                  key: 'los',
+                  icon: loading ? <RefreshCw size={13} className="tp-spin" /> : profile?.isObstructed ? <XCircle size={13} /> : <CheckCircle2 size={13} />,
+                  label: isEn ? 'Line of sight' : 'Linia wzroku',
+                  value: ready ? (profile!.isObstructed ? `${isEn ? 'Blocked' : 'Kolizja'} ${formatPl(profile!.obstructionMaxM, 1)} m` : (isEn ? 'Clear' : 'Czysta')) : skel,
+                  sub: ready
+                    ? profile!.isObstructed
+                      ? `${formatPl(profile!.obstructionDistKm, 2)} km ${isEn ? 'from BTS' : 'od BTS'} · ${profile!.isClutterObstructed && !profile!.isTerrainObstructed ? (isEn ? 'trees/buildings' : 'lasy/budynki') : (isEn ? 'ground' : 'grunt')}`
+                      : (isEn ? 'Fresnel zone free' : 'Strefa Fresnela wolna')
+                    : (isEn ? 'Analysing…' : 'Analiza…'),
+                  tone: ready ? (profile!.isObstructed ? 'err' : 'ok') : undefined,
+                },
+                {
+                  key: 'elevation',
+                  icon: <Mountain size={13} />,
+                  label: isEn ? 'Elevation diff' : 'Przewyższenie',
+                  value: ready ? `${elevDiff >= 0 ? '+' : ''}${formatPl(elevDiff, 1)} m` : skel,
+                  sub: ready ? `${formatPl(profile!.txElevation, 0)} → ${formatPl(profile!.rxElevation, 0)} m n.p.m.` : (isEn ? 'Terrain difference' : 'Różnica terenu'),
+                },
+                {
+                  key: 'pathloss',
+                  icon: <Activity size={13} />,
+                  label: isEn ? 'Path loss (ITU-R)' : 'Tłumienie trasy',
+                  value: ready ? `${formatPl(profile!.pathLossDb, 1)} dB` : skel,
+                  sub: `${activeAntenna.bandFreq} MHz · FSPL + ${isEn ? 'diffraction' : 'dyfrakcja'}`,
+                },
+                {
+                  key: 'tx',
+                  icon: <Radio size={13} />,
+                  label: isEn ? 'TX antenna' : 'Antena TX',
+                  value: `${formatPl(activeAntenna.height, 1)} m n.p.t.`,
+                  sub: `${tower.stationId || 'BTS'} · tilt ${activeAntenna.tilt}°`,
+                },
+                {
+                  key: 'rx',
+                  icon: <Crosshair size={13} />,
+                  label: isEn ? 'RX receiver' : 'Odbiornik RX',
+                  value: `${formatPl(rxHeight, 1)} m n.p.t.`,
+                  sub: isEn ? 'Measurement point' : 'Punkt pomiarowy',
+                },
+                {
+                  key: 'field',
+                  icon: <Radio size={13} />,
+                  label: isEn ? 'Field strength' : 'Natężenie pola',
+                  value: ready ? `${formatPl(profile!.fieldStrengthDbUvM, 1)} dBµV/m` : skel,
+                  sub: isEn ? 'At 1 kW ERP, receiver point' : 'Przy 1 kW ERP w punkcie odbioru',
+                },
+                {
+                  key: 'beam',
+                  icon: <Compass size={13} />,
+                  label: profile?.isBacklobe ? (isEn ? 'Back lobe' : 'Listek wsteczny') : (isEn ? 'Antenna beam' : 'Wiązka anteny'),
+                  value: ready && profile!.horizontalDeviationDeg !== null && profile!.horizontalDeviationDeg !== undefined
+                    ? `${formatPl(profile!.horizontalDeviationDeg, 1)}° ${isEn ? 'off-axis' : 'od osi'}`
+                    : ready ? '—' : skel,
+                  sub: ready && profile!.antennaLossDb !== null && profile!.antennaLossDb !== undefined
+                    ? `${isEn ? 'Antenna loss' : 'Tłumienie anteny'} −${formatPl(profile!.antennaLossDb, 1)} dB${profile!.isBacklobe ? ' (F/B)' : ''}`
+                    : `${isEn ? 'Vertical' : 'Pion'}: ${profile?.verticalDeviationDeg !== null && profile?.verticalDeviationDeg !== undefined ? `${formatPl(profile.verticalDeviationDeg, 1)}°` : '—'} · tilt ${activeAntenna.tilt}°`,
+                  tone: profile?.isBacklobe ? 'warn' : undefined,
+                },
+              ];
+              return (
+                <>
+                  <div className="tp-metrics">
+                    {metrics.map(m => (
+                      <div key={m.key} className={`tp-metric ${m.tone ? `is-${m.tone}` : ''}`}>
+                        <span className="tp-metric-label">{m.icon}{m.label}</span>
+                        <strong className="tp-metric-value">{m.value}</strong>
+                        <small className="tp-metric-sub">{m.sub}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="tp-source-note">
+                    <Trees size={12} />
+                    <span>
+                      {isEn ? 'Elevation data' : 'Dane wysokościowe'}:{' '}
+                      <strong>{loading ? (isEn ? 'loading…' : 'pobieranie…') : profile?.nmptAvailable ? 'GUGiK NMT + NMPT' : profile?.source || 'GUGiK NMT (1 m)'}</strong>
+                      {' · '}
+                      {pemReport?.downloadUrl ? (
+                        <a href={pemReport.downloadUrl} target="_blank" rel="noopener noreferrer" className="tp-pem-link">
+                          {isEn ? 'SI2PEM report' : 'Raport SI2PEM'} ({pemReport.date || 'PDF'}) <ArrowUpRight size={11} />
+                        </a>
+                      ) : (
+                        <span>Geoportal PZGiK (EPSG:2180)</span>
+                      )}
+                    </span>
+                  </p>
+                </>
+              );
+            })()}
           </main>
         </div>
         )
