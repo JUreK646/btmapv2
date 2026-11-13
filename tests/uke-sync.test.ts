@@ -138,7 +138,57 @@ test('a registry sync is all-or-nothing and follows file changes', async () => {
     const withBrokenSideFile = await syncUkeWykaz(db, options);
     assert.equal(withBrokenSideFile.updated, true);
     assert.equal(meta(db, 'ukeWykazDate'), '2026-11-23');
-    assert.deepEqual(bandsOf(db, 'PRV2'), ['Inne 3800']);
+    assert.deepEqual(bandsOf(db, 'PRV2'), ['Inne 3800'], 'stations of an unreadable side file are not treated as removed');
+    assert.equal(db.prepare("SELECT id FROM towers WHERE stationId='WRO0001'").get(), undefined, 'a station missing from the new registry is gone');
+  } finally { db.close(); rmSync(tempDir, {recursive: true, force: true}); }
+});
+
+test('stations no longer in the registry are removed; community and imported records are not', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'btmap-uke-'));
+  const db = openDatabase(':memory:');
+  try {
+    const {state, options} = fakeUke(tempDir);
+    state.files = [LTE, NR];
+    const many = Array.from({length: 10}, (_, i) => row('P4 Sp. z o.o.', `REJ/9/${i}/1/26`, 20 + i * 0.1, 51 + i * 0.1, `ST${i}`));
+    state.sheets.set(LTE, [HEADER, ...many]);
+    state.sheets.set(NR, [HEADER, many[0]]);
+    await syncUkeWykaz(db, options);
+    assert.equal(Number(db.prepare("SELECT COUNT(*) AS c FROM towers WHERE source='UKE'").get()!.c), 10);
+
+    // Records the sync does not own: a community station, a KML import and a BTMap copy of a registry station.
+    const other = db.prepare("INSERT INTO towers(id,stationId,address,province,lat,lng,operators,source,addedBy,status) VALUES(?,?,'X','Mazowieckie',52.2,21.0,'[]',?,?,'APPROVED')");
+    other.run('BTMAP_abc', 'COMM1', 'BTMAP', 'Anna');
+    other.run('UKE_kml', 'KML1', 'UKE', 'Import KML');
+    other.run('BTMAP_ST9', 'ST9', 'BTMAP', 'Anna');
+    const ST9 = String(db.prepare("SELECT id FROM towers WHERE stationId='ST9' AND source='UKE'").get()!.id);
+    db.prepare("INSERT INTO pem_report_operator_counts(towerId,operator,count,partial,checkedAt) VALUES(?, 'Play', 2, 0, '2027-01-01')").run(ST9);
+
+    // UKE drops ST8 and ST9 (2 of 10 = 20%, at the limit).
+    const next = (name: string) => name.replace('10-26', '11-09');
+    state.files = [next(LTE), next(NR)];
+    state.sheets.set(state.files[0], [HEADER, ...many.slice(0, 8)]);
+    state.sheets.set(state.files[1], [HEADER, many[0]]);
+    const result = await syncUkeWykaz(db, options);
+    assert.match(result.message, /usunięto 2 stacji/);
+    const left = db.prepare('SELECT stationId FROM towers ORDER BY stationId').all().map(r => String(r.stationId));
+    assert.deepEqual(left, ['COMM1', 'KML1', 'ST0', 'ST1', 'ST2', 'ST3', 'ST4', 'ST5', 'ST6', 'ST7', 'ST9']);
+    assert.equal(String(db.prepare("SELECT source FROM towers WHERE stationId='ST9'").get()!.source), 'BTMAP', 'only the BTMap copy of ST9 remains');
+    assert.equal(db.prepare('SELECT 1 FROM pem_report_operator_counts WHERE towerId=?').get(ST9), undefined, 'its cached report counts go with it');
+    assert.equal(meta(db, 'ukeSyncRemoved'), '2');
+
+    // A registry missing far more stations looks truncated: nothing is touched unless forced.
+    state.files = [LTE.replace('10-26', '11-23'), NR.replace('10-26', '11-23')];
+    state.sheets.set(state.files[0], [HEADER, ...many.slice(0, 3)]);
+    state.sheets.set(state.files[1], [HEADER, many[0]]);
+    await assert.rejects(syncUkeWykaz(db, options), /nie zawiera 5 z 8 stacji.*--force/s);
+    assert.equal(Number(db.prepare("SELECT COUNT(*) AS c FROM towers WHERE source='UKE' AND addedBy='AutoSync BIP UKE'").get()!.c), 8);
+    assert.equal(meta(db, 'ukeWykazDate'), '2026-11-09');
+    assert.match(meta(db, 'ukeSyncError'), /niepełny plik/);
+
+    const forced = await syncUkeWykaz(db, {...options, force: true});
+    assert.match(forced.message, /usunięto 5 stacji/);
+    assert.equal(Number(db.prepare("SELECT COUNT(*) AS c FROM towers WHERE source='UKE' AND addedBy='AutoSync BIP UKE'").get()!.c), 3);
+    assert.equal(Number(db.prepare("SELECT COUNT(*) AS c FROM towers WHERE addedBy<>'AutoSync BIP UKE'").get()!.c), 3, 'community and imported records survive a forced sync too');
   } finally { db.close(); rmSync(tempDir, {recursive: true, force: true}); }
 });
 

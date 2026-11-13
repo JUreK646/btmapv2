@@ -143,7 +143,7 @@ Synchronizacja wykazu UKE działa na zasadzie „wszystko albo nic”: jeśli kt
 
 ### ⚠️ Ograniczenia danych
 
-* **Wykaz UKE to pozwolenia, a nie stan sieci.** Pozwolenie nie oznacza, że nadajnik jest już uruchomiony, a stacje usunięte z wykazu na razie zostają w bazie.
+* **Wykaz UKE to pozwolenia, a nie stan sieci.** Pozwolenie nie oznacza, że nadajnik jest już uruchomiony. Stacja, której nie ma w nowym wykazie, jest usuwana z mapy przy synchronizacji.
 * **Tryb 5G (SA/NSA)** nie wynika z wykazu UKE. Filtr trybu 5G obejmuje więc tylko stacje z bazy BTMap, przy których tryb wpisano w zgłoszeniu.
 * **Azymuty** są dostępne tylko dla części stacji (patrz wyżej).
 * **Audyt obszaru i profil terenu** to modele obliczeniowe, a nie pomiary zasięgu.
@@ -247,7 +247,7 @@ The UKE registry sync is all-or-nothing: if any technology file fails to downloa
 
 ### ⚠️ Data limitations
 
-* **The UKE registry lists permits, not the live network.** A permit does not mean the transmitter is on air, and stations removed from the registry currently stay in the database.
+* **The UKE registry lists permits, not the live network.** A permit does not mean the transmitter is on air. A station missing from a new registry is removed from the map on sync.
 * **5G mode (SA/NSA)** is not part of the UKE registry, so the 5G mode filter only covers BTMap stations whose submitted cells have a mode.
 * **Azimuths** exist only for part of the stations (see above).
 * **The area audit and terrain profile** are calculations, not coverage measurements.

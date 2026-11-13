@@ -312,6 +312,32 @@ export interface UkeSyncOptions {
   readSheet?: (filePath: string) => Promise<unknown[][]>;
   tempDir?: string;
   retryDelayMs?: number;
+  /**
+   * Largest share of registry stations one sync may delete. A larger drop is far more likely a truncated
+   * file published by UKE than a real change, so the sync stops instead (`force` overrides it).
+   */
+  maxRemovedShare?: number;
+}
+
+/** Stations created by the registry sync itself. Community, KML-imported and other records are never removed by it. */
+const REGISTRY_STATION_SQL = "source = 'UKE' AND addedBy = 'AutoSync BIP UKE'";
+
+/**
+ * Registry stations that are no longer in the registry just read. A station that has a band from a
+ * supplementary file which could not be read this time is kept: its absence proves nothing.
+ */
+export function findRemovedStations(db: DatabaseSync, keptIds: Set<string>, unreadBands: Set<string>): string[] {
+  const rows = db.prepare(`SELECT id, operators FROM towers WHERE ${REGISTRY_STATION_SQL}`).all() as Array<{ id: string; operators: string }>;
+  return rows.filter(row => {
+    if (keptIds.has(row.id)) return false;
+    if (!unreadBands.size) return true;
+    try {
+      const ops = JSON.parse(row.operators) as Array<{ bands?: Array<{ tech?: string; band?: string }> }>;
+      return !ops.some(op => (op.bands || []).some(b => unreadBands.has(`${b.tech}|${b.band}`)));
+    } catch {
+      return true;
+    }
+  }).map(row => row.id);
 }
 
 const DOWNLOAD_ATTEMPTS = 3;
@@ -337,7 +363,7 @@ async function downloadFile(url: string, targetPath: string, fetcher: typeof fet
 }
 
 export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {}): Promise<{ updated: boolean; date: string; message: string }> {
-  const { fetcher = fetch, readSheet = readUkeSheet, retryDelayMs = 2000 } = options;
+  const { fetcher = fetch, readSheet = readUkeSheet, retryDelayMs = 2000, maxRemovedShare = 0.2 } = options;
   const tempDir = resolve(options.tempDir || 'data/temp_uke');
   const setMeta = (key: string, value: string) => db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)').run(key, value);
   const getMeta = (key: string) => (db.prepare('SELECT value FROM metadata WHERE key = ?').get(key) as { value?: string } | undefined)?.value || '';
@@ -371,6 +397,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
     // The exception is a supplementary list without a technology (private networks): its stations appear
     // in no other file, so skipping it leaves them as they were and must not block the main registry.
     const stations = new Map<string, StationEntry>();
+    const unreadBands = new Set<string>();
     for (const item of files) {
       const targetPath = resolve(tempDir, item.filename);
       try {
@@ -379,12 +406,20 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
       } catch (err) {
         const reason = `Nie udało się wczytać pliku ${item.filename}: ${(err as Error).message}`;
         if (item.recognised) throw new Error(reason);
+        unreadBands.add(`${item.tech}|${item.band}`);
         console.warn(`[UKE Sync] ${reason} Plik dodatkowy – pominięto.`);
       }
     }
 
     if (stations.size === 0) {
       throw new Error('Po sparsowaniu plików liczba stacji wynosi 0. Anulowano aktualizację bazy.');
+    }
+
+    // A station UKE no longer lists is gone, so it is removed from the map.
+    const removedIds = findRemovedStations(db, new Set([...stations.values()].map(st => st.id)), unreadBands);
+    const registryCount = Number((db.prepare(`SELECT COUNT(*) AS c FROM towers WHERE ${REGISTRY_STATION_SQL}`).get() as { c: number }).c);
+    if (!options.force && registryCount > 0 && removedIds.length / registryCount > maxRemovedShare) {
+      throw new Error(`Nowy wykaz UKE nie zawiera ${removedIds.length} z ${registryCount} stacji (więcej niż ${Math.round(maxRemovedShare * 100)}%). To wygląda na niepełny plik, więc baza pozostaje bez zmian. Jeśli to prawdziwa zmiana, uruchom: pnpm sync:uke --force`);
     }
 
     console.log(`[UKE Sync] Zapisywanie ${stations.size} stacji do bazy danych...`);
@@ -443,8 +478,19 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
         );
       }
 
+      const removeTower = db.prepare('DELETE FROM towers WHERE id = ?');
+      const removePemCounts = db.prepare('DELETE FROM pem_report_operator_counts WHERE towerId = ?');
+      const removePemCount = db.prepare('DELETE FROM pem_report_counts WHERE towerId = ?');
+      for (const id of removedIds) {
+        removeTower.run(id);
+        removePemCounts.run(id);
+        removePemCount.run(id);
+      }
+      if (removedIds.length) console.log(`[UKE Sync] Usunięto ${removedIds.length} stacji, których nie ma już w wykazie UKE.`);
+
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazDate', ?)").run(date);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazFiles', ?)").run(fingerprint);
+      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncRemoved', ?)").run(String(removedIds.length));
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('importedAt', ?)").run(now);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('sourceDescription', ?)").run(`Automatyczny wykaz stacji UKE (stan na ${date})`);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncCheckedAt', ?)").run(now);
@@ -464,7 +510,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
       console.log(`[UKE Sync] Pliki tymczasowe zostały usunięte.`);
     }
 
-    return { updated: true, date, message: `Pomyślnie wgrano nowy wykaz UKE (${date}) obejmujący ${stations.size} stacji.` };
+    return { updated: true, date, message: `Pomyślnie wgrano nowy wykaz UKE (${date}) obejmujący ${stations.size} stacji${removedIds.length ? `; usunięto ${removedIds.length} stacji, których nie ma już w wykazie` : ''}.` };
   } catch (err) {
     const errorMsg = (err as Error).message;
     console.error(`[UKE Sync] Błąd synchronizacji wykazu UKE:`, errorMsg);
