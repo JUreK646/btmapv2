@@ -1094,38 +1094,40 @@ function RadiolineDetailsDialog({
   );
 }
 
-function RadiolineCard({
+/** Same path: both ends within this distance, in either direction. */
+const SAME_PATH_KM = 0.025;
+
+/** All links that run along the same path as `line` (the same two ends), the clicked one first. */
+function linksOnSamePath(line: Radioline, all: Radioline[]): Radioline[] {
+  const near = (latA: number, lngA: number, latB: number, lngB: number) => computeHaversineKm(latA, lngA, latB, lngB) <= SAME_PATH_KM;
+  const same = all.filter(other =>
+    other.id === line.id ||
+    (near(line.latA, line.lngA, other.latA, other.lngA) && near(line.latB, line.lngB, other.latB, other.lngB)) ||
+    (near(line.latA, line.lngA, other.latB, other.lngB) && near(line.latB, line.lngB, other.latA, other.lngA)),
+  );
+  const topFreq = (l: Radioline) => Math.max(0, ...parseRadiolineChannels(l).map(ch => ch.freqGHz || 0), l.frequency || 0);
+  return same.sort((a, b) => (a.id === line.id ? -1 : b.id === line.id ? 1 : topFreq(b) - topFreq(a)));
+}
+
+/** One link inside the popup: operator, permit, length, mode, capacity and its channels. */
+function RadiolineItem({
   line,
   onClose,
   onOpenDetails,
 }: {
   line: Radioline;
-  onClose: () => void;
+  onClose?: () => void;
   onOpenDetails: (channelIdx?: number) => void;
 }) {
-  const [copiedCoords, setCopiedCoords] = useState(false);
-
   const brand = getRadiolineBrand(line);
   const distanceKm = line.distanceKm ?? computeHaversineKm(line.latA, line.lngA, line.latB, line.lngB);
   const mode = line.mode || '—';
   const capacityText = line.capacityText || 'brak danych';
-
   const channels = useMemo(() => parseRadiolineChannels(line), [line]);
 
-  const midLat = ((line.latA + line.latB) / 2).toFixed(5);
-  const midLng = ((line.lngA + line.lngB) / 2).toFixed(5);
-  const coordsStr = `${midLat}, ${midLng}`;
-
-  const handleCopyCoords = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard?.writeText(coordsStr);
-    setCopiedCoords(true);
-    setTimeout(() => setCopiedCoords(false), 1600);
-  };
-
   return (
-    <div
-      className="rl-popup-card is-clickable"
+    <section
+      className="rl-popup-item"
       onClick={e => {
         e.stopPropagation();
         onOpenDetails(0);
@@ -1138,24 +1140,22 @@ function RadiolineCard({
           <div className="rl-popup-title-group">
             <span className="rl-op-name">{brand.displayName}</span>
             {line.permitId && <span className="rl-permit-id">{line.permitId}</span>}
-            {line.isNew === 1 && (
-              <span style={{ background: '#059669', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 700, marginLeft: '6px' }}>
-                ★ NOWA
-              </span>
-            )}
+            {line.isNew === 1 && <span className="rl-new-badge">★ NOWA</span>}
           </div>
         </div>
-        <button
-          type="button"
-          className="rl-icon-btn rl-close-btn"
-          onClick={e => {
-            e.stopPropagation();
-            onClose();
-          }}
-          title="Zamknij"
-        >
-          <X size={15} />
-        </button>
+        {onClose && (
+          <button
+            type="button"
+            className="rl-icon-btn rl-close-btn"
+            onClick={e => {
+              e.stopPropagation();
+              onClose();
+            }}
+            title="Zamknij"
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
 
       <div className="rl-popup-summary">
@@ -1185,22 +1185,61 @@ function RadiolineCard({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/** Popup for the clicked link and every other link on the same path, listed one under another. */
+function RadiolineCard({
+  lines,
+  onClose,
+  onOpenDetails,
+}: {
+  lines: Radioline[];
+  onClose: () => void;
+  onOpenDetails: (line: Radioline, channelIdx?: number) => void;
+}) {
+  const [copiedCoords, setCopiedCoords] = useState(false);
+  const first = lines[0];
+  const midLat = ((first.latA + first.latB) / 2).toFixed(5);
+  const midLng = ((first.lngA + first.lngB) / 2).toFixed(5);
+  const coordsStr = `${midLat}, ${midLng}`;
+
+  const handleCopyCoords = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(coordsStr);
+    setCopiedCoords(true);
+    setTimeout(() => setCopiedCoords(false), 1600);
+  };
+
+  return (
+    <div className="rl-popup-card">
+      <div className="rl-popup-items">
+        {lines.map((line, idx) => (
+          <RadiolineItem
+            key={line.id}
+            line={line}
+            onClose={idx === 0 ? onClose : undefined}
+            onOpenDetails={channelIdx => onOpenDetails(line, channelIdx)}
+          />
+        ))}
+      </div>
 
       <div
         className="rl-popup-footer"
         onClick={e => e.stopPropagation()}
-        title={line.stationA && line.stationB ? `A: ${line.stationA} ↔ B: ${line.stationB}` : undefined}
+        title={first.stationA && first.stationB ? `A: ${first.stationA} ↔ B: ${first.stationB}` : undefined}
       >
         <div className="rl-footer-coords">
           <MapPin size={13.5} className="rl-pin-icon" />
           <span>{coordsStr}</span>
+          {lines.length > 1 && (
+            <span className="rl-footer-count">
+              · {lines.length} {lines.length % 10 >= 2 && lines.length % 10 <= 4 && (lines.length % 100 < 12 || lines.length % 100 > 14) ? 'linie' : 'linii'} na tej trasie
+            </span>
+          )}
         </div>
-        <button
-          type="button"
-          className="rl-icon-btn rl-copy-coords-btn"
-          onClick={handleCopyCoords}
-          title="Skopiuj współrzędne"
-        >
+        <button type="button" className="rl-icon-btn rl-copy-coords-btn" onClick={handleCopyCoords} title="Skopiuj współrzędne">
           {copiedCoords ? <Check size={13.5} className="rl-copied-icon" /> : <Copy size={13.5} />}
         </button>
       </div>
@@ -1216,7 +1255,7 @@ function RadiolinesLayer({
   renderer: L.Canvas;
 }) {
   const cappedRadiolines = useMemo(() => radiolines.slice(0, 1000), [radiolines]);
-  const [selectedRl, setSelectedRl] = useState<{ line: Radioline; pos: [number, number] } | null>(null);
+  const [selectedRl, setSelectedRl] = useState<{ line: Radioline; lines: Radioline[]; pos: [number, number] } | null>(null);
   const [detailsModal, setDetailsModal] = useState<{ line: Radioline; channelIdx: number } | null>(null);
 
   useMapEvents({
@@ -1257,7 +1296,7 @@ function RadiolinesLayer({
     <>
       {/* Sleek glowing halo underlayer for modern fiber/beam aesthetic */}
       {cappedRadiolines.map(line => {
-        const isSelected = selectedRl?.line.id === line.id;
+        const isSelected = Boolean(selectedRl?.lines.some(l => l.id === line.id));
         const brand = getRadiolineBrand(line);
         const color = line.isNew === 1 ? '#10b981' : brand.color;
         return (
@@ -1282,7 +1321,7 @@ function RadiolinesLayer({
 
       {/* Modern rounded core lines */}
       {cappedRadiolines.map(line => {
-        const isSelected = selectedRl?.line.id === line.id;
+        const isSelected = Boolean(selectedRl?.lines.some(l => l.id === line.id));
         const brand = getRadiolineBrand(line);
         const color = line.isNew === 1 ? '#10b981' : brand.color;
         return (
@@ -1307,7 +1346,7 @@ function RadiolinesLayer({
                 const clickedPos: [number, number] = e.latlng
                   ? [e.latlng.lat, e.latlng.lng]
                   : [(line.latA + line.latB) / 2, (line.lngA + line.lngB) / 2];
-                setSelectedRl({ line, pos: clickedPos });
+                setSelectedRl({ line, lines: linksOnSamePath(line, cappedRadiolines), pos: clickedPos });
               },
             }}
           />
@@ -1352,11 +1391,9 @@ function RadiolinesLayer({
             }}
           >
             <RadiolineCard
-              line={selectedRl.line}
+              lines={selectedRl.lines}
               onClose={() => setSelectedRl(null)}
-              onOpenDetails={(channelIdx = 0) =>
-                setDetailsModal({ line: selectedRl.line, channelIdx })
-              }
+              onOpenDetails={(line, channelIdx = 0) => setDetailsModal({ line, channelIdx })}
             />
           </Popup>
         </>
