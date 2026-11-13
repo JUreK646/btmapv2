@@ -300,15 +300,12 @@ test('UKE permit matching for 5G SA C-Band (3500-3600 MHz) with operator band as
     );
 
     // Query 1: Filter by modes5g: 'SA'
-    // UKE permits in 3500, 3600, 2600 are matched as 5G SA capable
-    const saResult = getTowers(db, { modes5g: 'SA' });
-    assert.equal(saResult.total, 4, 'Should match all 4 5G SA / C-band stations');
-    const saIds = new Set(saResult.items.map(t => t.id));
-    assert.ok(saIds.has('play-cband'));
-    assert.ok(saIds.has('orange-cband'));
-    assert.ok(saIds.has('tmobile-cband'));
-    assert.ok(saIds.has('plus-2600'));
-    assert.ok(!saIds.has('orange-lte-only'), 'LTE-only station must not match 5G SA');
+    // A UKE permit does not say whether a 5G cell runs SA or NSA. C-band and 2600 permits used to be counted
+    // as SA by band; the mode filter now covers only BTMap cells with a recorded mode (tests/mode5g-filter.test.ts).
+    assert.equal(getTowers(db, { modes5g: 'SA' }).total, 0, 'UKE permits are not treated as 5G SA');
+    assert.equal(getTowers(db, { modes5g: 'NSA' }).total, 0, 'UKE permits are not treated as 5G NSA either');
+    // The C-band permits are still found by band.
+    assert.equal(getTowers(db, { techs: '5G', bands: '3500,3600' }).total, 3);
 
     // Query 2: Filter by operator Play and band 3500
     const play3500 = getTowers(db, { operators: 'Play', bands: '3500' });

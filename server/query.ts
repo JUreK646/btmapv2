@@ -18,6 +18,9 @@ export const ukeViewSql = (alias = 't') => `(
   )
 )`;
 
+/** Stations of the community BTMap database ('User' is the legacy name of the same source). */
+const BTMAP_SOURCE_SQL = "(t.source = 'BTMAP' OR t.source = 'User')";
+
 /** The "new" window anchored to the latest UKE registry this database has synced. */
 export function getNewEntryWindow(db: DatabaseSync): NewEntryWindow {
   const row = db.prepare("SELECT value FROM metadata WHERE key='ukeWykazDate'").get() as { value?: string } | undefined;
@@ -46,7 +49,7 @@ export function towerWhere(query: Record<string, unknown>, window: NewEntryWindo
     if (query.source === 'UKE') {
       clauses.push(ukeViewSql('t'));
     } else if (query.source === 'BTMAP') {
-      clauses.push("(t.source = 'BTMAP' OR t.source = 'User')");
+      clauses.push(BTMAP_SOURCE_SQL);
     } else {
       clauses.push('t.source = ?');
       params.push(String(query.source));
@@ -105,7 +108,8 @@ export function towerWhere(query: Record<string, unknown>, window: NewEntryWindo
   }
 
   const operators = list(query.operators), techs = list(query.techs || query.tech), bands = list(query.bands);
-  const modes5g = (query.modes5g || query.mode5g) ? list(query.modes5g || query.mode5g) : [];
+  const modes5g = ((query.modes5g || query.mode5g) ? list(query.modes5g || query.mode5g) : [])
+    .map(mode => mode.toUpperCase()).filter(mode => mode === 'NSA' || mode === 'SA');
 
   if (operators.length || techs.length || bands.length || modes5g.length) {
     const opClauses: string[] = [];
@@ -125,35 +129,16 @@ export function towerWhere(query: Record<string, unknown>, window: NewEntryWindo
     if (bandClauses.length) opClauses.push(`EXISTS (SELECT 1 FROM json_each(op.value, '$.bands') b WHERE ${bandClauses.join(' AND ')})`);
 
     if (modes5g.length) {
-      const hasNsa = modes5g.includes('NSA');
-      const hasSa = modes5g.includes('SA');
-      if (hasNsa && !hasSa) {
-        opClauses.push(`EXISTS (
-          SELECT 1 FROM json_each(op.value, '$.bands') b5g
-          WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
-            AND (
-              UPPER(COALESCE(json_extract(b5g.value, '$.mode'), 'NSA')) = 'NSA'
-              OR t.source = 'UKE'
-            )
-        )`);
-      } else if (hasSa && !hasNsa) {
-        opClauses.push(`EXISTS (
-          SELECT 1 FROM json_each(op.value, '$.bands') b5g
-          WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
-            AND (
-              UPPER(json_extract(b5g.value, '$.mode')) = 'SA'
-              OR (
-                ${ukeViewSql('t')}
-                AND REPLACE(json_extract(b5g.value, '$.band'), 'MHz', '') IN ('3600', '3500', '2600', '2100', '700')
-              )
-            )
-        )`);
-      } else if (hasNsa && hasSa) {
-        opClauses.push(`EXISTS (
-          SELECT 1 FROM json_each(op.value, '$.bands') b5g
-          WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
-        )`);
-      }
+      // The UKE registry does not say whether a 5G cell runs SA or NSA, so the mode filter only covers the
+      // BTMap database, where the mode was entered per cell. A cell without a recorded mode does not match;
+      // nothing is inferred from the band.
+      clauses.push(BTMAP_SOURCE_SQL);
+      opClauses.push(`EXISTS (
+        SELECT 1 FROM json_each(op.value, '$.bands') b5g
+        WHERE CASE json_extract(b5g.value, '$.tech') WHEN 'NR' THEN '5G' ELSE json_extract(b5g.value, '$.tech') END = '5G'
+          AND UPPER(json_extract(b5g.value, '$.mode')) IN (${modes5g.map(() => '?').join(',')})
+      )`);
+      params.push(...modes5g);
     }
 
     clauses.push(`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(t.operators) THEN t.operators ELSE '[]' END) op WHERE ${opClauses.join(' AND ')})`);

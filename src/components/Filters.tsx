@@ -45,6 +45,7 @@ export default function Filters({
     [key]:filters[key].includes(value)?filters[key].filter(item=>item!==value):[...filters[key],value],
   });
 
+  const modeFilterUnavailable = filters.source === 'UKE';
   const toggle5gMode = (mode: 'NSA' | 'SA') => {
     const current = filters.modes5g || [];
     const next = current.includes(mode)
@@ -112,7 +113,8 @@ export default function Filters({
         <button
           type="button"
           className={`filter-option ${filters.source === 'UKE' ? 'is-selected' : ''}`}
-          onClick={() => onChange({ ...filters, source: 'UKE' })}
+          // The UKE registry has no 5G mode, so a mode filter would leave the UKE view empty.
+          onClick={() => onChange({ ...filters, source: 'UKE', modes5g: [] })}
           aria-pressed={filters.source === 'UKE'}
           title={t.filterSourceUkeDesc}
         >
@@ -131,6 +133,7 @@ export default function Filters({
             : t.filterAll}
         </span>
       </legend>
+      <p className="pem-layer-status">{modeFilterUnavailable ? t.filter5gModeUkeHint : t.filter5gModeDesc}</p>
       <div className="filter-options mode-5g-filters">
         <button
           type="button"
@@ -138,6 +141,7 @@ export default function Filters({
           aria-pressed={Boolean(filters.modes5g?.includes('NSA'))}
           onClick={() => toggle5gMode('NSA')}
           title={t.filter5gModeNsaDesc}
+          disabled={modeFilterUnavailable}
         >
           <span className="mode-5g-tag">NSA</span>
           <span>{t.filter5gModeNsa}</span>
@@ -148,6 +152,7 @@ export default function Filters({
           aria-pressed={Boolean(filters.modes5g?.includes('SA'))}
           onClick={() => toggle5gMode('SA')}
           title={t.filter5gModeSaDesc}
+          disabled={modeFilterUnavailable}
         >
           <span className="mode-5g-tag">SA</span>
           <span>{t.filter5gModeSa}</span>

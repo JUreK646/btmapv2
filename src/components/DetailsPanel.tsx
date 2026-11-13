@@ -131,6 +131,12 @@ function techGen(tech: string) {
   return { gen: t, label: t };
 }
 
+/** 5G modes entered for these cells (SA first). Empty for registry data, which has no mode. */
+function recordedModes(bands: Band[]): Array<'SA' | 'NSA'> {
+  const modes = new Set(bands.map(b => String(b.mode || '').toUpperCase()));
+  return (['SA', 'NSA'] as const).filter(mode => modes.has(mode));
+}
+
 function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: string) => void }) {
   const { t, lang } = useI18n();
   const isPl = lang === 'pl';
@@ -202,10 +208,10 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                 <span className="cell-tech-count">
                   ({techBands.length} {techBands.length === 1 ? (isPl ? 'pasmo' : 'band') : techBands.length < 5 ? (isPl ? 'pasma' : 'bands') : (isPl ? 'pasm' : 'bands')})
                 </span>
-                {gen.gen === '5G' && (
-                  <span className="cell-tag cell-tag-5g-mode" title={isPl ? "Wsparcie 5G Standalone (SA) i Non-Standalone (NSA)" : "5G Standalone (SA) & Non-Standalone (NSA) support"}>
+                {gen.gen === '5G' && recordedModes(techBands).length > 0 && (
+                  <span className="cell-tag cell-tag-5g-mode" title={isPl ? 'Tryb 5G wpisany przy komórkach tej stacji' : '5G mode recorded for the cells of this station'}>
                     <span>5G</span>
-                    <strong>SA / NSA</strong>
+                    <strong>{recordedModes(techBands).join(' / ')}</strong>
                   </span>
                 )}
                 {op.stationIds?.[0] && (
@@ -259,18 +265,12 @@ function CellDetailsBlock({ op, onNotice }: { op: Operator; onNotice: (msg: stri
                         <tr key={idx}>
                           <td className="cell-col-pasmo">
                             <strong className="cell-pasmo-main">{b.band}</strong>
-                            {b.mode ? (
+                            {/* Only a mode entered for the cell is shown; the UKE registry has none and it is not inferred from the band. */}
+                            {b.mode && (
                               <span className={`cell-mode-tag mode-${b.mode.toLowerCase()}`} title={`Tryb 5G ${b.mode}`}>{b.mode}</span>
-                            ) : (tech === '5G' ? (
-                              <span
-                                className={`cell-mode-tag ${b.band === '3500' || b.band === '3600' ? 'mode-sa' : 'mode-nsa'}`}
-                                title={b.band === '3500' || b.band === '3600' ? (isPl ? '5G C-Band (gotowe na SA / NSA)' : '5G C-Band (SA / NSA ready)') : (isPl ? '5G DSS / NSA' : '5G DSS / NSA')}
-                              >
-                                {b.band === '3500' || b.band === '3600' ? 'SA / NSA' : 'NSA'}
-                              </span>
-                            ) : null)}
+                            )}
                             {azList.length > 0 && (
-                              <span className="cell-azimuth-tag" title={isPl ? 'Azymuty sektorów (BIP UKE)' : 'Sector azimuths (BIP UKE)'}>
+                              <span className="cell-azimuth-tag" title={isPl ? 'Azymuty sektorów' : 'Sector azimuths'}>
                                 {azList.map(a => `${a}°`).join(' / ')}
                               </span>
                             )}

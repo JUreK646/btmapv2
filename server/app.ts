@@ -447,7 +447,8 @@ export function createApp(
         pci: c.pci,
         earfcn: c.earfcn,
         azimuth: c.azimuth,
-        mode: c.mode || (c.tech === '5G' ? 'NSA' : undefined),
+        // Stored only as entered: a 5G cell without a mode is not assumed to be NSA.
+        mode: c.tech === '5G' && (c.mode === 'NSA' || c.mode === 'SA') ? c.mode : undefined,
         isIot: Boolean(c.isIot),
         cellType: c.cellType || 'macro',
         // Cell identity reported from the field. Without these a published station cannot be found by eNB/gNB or cell id.
