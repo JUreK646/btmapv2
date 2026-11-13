@@ -56,11 +56,11 @@
 .pem-antenna-layout { display:grid; grid-template-columns:250px minmax(0,1fr); margin:10px 22px 22px; }
 .pem-antenna-diagrams { border-right:1px solid var(--line); padding:10px 18px 15px 0; }
 .pem-directions svg { width:100%; display:block; overflow:visible; }
-.pem-directions { --pem-sector:#16a34a; }
-[data-theme="dark"] .pem-directions { --pem-sector:#22c55e; }
+/* Default when the operator is unknown; the dialog sets the operator's own colour inline. */
+.pem-directions { --pem-sector:#788992; }
 .pem-dial-disc { fill:var(--surface-alt); stroke:var(--line); stroke-width:1; }
 .pem-dial-ring { fill:none; stroke:var(--line); stroke-width:1; }
-.pem-dial-sector { fill:var(--pem-sector); fill-opacity:.32; stroke:var(--pem-sector); stroke-width:1.2; stroke-linejoin:round; }
+.pem-dial-sector { fill:var(--pem-sector); fill-opacity:.4; stroke:var(--pem-sector); stroke-width:1.4; stroke-linejoin:round; }
 .pem-dial-sector:hover { fill-opacity:.5; }
 .pem-dial-tick { stroke:var(--muted); stroke-width:1.2; }
 .pem-dial-label { fill:var(--text); font-size:10.5px; font-weight:600; font-variant-numeric:tabular-nums; }

@@ -4,6 +4,7 @@ import type {Tower} from '../types';
 import type {PemAntenna,PemReport} from '../../shared/pem';
 import {formatDate} from '../lib/api';
 import {loadPemPdf} from '../lib/pemCache';
+import {operatorColor} from '../../shared/operators';
 
 type Props={tower:Tower;operator:string;reports:PemReport[];initialReportId:string;onClose:()=>void};
 const num=new Intl.NumberFormat('pl-PL',{maximumFractionDigits:2});
@@ -78,7 +79,7 @@ function clusterAzimuths(rawAngles: number[], thresholdDeg = 14): DirectionClust
 /** Width of a drawn sector. SI2PEM reports give no beam width, so this is only how a direction is drawn. */
 const SECTOR_DRAW_DEG = 26;
 
-function DirectionDiagram({antennas}:{antennas:PemAntenna[]}){
+function DirectionDiagram({antennas,color}:{antennas:PemAntenna[];color?:string}){
   const rawAngles = antennas.flatMap(a => (a.azimuth === null ? [] : [a.azimuth]));
   const uniqueAngles = [...new Set(rawAngles)].sort((a, b) => a - b);
   const countAt = (angle: number) => rawAngles.filter(a => a === angle).length;
@@ -98,7 +99,7 @@ function DirectionDiagram({antennas}:{antennas:PemAntenna[]}){
   };
 
   return (
-    <div className="pem-directions">
+    <div className="pem-directions" style={color ? ({ '--pem-sector': color } as React.CSSProperties) : undefined}>
       <svg
         viewBox={`0 0 ${size} ${size}`}
         role="img"
@@ -200,7 +201,7 @@ export default function PemReportsDialog({tower,operator,reports,initialReportId
         <div className="pem-report-bar"><div><time dateTime={report.date||undefined}>{formatDate(report.date||undefined)}</time>{source?.id===reports[0]?.id&&<span className="pem-report-latest">Najnowszy</span>}<span>{report.laboratory||'SI2PEM'}</span></div><a href={report.downloadUrl} target="_blank" rel="noopener noreferrer">Otwórz PDF<ArrowUpRight size={14}/></a></div>
         <div className="pem-report-choice"><div><strong>{report.number}</strong><span>{report.stationIds.join(' · ')} · {report.operator}</span></div>{reports.length>1&&<label>Wybierz raport<select value={selected} onChange={e=>setSelected(e.target.value)}>{reports.map(r=><option value={r.id} key={r.id}>{formatDate(r.date||undefined)} · {r.number}</option>)}</select></label>}</div>
         {loading?<div className="pem-report-state" role="status"><RefreshCw size={23}/><strong>Odczytywanie anten z PDF SI2PEM…</strong><p>Pobieranie i analiza parametrów z oficjalnego sprawozdania…</p></div>:error?<div className="pem-report-state"><Activity size={25}/><h3>Nie udało się odczytać PDF</h3><p role="alert">{error}</p><button className="secondary-button" onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>Spróbuj ponownie</button></div>:!antennas.length?<div className="pem-report-state"><Radio size={25}/><h3>Nie udało się rozpoznać tabeli anten</h3><p>Dokument ma inny układ lub jest skanem. Parametry możesz sprawdzić przez „Otwórz PDF”.</p></div>:<>
-        <div className="pem-antenna-layout"><aside className="pem-antenna-diagrams" aria-label="Kierunki i wysokości anten"><DirectionDiagram antennas={antennas}/><HeightsMast antennas={antennas} heights={heights}/></aside><section className="pem-antenna-data" aria-label="Parametry anten"><div className="pem-antenna-count">{antennas.length?<><strong>{antennas.length} {antennas.length===1?'antena':'anteny'}</strong><span> · {[...new Set(antennas.map(a=>a.azimuth).filter(a=>a!==null))].length} kierunki</span></>:<strong>Parametry anten</strong>}</div><p className="pem-table-hint">Przesuń tabelę w bok, aby zobaczyć wszystkie parametry.</p><AntennaTable antennas={antennas}/></section></div>
+        <div className="pem-antenna-layout"><aside className="pem-antenna-diagrams" aria-label="Kierunki i wysokości anten"><DirectionDiagram antennas={antennas} color={operatorColor(operator||report?.operator||tower.operators[0]?.name||'')}/><HeightsMast antennas={antennas} heights={heights}/></aside><section className="pem-antenna-data" aria-label="Parametry anten"><div className="pem-antenna-count">{antennas.length?<><strong>{antennas.length} {antennas.length===1?'antena':'anteny'}</strong><span> · {[...new Set(antennas.map(a=>a.azimuth).filter(a=>a!==null))].length} kierunki</span></>:<strong>Parametry anten</strong>}</div><p className="pem-table-hint">Przesuń tabelę w bok, aby zobaczyć wszystkie parametry.</p><AntennaTable antennas={antennas}/></section></div>
         {antennas.some(a=>a.eirpCombined)&&<p className="pem-partial">* EIRP łączne dla pasm danej anteny, zgodnie z oznaczeniem w PDF.</p>}
         </>}
         {!!report.measurements.length&&<details className="pem-report-readings"><summary><Activity size={15}/>Wyniki pomiarów<span>{report.measurements.length} punktów</span><ChevronDown size={15}/></summary><p>Wartości pola w punktach pomiarowych z wybranego sprawozdania.</p><table><thead><tr><th>Punkt</th><th>Natężenie pola</th></tr></thead><tbody>{report.measurements.slice(0,100).map((m,i)=><tr key={`${m.point}-${i}`}><td>{m.point}</td><td>{m.belowSensitivity?'< ':''}{num.format(m.intensity)} V/m{m.belowSensitivity&&<small>poniżej czułości</small>}</td></tr>)}</tbody></table>{report.measurements.length>100&&<p>Pokazano pierwsze 100 punktów. Pełne dane zawiera PDF.</p>}</details>}
