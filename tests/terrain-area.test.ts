@@ -74,7 +74,11 @@ test('the area audit rates only what it knows and says what it could not check',
     assert.equal(plus.scoreBreakdown.sectorAlignment, 10);
     assert.equal(plus.servingStation!.heightKnown, false);
     assert.ok(plus.cons.some(c => /azymutach anten/.test(c)));
-    assert.ok(plus.cons.some(c => /przyjęto 38 m/.test(c)));
+    // No height in the UKE data: none is assumed, so line of sight is not computed and nothing is claimed about it.
+    assert.equal(plus.servingStation!.antennaHeightM, 0);
+    assert.equal(plus.servingStation!.losKnown, false);
+    assert.ok(plus.cons.some(c => /UKE nie podaje wysokości anten/.test(c)));
+    assert.ok(!plus.pros.concat(plus.cons).some(c => /przyjęto|Czysta widoczność|narusza 1\. strefę/.test(c)));
     assert.ok(!plus.pros.concat(plus.cons).some(c => /Wiązka główna|listka wstecznego|odchylenie kątowe/i.test(c)), 'no statement about a sector direction that is not known');
 
     assert.equal(result.operators[0].isWinner, true);

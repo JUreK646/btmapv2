@@ -180,11 +180,13 @@ type StationEntry = {
   province: string;
   stationId: string;
   teryt: string;
+  /** Highest antenna above ground UKE lists for the station (device register "H anteny"); unknown otherwise. */
+  height?: number;
   operators: {
     name: string;
     color: string;
     stationIds: string[];
-    bands: { tech: string; band: string; status: string; permit: string; entryDate?: string }[];
+    bands: { tech: string; band: string; status: string; permit: string; entryDate?: string; heightsM?: number[] }[];
     azimuths?: number[];
   }[];
 };
@@ -252,13 +254,22 @@ export function addRegisterStations(stations: Map<string, StationEntry>, registe
   let bands = 0;
   for (const site of registerStations) {
     const op = stationOperator(stations, site);
+    const station = stations.get(`${site.lat.toFixed(6)},${site.lng.toFixed(6)}|${site.operator}|${site.stationId}`)!;
     for (const b of site.bands) {
       if (b.azimuths?.length) {
         const azimuths = normalizeAzimuths([...(op.azimuths || []), ...b.azimuths]);
         if (azimuths.length) op.azimuths = azimuths;
       }
+      if (b.heightsM?.length) station.height = Math.max(station.height ?? 0, ...b.heightsM);
       if (op.bands.some(x => x.tech === b.tech && x.band === b.band && x.permit === b.permit)) continue;
-      op.bands.push({ tech: b.tech, band: b.band, status: 'Rejestr', permit: b.permit, ...(b.entryDate ? { entryDate: b.entryDate } : {}) });
+      op.bands.push({
+        tech: b.tech,
+        band: b.band,
+        status: 'Rejestr',
+        permit: b.permit,
+        ...(b.entryDate ? { entryDate: b.entryDate } : {}),
+        ...(b.heightsM?.length ? { heightsM: b.heightsM } : {}),
+      });
       bands++;
     }
   }
@@ -387,8 +398,9 @@ export function findRemovedStations(db: DatabaseSync, keptIds: Set<string>, unre
  * re-reads the registry once even though the files on BIP UKE have not changed.
  * 2: stations split into partial rows are rebuilt and old KML copies of registry stations are merged.
  * 3: stations of the device register (REJ entries) are added.
+ * 4: antenna heights from the device register are stored.
  */
-const SYNC_FORMAT = '3';
+const SYNC_FORMAT = '4';
 
 /** The device-register workbooks listed on BIP UKE. */
 export async function fetchRegisterFiles(fetcher: typeof fetch = fetch): Promise<RegisterFile[]> {
@@ -584,13 +596,14 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
     db.exec('BEGIN TRANSACTION;');
     try {
       const insertOrUpdate = db.prepare(`
-        INSERT INTO towers (id, stationId, address, province, lat, lng, operators, source, addedBy, status, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'UKE', 'AutoSync BIP UKE', 'APPROVED', ?)
+        INSERT INTO towers (id, stationId, address, province, lat, lng, operators, height, source, addedBy, status, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'UKE', 'AutoSync BIP UKE', 'APPROVED', ?)
         ON CONFLICT(id) DO UPDATE SET
           stationId = CASE WHEN excluded.stationId != '' THEN excluded.stationId ELSE towers.stationId END,
           address = CASE WHEN excluded.address != '' THEN excluded.address ELSE towers.address END,
           province = CASE WHEN excluded.province != '' THEN excluded.province ELSE towers.province END,
-          operators = excluded.operators
+          operators = excluded.operators,
+          height = COALESCE(excluded.height, towers.height)
       `);
 
       const storedOperators = db.prepare('SELECT operators FROM towers WHERE id = ?');
@@ -618,6 +631,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
           st.lat,
           st.lng,
           JSON.stringify(st.operators),
+          st.height ?? null,
           now
         );
       }

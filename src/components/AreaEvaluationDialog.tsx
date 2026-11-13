@@ -312,7 +312,7 @@ export default function AreaEvaluationDialog({
                     const rows: Array<[string, React.ReactNode, string?]> = [
                       [isEn ? 'Station' : 'Stacja', s.stationId || s.id],
                       [isEn ? 'Distance' : 'Odległość', formatDist(s.distanceKm)],
-                      [isEn ? 'Antenna height' : 'Wysokość anten', `${s.antennaHeightM} m n.p.t.${s.heightKnown === false ? (isEn ? ' (assumed)' : ' (przyjęto)') : ''}`],
+                      [isEn ? 'Antenna height' : 'Wysokość anten', s.heightKnown === false ? (isEn ? 'not in UKE data' : 'brak w danych UKE') : `${String(s.antennaHeightM).replace('.', ',')} m n.p.t.`],
                       [isEn ? 'Sector' : 'Sektor', s.sectorKnown === false ? (isEn ? 'no data' : 'brak danych') : `${s.bestSectorAzimuth}° (${isEn ? 'off by' : 'odchylenie'} ${s.sectorDeviationDeg.toFixed(1).replace('.', ',')}°)`],
                       [isEn ? 'Line of sight' : 'Widoczność', s.losKnown === false ? (isEn ? 'not checked' : 'nie sprawdzono') : s.isLosClear ? (isEn ? 'clear' : 'czysta') : `${isEn ? 'obstructed' : 'przesłonięta'} ${s.obstructionM.toFixed(1).replace('.', ',')} m`, s.losKnown === false ? '' : s.isLosClear ? 'is-ok' : 'is-warn'],
                       ['5G C-Band', s.hasCband5G ? '3600 MHz (n78)' : (isEn ? 'none' : 'brak')],

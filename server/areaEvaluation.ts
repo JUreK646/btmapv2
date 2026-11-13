@@ -23,8 +23,6 @@ function bandFreqMhz(b: unknown): number {
   return m ? Number(m[0]) : 0;
 }
 
-/** Used for the line-of-sight calculation only when a station has no recorded antenna height; always reported as assumed. */
-const ASSUMED_ANTENNA_HEIGHT_M = 38;
 /** Half of a category's points, given when the input it needs is unknown, so missing data neither rewards nor punishes. */
 const NEUTRAL = { los: 9, sector: 10, height: 4 };
 
@@ -187,7 +185,8 @@ export async function evaluateAreaCoverage(
       const isMainLobe = sectorKnown && bestDeviation <= 35;
       const isBacklobe = sectorKnown && bestDeviation > 90;
       const heightKnown = typeof t.height === 'number' && t.height > 0;
-      const antennaHeightM = heightKnown ? t.height! : ASSUMED_ANTENNA_HEIGHT_M;
+      // Real antenna height only (UKE device register or recorded data); never a typical value.
+      const antennaHeightM = heightKnown ? t.height! : 0;
 
       const hasSi2pem = hasPemReport(t);
       const pemSummary = hasSi2pem ? (t.pemReportsByOperator?.[opName] || (isNetworksOp ? t.pemReportsByOperator?.[partnerOp] : undefined)) : undefined;
@@ -248,7 +247,12 @@ export async function evaluateAreaCoverage(
     let obstructionM = 0;
     let pathLossDb = 0;
 
-    try {
+    const freeSpaceLossDb = () => Math.round((32.44 + 20 * Math.log10(1800) + 20 * Math.log10(Math.max(0.01, bestCandidate.distanceKm))) * 10) / 10;
+    if (!bestCandidate.heightKnown) {
+      // Line of sight depends on the antenna height; without the real one it is not computed at all.
+      losKnown = false;
+      pathLossDb = freeSpaceLossDb();
+    } else try {
       const profile = await calculateTerrainProfile({
         lat1: bestCandidate.tower.lat,
         lng1: bestCandidate.tower.lng,
@@ -269,7 +273,7 @@ export async function evaluateAreaCoverage(
     } catch {
       // No terrain data: line of sight stays unknown. Only free-space loss, which needs no terrain, is reported.
       losKnown = false;
-      pathLossDb = Math.round((32.44 + 20 * Math.log10(1800) + 20 * Math.log10(Math.max(0.01, bestCandidate.distanceKm))) * 10) / 10;
+      pathLossDb = freeSpaceLossDb();
     }
 
     // ==========================================
@@ -360,8 +364,10 @@ export async function evaluateAreaCoverage(
     }
 
     // Line of sight & Fresnel zone
-    if (!losKnown) {
+    if (!losKnown && bestCandidate.heightKnown) {
       cons.push('Nie udało się pobrać danych wysokościowych terenu – widoczność optyczna nie została sprawdzona (ocena neutralna).');
+    } else if (!losKnown) {
+      // Said once, under the mast height below.
     } else if (isLosClear) {
       pros.push(`Czysta widoczność optyczna (LOS) ze stacji ${bestCandidate.tower.stationId || bestCandidate.tower.id} – brak przeszkód w 1. strefie Fresnela.`);
     } else {
@@ -385,7 +391,7 @@ export async function evaluateAreaCoverage(
     if (bestCandidate.hasCband5G) {
       pros.push('Pasmo 5G C-Band (3600 MHz, n78) w wykazie UKE – najszybsza transmisja danych z dostępnych pasm.');
     } else {
-      cons.push('Brak pasma 5G C-Band (3600 MHz n78) na tej stacji – dostępne tylko pasma LTE lub 5G DSS.');
+      cons.push('Brak pasma 5G C-Band (3600 MHz, n78) na tej stacji w wykazie UKE.');
     }
 
     // Low bands (coverage / indoor penetration)
@@ -405,7 +411,7 @@ export async function evaluateAreaCoverage(
 
     // Mast height
     if (!bestCandidate.heightKnown) {
-      cons.push(`Wysokość zawieszenia anten nie jest znana – do obliczenia widoczności przyjęto ${ASSUMED_ANTENNA_HEIGHT_M} m n.p.t.`);
+      cons.push('UKE nie podaje wysokości anten tej stacji – widoczność optyczna nie została obliczona (ocena neutralna).');
     } else if (bestCandidate.antennaHeightM >= 45) {
       pros.push(`Wysoki maszt nadawczy (${bestCandidate.antennaHeightM} m n.p.t.) górujący ponad lokalną zabudową i drzewostanem.`);
     } else if (bestCandidate.antennaHeightM < 25) {

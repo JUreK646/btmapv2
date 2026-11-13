@@ -15,7 +15,8 @@ export const UKE_REGISTER_URL = 'https://bip.uke.gov.pl/pozwolenia-radiowe/rejes
 
 export interface RegisterFile { url: string; filename: string; date: string; operator: string }
 
-export interface RegisterBand { tech: string; band: string; permit: string; entryDate?: string; azimuths?: number[] }
+/** Antenna heights above ground ("H anteny") of the band's cells, in metres, as UKE lists them. */
+export interface RegisterBand { tech: string; band: string; permit: string; entryDate?: string; azimuths?: number[]; heightsM?: number[] }
 export interface RegisterStation {
   stationId: string;
   lat: number;
@@ -94,7 +95,7 @@ export async function parseRegisterSheets(entries: Rows, cells: Rows, fallbackOp
       c = {
         alt: find('nr alternatywny'), station: find('id stacji'), city: find('miejscowość'), street: find('ulica'), house: find('nr domu'),
         lng: find('dł geogr.', 'dł. geogr.'), lat: find('szer. geogr.', 'szer geogr.'), teryt: find('kod gus', 'teryt'),
-        system: find('rodzaj systemu komórki'), azimuth: find('azymut'),
+        system: find('rodzaj systemu komórki'), azimuth: find('azymut'), height: find('h anteny'),
       };
       const missing = Object.entries({ 'Nr alternatywny': c.alt, 'Id stacji': c.station, 'Dł geogr.': c.lng, 'Szer. geogr.': c.lat, 'Rodzaj systemu komórki': c.system })
         .filter(([, i]) => i < 0).map(([name]) => name);
@@ -133,6 +134,12 @@ export async function parseRegisterSheets(entries: Rows, cells: Rows, fallbackOp
       station.bandIndex.set(bandKey, band);
       station.bands.push(band);
     }
+    const height = c.height >= 0 && String(row[c.height] ?? '').trim() !== '' ? Number(String(row[c.height]).replace(',', '.')) : NaN;
+    if (Number.isFinite(height) && height > 0 && height < 400) {
+      const list = band.heightsM || (band.heightsM = []);
+      const rounded = Math.round(height * 10) / 10;
+      if (!list.includes(rounded)) list.push(rounded);
+    }
     const azimuth = c.azimuth >= 0 ? Number(row[c.azimuth]) : NaN;
     if (Number.isFinite(azimuth) && azimuth >= 0 && azimuth < 360 && String(row[c.azimuth] ?? '').trim() !== '') {
       const list = band.azimuths || (band.azimuths = []);
@@ -144,7 +151,11 @@ export async function parseRegisterSheets(entries: Rows, cells: Rows, fallbackOp
   }
   return [...stations.values()].map(({ bandIndex: _index, ...station }) => ({
     ...station,
-    bands: station.bands.map(b => (b.azimuths ? { ...b, azimuths: [...b.azimuths].sort((x, y) => x - y) } : b)),
+    bands: station.bands.map(b => ({
+      ...b,
+      ...(b.azimuths ? { azimuths: [...b.azimuths].sort((x, y) => x - y) } : {}),
+      ...(b.heightsM ? { heightsM: [...b.heightsM].sort((x, y) => x - y) } : {}),
+    })),
   }));
 }
 
@@ -161,7 +172,12 @@ export interface RegisterLoadOptions {
   retryDelayMs?: number;
 }
 
-const cacheName = (url: string) => `${createHash('sha256').update(url).digest('hex').slice(0, 24)}.json`;
+/**
+ * Bumped when the parser reads more from a workbook, so cached results made by an older parser are read
+ * again. 2: antenna heights ("H anteny").
+ */
+const REGISTER_PARSER_VERSION = 2;
+const cacheName = (url: string) => `${createHash('sha256').update(`v${REGISTER_PARSER_VERSION}:${url}`).digest('hex').slice(0, 24)}.json`;
 
 async function download(url: string, target: string, fetcher: typeof fetch, retryDelayMs: number) {
   let lastError = '';

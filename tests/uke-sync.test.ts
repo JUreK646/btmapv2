@@ -322,12 +322,12 @@ test('a device-register workbook is read from both sheets, streamed', async () =
         [100000, 45000, 45001, 'Orange Polska S.A.', 'REJ/15/999/1/25', 'nieaktualny'],
       ],
       'Warunki wykorzystania': [
-        ['Nr alternatywny', 'Rodzaj wniosku', 'Id stacji', 'Miejscowość', 'Ulica', 'Nr domu', 'Dł geogr.', 'Szer. geogr.', 'Kod GUS', 'Rodzaj systemu komórki', 'Azymut', 'Dl geogr. śr.'],
-        ['REJ/15/15429/3/26', 'M', '15429', 'Józefów', 'Marszałka Piłsudskiego', '1', 211426, 520754, '1417011', 'GSM900', 309, 211139],
-        ['REJ/15/15429/3/26', 'M', '15429', 'Józefów', 'Marszałka Piłsudskiego', '1', 211426, 520754, '1417011', 'LTE800', 120, 211139],
-        ['REJ/15/15429/3/26', 'M', '15429', 'Józefów', 'Marszałka Piłsudskiego', '1', 211426, 520754, '1417011', 'GSM900', 30, 211139],
+        ['Nr alternatywny', 'Rodzaj wniosku', 'Id stacji', 'Miejscowość', 'Ulica', 'Nr domu', 'Dł geogr.', 'Szer. geogr.', 'Kod GUS', 'Rodzaj systemu komórki', 'H anteny', 'Azymut', 'Dl geogr. śr.'],
+        ['REJ/15/15429/3/26', 'M', '15429', 'Józefów', 'Marszałka Piłsudskiego', '1', 211426, 520754, '1417011', 'GSM900', 24, 309, 211139],
+        ['REJ/15/15429/3/26', 'M', '15429', 'Józefów', 'Marszałka Piłsudskiego', '1', 211426, 520754, '1417011', 'LTE800', 36, 120, 211139],
+        ['REJ/15/15429/3/26', 'M', '15429', 'Józefów', 'Marszałka Piłsudskiego', '1', 211426, 520754, '1417011', 'GSM900', 24, 30, 211139],
         // An entry that is no longer current is not on air.
-        ['REJ/15/999/1/25', 'N', '999', 'Radom', null, null, 211000, 512400, '1463011', 'LTE800', 0, 211000],
+        ['REJ/15/999/1/25', 'N', '999', 'Radom', null, null, 211000, 512400, '1463011', 'LTE800', 30, 0, 211000],
       ],
     });
     const file: RegisterFile = {url: 'x', filename: '2026-11-13_orange.xlsx', date: '2026-11-13', operator: 'orange'};
@@ -336,8 +336,8 @@ test('a device-register workbook is read from both sheets, streamed', async () =
     const [st] = stations;
     assert.deepEqual([st.stationId, st.operator, st.address, st.teryt, st.lat, st.lng], ['15429', 'Orange', 'Józefów, Marszałka Piłsudskiego 1', '1417011', 52.131667, 21.240556]);
     assert.deepEqual(st.bands, [
-      {tech: 'GSM', band: '900', permit: 'REJ/15/15429/3/26 [wpis]', entryDate: '2026-02-18', azimuths: [30, 309]},
-      {tech: 'LTE', band: '800', permit: 'REJ/15/15429/3/26 [wpis]', entryDate: '2026-02-18', azimuths: [120]},
+      {tech: 'GSM', band: '900', permit: 'REJ/15/15429/3/26 [wpis]', entryDate: '2026-02-18', azimuths: [30, 309], heightsM: [24]},
+      {tech: 'LTE', band: '800', permit: 'REJ/15/15429/3/26 [wpis]', entryDate: '2026-02-18', azimuths: [120], heightsM: [36]},
     ]);
 
     // An unknown layout is an error, not an empty register.
@@ -361,7 +361,7 @@ test('stations of the device register join the registry: merged by site, cached,
     const ORANGE = '2026-11-13_orange.xlsx', PLUS = '2026-10-28_polkomtel.xlsx';
     state.registerFiles = [PLUS, ORANGE];
     const site = (operator: string, stationId: string, lat: number, lng: number, bands: RegisterStation['bands']): RegisterStation => ({stationId, lat, lng, operator, address: 'Józefów', teryt: '1417011', bands});
-    state.registers.set(ORANGE, [site('Orange', '15429', 52.131667, 21.240556, [{tech: 'LTE', band: '800', permit: 'REJ/15/15429/3/26 [wpis]', entryDate: '2026-11-10', azimuths: [120, 240]}])]);
+    state.registers.set(ORANGE, [site('Orange', '15429', 52.131667, 21.240556, [{tech: 'LTE', band: '800', permit: 'REJ/15/15429/3/26 [wpis]', entryDate: '2026-11-10', azimuths: [120, 240], heightsM: [31.5, 36]}])]);
     state.registers.set(PLUS, [site('Plus', '50123', 50.5, 19.5, [{tech: '5G', band: '3600', permit: 'REJ/26/50123/1/26 [wpis]', entryDate: '2026-10-20'}])]);
 
     const first = await syncUkeWykaz(db, options);
@@ -371,6 +371,8 @@ test('stations of the device register join the registry: merged by site, cached,
     const orange = JSON.parse(String(db.prepare("SELECT operators FROM towers WHERE stationId='15429'").get()!.operators));
     assert.deepEqual(orange[0].azimuths, [120, 240], 'register azimuths are the registry azimuths of the operator');
     assert.equal(orange[0].bands.find((b: {band: string}) => b.band === '800').entryDate, '2026-11-10');
+    assert.equal(Number(db.prepare("SELECT height FROM towers WHERE stationId='15429'").get()!.height), 36, 'the station height is the highest antenna UKE lists');
+    assert.equal(db.prepare("SELECT height FROM towers WHERE stationId='50123'").get()!.height, null, 'no height in the register: none is made up');
     const plus = db.prepare("SELECT source, addedBy, operators FROM towers WHERE stationId='50123'").get()!;
     assert.deepEqual([plus.source, plus.addedBy], ['UKE', 'AutoSync BIP UKE']);
     assert.equal(JSON.parse(String(plus.operators))[0].bands[0].status, 'Rejestr');
