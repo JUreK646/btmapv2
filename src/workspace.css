@@ -56,11 +56,12 @@
 .map-coordinates { display:flex; gap:9px; align-items:center; padding:5px 9px; background:var(--surface); border-radius:6px; font-size:10px; font-variant-numeric:tabular-nums; }
 .map-coordinates>span { color:var(--muted); font-size:9px; }
 .map-coordinates .coordinate-zoom { padding-left:8px; border-left:1px solid var(--line); }
-.map-searchbar { display:flex; align-items:center; gap:6px; width:min(580px, calc(100% - 300px)); height:48px; position:absolute; z-index:460; right:18px; top:18px; background:var(--surface); border-radius:12px; box-shadow:var(--shadow); padding:5px; flex-wrap:nowrap; transition:width .26s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .2s ease, gap .2s ease; }
-.map-searchbar.search-active, .map-searchbar:has(.search-container:focus-within) { width:min(580px, calc(100% - 36px)); gap:0; box-shadow:0 10px 32px rgba(0,0,0,0.38), 0 0 0 1px var(--line); }
-.map-searchbar-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; max-width:400px; opacity:1; transform:translateX(0); transition:max-width .26s cubic-bezier(0.16, 1, 0.3, 1), opacity .2s ease, transform .22s cubic-bezier(0.16, 1, 0.3, 1), margin .24s ease; overflow:hidden; white-space:nowrap; position:relative; z-index:2; }
+.map-searchbar { display:flex; align-items:center; gap:6px; width:min(700px, calc(100% - 300px)); height:50px; position:absolute; z-index:460; right:18px; top:18px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:5px; flex-wrap:nowrap; transition:width .26s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .2s ease, gap .2s ease; }
+.map-searchbar.search-active, .map-searchbar:has(.search-container:focus-within) { width:min(700px, calc(100% - 36px)); gap:0; box-shadow:0 10px 32px rgba(0,0,0,0.38), 0 0 0 1px var(--line); }
+/* The actions sit behind a thin divider so the search field reads as its own control. */
+.map-searchbar-actions { display:flex; align-items:center; gap:2px; flex-shrink:0; max-width:520px; padding-left:6px; border-left:1px solid var(--line); opacity:1; transform:translateX(0); transition:max-width .26s cubic-bezier(0.16, 1, 0.3, 1), opacity .2s ease, transform .22s cubic-bezier(0.16, 1, 0.3, 1), margin .24s ease; overflow:hidden; white-space:nowrap; position:relative; z-index:2; }
 .map-searchbar.search-active .map-searchbar-actions, .map-searchbar .search-container:focus-within ~ .map-searchbar-actions { max-width:0; opacity:0; margin:0; pointer-events:none; transform:translateX(12px); }
-.map-searchbar .search-container { flex:1; min-width:0; margin:0; z-index:1; position:relative; }
+.map-searchbar .search-container { flex:1; min-width:160px; margin:0; z-index:1; position:relative; }
 .map-searchbar .search-box { border:0; background:transparent; height:38px; border-radius:8px; padding:0 10px; gap:9px; display:flex; align-items:center; width:100%; }
 .map-searchbar .search-box input { font-size:12.5px; font-family:inherit; flex:1; min-width:0; }
 .map-searchbar .search-box kbd { display:none; }
@@ -72,6 +73,21 @@
 .filter-trigger:active { transform:scale(0.96); }
 .filter-trigger.selected { background:var(--accent-soft); color:var(--accent-text); }
 .filter-trigger b { font-size:10px; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 4px; border-radius:5px; background:var(--surface); color:var(--text); font-weight:800; font-variant-numeric:tabular-nums; }
+.filter-trigger:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* In the search bar the tools are quiet ghost buttons; only the main action is filled. */
+.map-searchbar-actions .filter-trigger { background:transparent; color:var(--muted); padding:0 10px; border-radius:9px; }
+.map-searchbar-actions .filter-trigger:hover { background:var(--surface-hover); color:var(--text); }
+.map-searchbar-actions .filter-trigger.selected { background:var(--accent-soft); color:var(--accent-text); }
+.map-searchbar-actions .filter-trigger.selected b { background:var(--accent); color:var(--on-accent); }
+.map-searchbar-actions .filter-trigger.is-primary { background:var(--accent); color:var(--on-accent); margin-left:4px; padding:0 13px; }
+.map-searchbar-actions .filter-trigger.is-primary:hover { background:var(--accent-hover); color:var(--on-accent); }
+/* Not enough room for every label: the less used tools become icons (their title still names them)
+   before the search field gets squeezed. */
+@media (max-width:1480px) {
+  .map-searchbar-actions .filter-trigger.is-compactable { position:relative; width:38px; padding:0; justify-content:center; }
+  .map-searchbar-actions .filter-trigger.is-compactable span { display:none; }
+  .map-searchbar-actions .filter-trigger.is-compactable b { position:absolute; transform:translate(11px,-10px); min-width:16px; height:16px; font-size:9px; }
+}
 .map-workspace .map-tools { top:auto; transform:none; right:18px; bottom:54px; gap:9px; }
 .map-workspace .map-tool,.map-workspace .map-control-group button { width:38px; height:38px; }
 .map-workspace .map-tool { border-radius:9px; }
@@ -145,8 +161,12 @@
   .sidebar-brand { margin-inline:7px; }
   .sidebar-wordmark { font-size:25px; }
   .sidebar-account small { font-size:9px; }
-  .map-searchbar { width:min(440px, calc(100% - 285px)); }
-  .map-searchbar.search-active, .map-searchbar:has(.search-container:focus-within) { width:min(520px, calc(100% - 36px)); }
+  .map-searchbar { width:min(560px, calc(100% - 285px)); }
+  .map-searchbar.search-active, .map-searchbar:has(.search-container:focus-within) { width:min(560px, calc(100% - 36px)); }
+  .map-searchbar-actions .filter-trigger span { display:none; }
+  .map-searchbar-actions .filter-trigger { position:relative; width:38px; padding:0; justify-content:center; }
+  .map-searchbar-actions .filter-trigger.is-primary { padding:0; }
+  .map-searchbar-actions .filter-trigger b { position:absolute; transform:translate(11px,-10px); min-width:16px; height:16px; font-size:9px; }
   .map-searchbar .search-results { width:100%; }
   .map-coordinates>span:first-child { display:none; }
   .connection-status { display:none; }
@@ -176,6 +196,7 @@
   .map-searchbar-actions { gap:4px; }
   .map-searchbar-actions .filter-trigger { padding:0 8px; font-size:11px; gap:4px; }
   .map-searchbar-actions .filter-trigger span { display:none; }
+  .map-searchbar-actions .filter-trigger.is-primary { padding:0 10px; }
   .map-searchbar.search-active .map-searchbar-actions, .map-searchbar .search-container:focus-within ~ .map-searchbar-actions { max-width:0; opacity:0; margin:0; pointer-events:none; }
   .map-searchbar .search-box input { font-size:12.5px; font-family:inherit; flex:1; min-width:0; }
   .filter-trigger { padding:0 9px; font-size:11px; gap:5px; height:38px; }
@@ -220,6 +241,7 @@
   .map-searchbar { left:8px; right:8px; top:8px; gap:4px; padding:4px; }
   .map-searchbar .search-box { padding:0 6px; gap:6px; }
   .map-searchbar .search-box input { font-size:11.5px; }
+  .map-searchbar .search-container { min-width:0; }
   .filter-trigger { padding:0 8px; font-size:11px; gap:4px; }
   .map-hud { top:64px; left:8px; }
 }

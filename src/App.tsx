@@ -386,7 +386,7 @@ export default function App(){
             <div className="map-searchbar-actions">
               <button
                 type="button"
-                className={`filter-trigger ${showRadiolines ? 'selected' : ''}`}
+                className={`filter-trigger is-compactable ${showRadiolines ? 'selected' : ''}`}
                 onClick={() => setShowRadiolines(prev => !prev)}
                 aria-pressed={showRadiolines}
                 aria-label={lang === 'pl' ? 'Linie radiowe UKE' : 'UKE Microwave Links'}
@@ -398,7 +398,7 @@ export default function App(){
               </button>
               <button
                 type="button"
-                className={`filter-trigger ${evalTarget || isPickingEvalTarget ? 'selected' : ''}`}
+                className={`filter-trigger is-compactable ${evalTarget || isPickingEvalTarget ? 'selected' : ''}`}
                 onClick={() => {
                   if (evalTarget || isPickingEvalTarget) {
                     closeAreaEvaluation();
@@ -423,6 +423,7 @@ export default function App(){
                 onClick={()=>togglePanel('filters')}
                 aria-expanded={panel==='filters'}
                 aria-label={t.filters}
+                title={t.filters}
               >
                 <SlidersHorizontal size={17}/>
                 <span>{t.filters}</span>
@@ -430,7 +431,7 @@ export default function App(){
               </button>
               <button
                 type="button"
-                className="filter-trigger"
+                className="filter-trigger is-primary"
                 onClick={() => openCreateStation(null)}
                 aria-label={t.addStation}
                 title={t.addStationTooltip}
