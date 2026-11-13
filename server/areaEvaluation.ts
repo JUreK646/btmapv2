@@ -97,9 +97,11 @@ export async function evaluateAreaCoverage(
 
       if (si2pemTowers.length === 0) {
         // Disqualified operator in this location (no SI2PEM confirmed stations in range)
+        // Not rated: there is nothing measured to score, so no points and no grade are made up.
         return {
           operator: opName,
-          score: unverifiedTowers.length > 0 ? 15 : 0,
+          rated: false,
+          score: 0,
           rank: 4,
           grade: 'F',
           isWinner: false,
@@ -217,7 +219,8 @@ export async function evaluateAreaCoverage(
     if (candidates.length === 0) {
       return {
         operator: opName,
-        score: 10,
+        rated: false,
+        score: 0,
         rank: 4,
         grade: 'F',
         isWinner: false,
@@ -379,14 +382,14 @@ export async function evaluateAreaCoverage(
 
     // 5G C-Band n78
     if (bestCandidate.hasCband5G) {
-      pros.push('Aktywne pasmo 5G C-Band (3600 MHz n78) w wykazie UKE – gigabitowe transfery i minimalne opóźnienia.');
+      pros.push('Pasmo 5G C-Band (3600 MHz, n78) w wykazie UKE – najszybsza transmisja danych z dostępnych pasm.');
     } else {
       cons.push('Brak pasma 5G C-Band (3600 MHz n78) na tej stacji – dostępne tylko pasma LTE lub 5G DSS.');
     }
 
     // Low bands (coverage / indoor penetration)
     if (bestCandidate.hasLowBand) {
-      pros.push('Pasma zasięgowe 800/900 MHz gwarantujące stabilny sygnał wewnątrz pomieszczeń.');
+      pros.push('Pasma zasięgowe 800/900 MHz – lepszy odbiór wewnątrz budynków.');
     } else {
       cons.push('Brak pasm zasięgowych 800/900 MHz – utrudniony odbiór w głębi budynków.');
     }
@@ -416,7 +419,8 @@ export async function evaluateAreaCoverage(
     }
 
     // Verified SI2PEM report
-    pros.push(`Zweryfikowane laboratoryjne sprawozdanie PEM zarejestrowane w państwowym systemie SI2PEM${bestCandidate.pemReportDate ? ` (${bestCandidate.pemReportDate})` : ''}.`);
+    // pemReportDate is when BTMap last checked SI2PEM, not the date of the report.
+    pros.push(`Stacja ma sprawozdanie z pomiarów PEM w SI2PEM${bestCandidate.pemReportDate ? ` (sprawdzono ${bestCandidate.pemReportDate})` : ''}.`);
 
     // Grade and Verdict
     let grade: OperatorEvaluation['grade'] = 'C';
@@ -441,6 +445,7 @@ export async function evaluateAreaCoverage(
 
     return {
       operator: opName,
+      rated: true,
       isNetworks: bestCandidate.isNetworksShared || isNetworksOp,
       score: totalScore,
       rank: 1, // Will be sorted below

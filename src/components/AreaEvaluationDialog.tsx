@@ -2,14 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   X,
   Radar,
-  Trophy,
   Crosshair,
   CheckCircle2,
   AlertTriangle,
   Mountain,
-  ShieldCheck,
-  Maximize2,
-  Minimize2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { AreaEvaluationResult, OperatorEvaluation } from '../types';
@@ -143,35 +141,32 @@ export default function AreaEvaluationDialog({
     );
   }, [data, selectedOpName]);
 
-  return (
-    <div className={`ae-dialog-dock ${isMinimized ? 'is-minimized' : ''}`}>
-      {/* Header */}
-      <div className="ae-header">
-        <div className="ae-header-info">
-          <div className="ae-header-icon">
-            <Radar size={18} />
-          </div>
-          <div className="ae-header-titles">
-            <h2 className="ae-title">
-              {isEn ? '4-Operator Coverage Audit' : 'Audyt zasięgu 4 operatorów'}
-              <span className="ae-title-badge">{isEn ? 'BTMap DB + SI2PEM' : 'Baza BTMap + SI2PEM'}</span>
-            </h2>
-            <div className="ae-subtitle">
-              <span>{targetCoords[0].toFixed(5)}, {targetCoords[1].toFixed(5)}</span>
-              <span>·</span>
-              <span>{isEn ? `Area ${areaKm2.toFixed(2)} km² (${Math.round(radiusM)} m)` : `Obszar ${areaKm2.toFixed(2)} km² (${Math.round(radiusM)} m)`}</span>
-            </div>
-          </div>
-        </div>
+  const breakdown = selectedOp
+    ? [
+        { key: 'terrain', label: isEn ? 'Terrain & line of sight' : 'Teren i widoczność', value: selectedOp.scoreBreakdown.terrainLos, max: 30 },
+        { key: 'bands', label: isEn ? 'Bands' : 'Pasma', value: selectedOp.scoreBreakdown.spectrumBands, max: 30 },
+        { key: 'sector', label: isEn ? 'Sector direction' : 'Kierunek sektora', value: selectedOp.scoreBreakdown.sectorAlignment, max: 20 },
+        { key: 'infra', label: isEn ? 'Mast & SI2PEM' : 'Maszt i SI2PEM', value: selectedOp.scoreBreakdown.infrastructure, max: 20 },
+      ]
+    : [];
+  const isRated = (op: OperatorEvaluation) => op.rated !== false && Boolean(op.servingStation);
+  const partnerOf = (op: OperatorEvaluation) => op.servingStation?.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange');
 
+  return (
+    <div className={`ae-dialog-dock ae-flat ${isMinimized ? 'is-minimized' : ''}`} role="dialog" aria-label={isEn ? 'Operator coverage audit' : 'Audyt zasięgu operatorów'}>
+      <header className="ae-header">
+        <div className="ae-hd">
+          <span className="ae-hd-title">
+            <Radar size={15} />
+            {isEn ? 'Coverage audit' : 'Audyt zasięgu'}
+          </span>
+          <span className="ae-hd-sub">
+            {targetCoords[0].toFixed(5)}, {targetCoords[1].toFixed(5)} · r = {Math.round(radiusM)} m
+          </span>
+        </div>
         <div className="ae-header-actions">
-          <button
-            type="button"
-            className="ae-pick-another-btn"
-            onClick={onPickOnMap}
-            title={isEn ? 'Pick another building, plot or point on map' : 'Wskaż inny budynek, działkę lub miejsce na mapie'}
-          >
-            <Crosshair size={12} />
+          <button type="button" className="ae-btn-outline" onClick={onPickOnMap} title={isEn ? 'Pick another point on the map' : 'Wskaż inny punkt na mapie'}>
+            <Crosshair size={13} />
             <span>{isEn ? 'Change point' : 'Zmień punkt'}</span>
           </button>
           <button
@@ -181,401 +176,209 @@ export default function AreaEvaluationDialog({
             aria-label={isMinimized ? (isEn ? 'Expand panel' : 'Rozwiń panel') : (isEn ? 'Collapse panel' : 'Zwiń panel')}
             onClick={() => setIsMinimized(!isMinimized)}
           >
-            {isMinimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
+            {isMinimized ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
           </button>
-          <button
-            type="button"
-            className="ae-icon-btn"
-            title={isEn ? 'Close audit' : 'Zamknij audyt'}
-            aria-label={isEn ? 'Close audit' : 'Zamknij audyt'}
-            onClick={onClose}
-          >
-            <X size={16} />
+          <button type="button" className="ae-icon-btn" title={isEn ? 'Close audit' : 'Zamknij audyt'} aria-label={isEn ? 'Close audit' : 'Zamknij audyt'} onClick={onClose}>
+            <X size={17} />
           </button>
         </div>
-      </div>
+      </header>
 
       {!isMinimized && (
-        <>
-          {/* Target Area Controls Bar */}
-          <div className="ae-target-bar">
-            {/* Presets Grid */}
-            <div className="ae-radius-presets">
+        <div className="ae-content">
+          {/* Area */}
+          <section className="ae-group">
+            <div className="ae-group-head">
+              <span className="ae-group-title">{isEn ? 'Area' : 'Obszar'}</span>
+              <span className="ae-group-meta">{areaKm2.toFixed(2).replace('.', ',')} km²</span>
+            </div>
+            <div className="ae-presets" role="group" aria-label={isEn ? 'Area size' : 'Wielkość obszaru'}>
               {presets.map(p => {
                 const isActive = Math.abs(radiusM - p.radius) < 25;
                 return (
-                  <button
-                    key={p.radius}
-                    type="button"
-                    className={`ae-preset-btn ${isActive ? 'active' : ''}`}
-                    onClick={() => onRadiusChange(p.radius)}
-                  >
-                    <span className="ae-preset-label">{p.label}</span>
-                    <span className="ae-preset-metrics">{p.radius}m · {p.area}</span>
+                  <button key={p.radius} type="button" className={isActive ? 'active' : ''} aria-pressed={isActive} onClick={() => onRadiusChange(p.radius)}>
+                    {p.label}
+                    <small>{p.radius} m</small>
                   </button>
                 );
               })}
             </div>
+            <label className="ae-slider">
+              <span className="ae-visually-hidden">{isEn ? 'Area radius' : 'Promień obszaru'}</span>
+              <input type="range" min="80" max="977" step="10" value={Math.round(radiusM)} onChange={e => onRadiusChange(Number(e.target.value))} />
+              <output>{Math.round(radiusM)} m</output>
+            </label>
+          </section>
 
-            {/* Slider */}
-            <div className="ae-slider-row">
-              <span className="ae-slider-label">{isEn ? 'Area radius:' : 'Promień terenu:'}</span>
-              <input
-                type="range"
-                className="ae-radius-slider"
-                min="80"
-                max="977"
-                step="10"
-                value={Math.round(radiusM)}
-                onChange={e => onRadiusChange(Number(e.target.value))}
-              />
-              <span className="ae-slider-value">
-                <strong>{Math.round(radiusM)} m</strong>
-                <small>({areaKm2.toFixed(2)} km²)</small>
-              </span>
+          {loading ? (
+            <div className="ae-state">
+              <span className="ae-state-ring"><Radar size={18} className="ae-spin-slow" /></span>
+              <strong>{isEn ? 'Evaluating 4 operators…' : 'Ocenianie 4 operatorów…'}</strong>
+              <span>{isEn ? 'Nearest stations, sectors, bands, terrain and SI2PEM reports' : 'Najbliższe stacje, sektory, pasma, teren i raporty SI2PEM'}</span>
             </div>
-          </div>
-
-          {/* Body Content */}
-          <div className="ae-body">
-            {loading ? (
-              <div className="ae-loading-state">
-                <div className="ae-radar-sweep">
-                  <Radar size={24} />
+          ) : error ? (
+            <div className="ae-state is-error">
+              <AlertTriangle size={18} />
+              <strong>{error}</strong>
+              <button type="button" className="ae-btn-outline" onClick={() => onRadiusChange(radiusM)}>
+                {isEn ? 'Try again' : 'Spróbuj ponownie'}
+              </button>
+            </div>
+          ) : data ? (
+            <>
+              {/* Ranking */}
+              <section className="ae-group">
+                <div className="ae-group-head">
+                  <span className="ae-group-title">{isEn ? 'Ranking' : 'Ranking'}</span>
+                  <span className="ae-group-meta">{isEn ? 'select an operator for details' : 'wybierz operatora, aby zobaczyć szczegóły'}</span>
                 </div>
-                <h3 className="ae-loading-title">{isEn ? 'Evaluating 4 operators…' : 'Przeliczanie parametrów 4 operatorów…'}</h3>
-                <p className="ae-loading-desc">
-                  {isEn
-                    ? 'Checking nearest base stations, mast heights, antenna sector azimuths, band aggregation, and SI2PEM lab measurements.'
-                    : 'Trwa sprawdzanie najbliższych stacji bazowych, wysokości masztów, azymutów sektorów antenowych, agregacji pasm oraz sprawozdań laboratoryjnych SI2PEM.'}
-                </p>
-              </div>
-            ) : error ? (
-              <div className="ae-error-state">
-                <AlertTriangle size={28} color="#f87171" />
-                <p className="ae-error-text">{error}</p>
-                <button
-                  type="button"
-                  className="ae-btn-secondary"
-                  onClick={() => onRadiusChange(radiusM)}
-                >
-                  {isEn ? 'Try again' : 'Spróbuj ponownie'}
-                </button>
-              </div>
-            ) : data ? (
-              <>
-                {/* 4-Operator Leaderboard Table */}
-                <div className="ae-leaderboard-section">
-                  <div className="ae-leaderboard-header">
-                    <span>{isEn ? 'Operator ranking at this point' : 'Ranking operatorów w tym punkcie'}</span>
-                    <span className="ae-leaderboard-hint">{isEn ? 'Click operator to expand audit' : 'Kliknij operatora, aby rozwinąć audyt'}</span>
-                  </div>
-
-                  <div className="ae-leaderboard-grid">
-                    {data.operators.map(op => {
-                      const isSelected = selectedOp?.operator === op.operator;
-                      const brandColor = OP_COLORS[op.operator] || '#94a3b8';
-                      const s = op.servingStation;
-
-                      return (
-                        <div
-                          key={op.operator}
-                          className={`ae-leaderboard-row ${op.isWinner ? 'is-winner' : ''} ${isSelected ? 'is-selected' : ''}`}
-                          onClick={() => setSelectedOpName(op.operator)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              setSelectedOpName(op.operator);
-                            }
-                          }}
-                        >
-                          {/* Col 1: Rank & Brand */}
-                          <div className="ae-row-brand">
-                            <span className="ae-rank-number">
-                              {op.isWinner ? <Trophy size={13} className="ae-gold-trophy" /> : `#${op.rank}`}
-                            </span>
-                            <div className="ae-brand-info">
-                              <span className="ae-brand-name">
-                                <span className="ae-brand-dot" style={{ background: brandColor }} />
-                                <span className="ae-brand-label">{op.operator}</span>
-                                {s?.isNetworks && (
-                                  <span
-                                    className="ae-networks-tag"
-                                    title={isEn ? `Station shared via NetWorkS! with ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}` : `Współdzielenie stacji w ramach NetWorkS! z ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}`}
-                                  >
-                                    N!
-                                  </span>
-                                )}
-                              </span>
-                              <span
-                                className="ae-station-sub"
-                                title={s ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}` : undefined}
-                              >
-                                {s ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}` : (isEn ? 'No station in range' : 'Brak stacji w zasięgu')}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Col 2: Telemetry Badges */}
-                          <div className="ae-row-telemetry">
-                            {s ? (
-                              <>
-                                {s.isNetworks && (
-                                  <span
-                                    className="ae-metric-chip chip-networks"
-                                    title={isEn ? `NetWorkS! (N!): station shared with operator ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}` : `NetWorkS! (N!): stacja współdzielona z operatorem ${s.networksPartner || (op.operator === 'Orange' ? 'T-Mobile' : 'Orange')}`}
-                                  >
-                                    N! NetWorkS!
-                                  </span>
-                                )}
-                                <span
-                                  className={`ae-metric-chip ${s.hasCband5G ? 'chip-cband' : 'chip-dim'}`}
-                                  title={s.hasCband5G ? (isEn ? '5G C-Band 3600 MHz n78 active' : '5G C-Band 3600 MHz n78 aktywny') : (isEn ? 'No 5G 3600 MHz band' : 'Brak pasma 5G 3600 MHz')}
-                                >
-                                  {s.hasCband5G ? '5G 3.6 GHz' : 'LTE-A'}
-                                </span>
-                                {s.losKnown === false ? (
-                                  <span className="ae-metric-chip chip-dim" title={isEn ? 'Terrain data unavailable – line of sight was not checked' : 'Brak danych wysokościowych – widoczność nie została sprawdzona'}>
-                                    {isEn ? 'LOS unknown' : 'LOS nieznany'}
-                                  </span>
-                                ) : (
-                                  <span
-                                    className={`ae-metric-chip ${s.isLosClear ? 'chip-ok' : 'chip-warn'}`}
-                                    title={s.isLosClear ? (isEn ? 'Line of sight (LOS) clear' : 'Widoczność optyczna LOS czysta') : (isEn ? `Obstruction ${s.obstructionM.toFixed(1)}m` : `Przeszkoda ${s.obstructionM.toFixed(1)}m`)}
-                                  >
-                                    {s.isLosClear ? (isEn ? 'LOS Clear' : 'LOS Czysty') : `LOS -${s.obstructionM.toFixed(1)}m`}
-                                  </span>
-                                )}
-                                {s.sectorKnown === false ? (
-                                  <span className="ae-metric-chip chip-dim" title={isEn ? 'No antenna azimuths for this station (SI2PEM / UKE)' : 'Brak danych o azymutach anten tej stacji (SI2PEM / UKE)'}>
-                                    {isEn ? 'Sector unknown' : 'Sektor nieznany'}
-                                  </span>
-                                ) : (
-                                  <span
-                                    className={`ae-metric-chip ${s.isMainLobe ? 'chip-ok' : s.isBacklobe ? 'chip-err' : 'chip-dim'}`}
-                                    title={isEn ? `Sector ${s.bestSectorAzimuth}° (deviation ${s.sectorDeviationDeg.toFixed(0)}°)` : `Sektor ${s.bestSectorAzimuth}° (odchylenie ${s.sectorDeviationDeg.toFixed(0)}°)`}
-                                  >
-                                    {s.bestSectorAzimuth}° ({s.sectorDeviationDeg.toFixed(0)}°)
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="ae-no-station-label">{isEn ? 'No SI2PEM' : 'Brak SI2PEM'}</span>
-                            )}
-                          </div>
-
-                          {/* Col 3: Score and Grade */}
-                          <div className="ae-row-score">
-                            <span className="ae-score-value">
-                              <strong>{op.score}</strong>
-                              <small>/100</small>
-                            </span>
-                            <span className={`ae-grade-tag grade-${op.grade[0]}`}>
-                              {op.grade}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Selected Operator Detailed Dossier */}
-                {selectedOp && (
-                  <div className="ae-dossier-card">
-                    <div className="ae-dossier-header">
-                      <div className="ae-dossier-title">
-                        <span
-                          className="ae-brand-dot"
-                          style={{ background: OP_COLORS[selectedOp.operator] || '#94a3b8' }}
-                        />
-                        <strong className="ae-dossier-heading">{isEn ? `RF Engineering Audit: ${selectedOp.operator}` : `Audyt inżynieryjny: ${selectedOp.operator}`}</strong>
-                        {selectedOp.isNetworks && (
-                          <span
-                            className="ae-networks-pill"
-                            title={isEn ? 'Infrastructure shared in NetWorkS! alliance (Orange + T-Mobile)' : 'Infrastruktura współdzielona w ramach sojuszu NetWorkS! (Orange + T-Mobile)'}
-                          >
-                            N! NetWorkS!
-                          </span>
-                        )}
-                        <span className={`ae-grade-tag grade-${selectedOp.grade[0]}`}>
-                          {isEn ? `Grade ${selectedOp.grade} (${selectedOp.score} / 100 pts)` : `Ocena ${selectedOp.grade} (${selectedOp.score} / 100 pkt)`}
-                        </span>
-                      </div>
-
-                      {selectedOp.servingStation && onOpenTerrainProfile && (
+                <ol className="ae-rank">
+                  {data.operators.map(op => {
+                    const isSelected = selectedOp?.operator === op.operator;
+                    const s = op.servingStation;
+                    const rated = isRated(op);
+                    const facts = s
+                      ? [
+                          s.hasCband5G ? '5G 3,6 GHz' : null,
+                          s.losKnown === false ? (isEn ? 'LOS unknown' : 'LOS nieznany') : s.isLosClear ? (isEn ? 'LOS clear' : 'LOS czysty') : `LOS −${s.obstructionM.toFixed(1).replace('.', ',')} m`,
+                          s.sectorKnown === false ? null : `${isEn ? 'sector' : 'sektor'} ${s.bestSectorAzimuth}° (${s.sectorDeviationDeg.toFixed(0)}°)`,
+                          s.isNetworks ? 'NetWorkS!' : null,
+                        ].filter(Boolean)
+                      : [];
+                    return (
+                      <li key={op.operator}>
                         <button
                           type="button"
-                          className="ae-profile-btn"
-                          onClick={() => handleLaunchProfile(selectedOp)}
-                          title={isEn ? 'Open LiDAR terrain profile from this station' : 'Otwórz wykres profilu terenu LiDAR z tej stacji'}
+                          className={`ae-rank-row ${isSelected ? 'is-selected' : ''} ${rated ? '' : 'is-unrated'}`}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedOpName(op.operator)}
+                          title={s?.isNetworks ? (isEn ? `Station shared via NetWorkS! with ${partnerOf(op)}` : `Stacja współdzielona w NetWorkS! z ${partnerOf(op)}`) : undefined}
                         >
-                          <Mountain size={13} />
-                          <span>{isEn ? 'Terrain profile' : 'Profil terenu'}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Serving station telemetry table */}
-                    {selectedOp.servingStation ? (
-                      <div className="ae-telemetry-grid">
-                        <div className="ae-tel-cell">
-                          <span className="ae-tel-k">{isEn ? 'Nearest station' : 'Najbliższa stacja'}</span>
-                          <span className="ae-tel-v" title={selectedOp.servingStation.address}>
-                            {selectedOp.servingStation.stationId || selectedOp.servingStation.id}
-                          </span>
-                        </div>
-                        <div className="ae-tel-cell">
-                          <span className="ae-tel-k">{isEn ? 'Physical distance' : 'Fizyczna odległość'}</span>
-                          <span className="ae-tel-v ae-highlight">
-                            {formatDist(selectedOp.servingStation.distanceKm)}
-                          </span>
-                        </div>
-                        <div className="ae-tel-cell">
-                          <span className="ae-tel-k">{isEn ? 'Antenna height' : 'Wysokość anteny'}</span>
-                          <span className="ae-tel-v">
-                            {selectedOp.servingStation.antennaHeightM} {isEn ? 'm AGL' : 'm n.p.t.'}
-                            {selectedOp.servingStation.heightKnown === false && (isEn ? ' (assumed)' : ' (przyjęto)')}
-                          </span>
-                        </div>
-                        <div className="ae-tel-cell">
-                          <span className="ae-tel-k">{isEn ? 'Antenna sector' : 'Sektor antenowy'}</span>
-                          <span className="ae-tel-v">
-                            {selectedOp.servingStation.sectorKnown === false
-                              ? (isEn ? 'No data' : 'Brak danych')
-                              : <>{selectedOp.servingStation.bestSectorAzimuth}° ({isEn ? 'dev.' : 'odch.'} {selectedOp.servingStation.sectorDeviationDeg.toFixed(1)}°)</>}
-                          </span>
-                        </div>
-                        <div className="ae-tel-cell">
-                          <span className="ae-tel-k">{isEn ? 'LiDAR Visibility' : 'Widoczność LiDAR'}</span>
-                          <span className={`ae-tel-v ${selectedOp.servingStation.losKnown === false ? '' : selectedOp.servingStation.isLosClear ? 'text-ok' : 'text-warn'}`}>
-                            {selectedOp.servingStation.losKnown === false ? (isEn ? 'Not checked (no terrain data)' : 'Nie sprawdzono (brak danych terenu)') : selectedOp.servingStation.isLosClear ? (isEn ? 'Clear path (LOS)' : 'Czysty tor (LOS)') : (isEn ? `Obstruction ${selectedOp.servingStation.obstructionM.toFixed(1)}m` : `Przesłonięcie ${selectedOp.servingStation.obstructionM.toFixed(1)}m`)}
-                          </span>
-                        </div>
-                        <div className="ae-tel-cell">
-                          <span className="ae-tel-k">{isEn ? '5G C-Band' : 'Pasmo 5G C-Band'}</span>
-                          <span className={`ae-tel-v ${selectedOp.servingStation.hasCband5G ? 'text-cband' : ''}`}>
-                            {selectedOp.servingStation.hasCband5G ? '3600 MHz (n78)' : (isEn ? 'None (LTE only)' : 'Brak (tylko LTE)')}
-                          </span>
-                        </div>
-                        {selectedOp.servingStation.isNetworks && (
-                          <div className="ae-tel-cell ae-tel-cell-full">
-                            <span className="ae-tel-k">{isEn ? 'RAN Radio Alliance' : 'Sojusz radiowy RAN'}</span>
-                            <span className="ae-tel-v text-networks">
-                              NetWorkS! (N!) · {isEn ? 'Shared with' : 'Współdzielenie z'} {selectedOp.servingStation.networksPartner || (selectedOp.operator === 'Orange' ? 'T-Mobile' : 'Orange')}
+                          <span className="ae-rank-no">{rated ? op.rank : '–'}</span>
+                          <span className="ae-rank-main">
+                            <span className="ae-rank-op">
+                              <i style={{ background: OP_COLORS[op.operator] || '#94a3b8' }} aria-hidden="true" />
+                              {op.operator}
+                              {op.isWinner && <span className="ae-rank-best">{isEn ? 'best' : 'najlepszy'}</span>}
                             </span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="ae-no-station-box">
-                        {isEn ? 'No active base stations with SI2PEM report within 7.5 km.' : 'Brak aktywnych stacji bazowych ze sprawozdaniem SI2PEM w promieniu 7.5 km.'}
-                      </div>
-                    )}
+                            <span className="ae-rank-sub">
+                              {s
+                                ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}${facts.length ? ` · ${facts.join(' · ')}` : ''}`
+                                : (isEn ? 'No station with SI2PEM measurements within 7.5 km' : 'Brak stacji z pomiarem SI2PEM w promieniu 7,5 km')}
+                            </span>
+                          </span>
+                          {rated ? (
+                            <span className="ae-rank-score">
+                              <span className="ae-rank-bar" aria-hidden="true"><span style={{ width: `${op.score}%` }} /></span>
+                              <b>{op.score}</b>
+                              <span className={`ae-grade grade-${op.grade[0]}`}>{op.grade}</span>
+                            </span>
+                          ) : (
+                            <span className="ae-rank-none">{isEn ? 'not rated' : 'brak oceny'}</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
 
-                    {/* Score Breakdown Bar */}
-                    <div className="ae-breakdown-bar-wrap">
-                      <div className="ae-breakdown-bar">
-                        <div
-                          className="ae-seg ae-seg-terrain"
-                          style={{ width: `${(selectedOp.scoreBreakdown.terrainLos / 100) * 100}%` }}
-                          title={`${isEn ? 'Terrain & LOS' : 'Teren i LOS'}: ${selectedOp.scoreBreakdown.terrainLos}/30`}
-                        />
-                        <div
-                          className="ae-seg ae-seg-spectrum"
-                          style={{ width: `${(selectedOp.scoreBreakdown.spectrumBands / 100) * 100}%` }}
-                          title={`${isEn ? 'Bands & 5G' : 'Pasma i 5G'}: ${selectedOp.scoreBreakdown.spectrumBands}/30`}
-                        />
-                        <div
-                          className="ae-seg ae-seg-sector"
-                          style={{ width: `${(selectedOp.scoreBreakdown.sectorAlignment / 100) * 100}%` }}
-                          title={`${isEn ? 'Sector angle' : 'Kąt sektora'}: ${selectedOp.scoreBreakdown.sectorAlignment}/20`}
-                        />
-                        <div
-                          className="ae-seg ae-seg-infra"
-                          style={{ width: `${(selectedOp.scoreBreakdown.infrastructure / 100) * 100}%` }}
-                          title={`${isEn ? 'Mast & SI2PEM' : 'Maszt i SI2PEM'}: ${selectedOp.scoreBreakdown.infrastructure}/20`}
-                        />
-                      </div>
-                      <div className="ae-breakdown-legend">
-                        <span className="ae-legend-item">
-                          <span className="ae-legend-dot dot-terrain" />
-                          <span>{isEn ? 'Terrain/LOS' : 'Teren/LOS'}: {selectedOp.scoreBreakdown.terrainLos}/30</span>
+              {/* Details of the selected operator */}
+              {selectedOp && (
+                <section className="ae-group ae-detail">
+                  <div className="ae-detail-head">
+                    <span className="ae-detail-title">
+                      <i style={{ background: OP_COLORS[selectedOp.operator] || '#94a3b8' }} aria-hidden="true" />
+                      {selectedOp.operator}
+                      {isRated(selectedOp) && (
+                        <span className="ae-detail-score">
+                          {selectedOp.score}/100 · {isEn ? 'grade' : 'ocena'} <span className={`ae-grade grade-${selectedOp.grade[0]}`}>{selectedOp.grade}</span>
                         </span>
-                        <span className="ae-legend-item">
-                          <span className="ae-legend-dot dot-spectrum" />
-                          <span>{isEn ? 'Bands' : 'Pasma'}: {selectedOp.scoreBreakdown.spectrumBands}/30</span>
-                        </span>
-                        <span className="ae-legend-item">
-                          <span className="ae-legend-dot dot-sector" />
-                          <span>{isEn ? 'Sector' : 'Sektor'}: {selectedOp.scoreBreakdown.sectorAlignment}/20</span>
-                        </span>
-                        <span className="ae-legend-item">
-                          <span className="ae-legend-dot dot-infra" />
-                          <span>{isEn ? 'Infrastructure' : 'Infrastruktura'}: {selectedOp.scoreBreakdown.infrastructure}/20</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Verdict */}
-                    {selectedOp.verdict && (
-                      <div className="ae-dossier-verdict">
-                        „{selectedOp.verdict}”
-                      </div>
+                      )}
+                    </span>
+                    {selectedOp.servingStation && onOpenTerrainProfile && (
+                      <button type="button" className="ae-btn-outline" onClick={() => handleLaunchProfile(selectedOp)} title={isEn ? 'Open the LiDAR terrain profile from this station' : 'Otwórz profil terenu LiDAR z tej stacji'}>
+                        <Mountain size={13} />
+                        <span>{isEn ? 'Terrain profile' : 'Profil terenu'}</span>
+                      </button>
                     )}
-
-                    {/* Concrete RF Engineering Pros */}
-                    {selectedOp.pros.length > 0 && (
-                      <div className="ae-facts-group">
-                        <div className="ae-facts-heading text-pro">
-                          <CheckCircle2 size={13} />
-                          <span>{isEn ? `Strengths and advantages (${selectedOp.pros.length})` : `Mocne strony i atuty (${selectedOp.pros.length})`}</span>
-                        </div>
-                        <ul className="ae-facts-list">
-                          {selectedOp.pros.map((pro, idx) => (
-                            <li key={idx} className="ae-fact-item fact-pro">
-                              <CheckCircle2 size={13} className="ae-fact-icon" />
-                              <span>{pro}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Concrete RF Engineering Cons */}
-                    {selectedOp.cons.length > 0 && (
-                      <div className="ae-facts-group">
-                        <div className="ae-facts-heading text-con">
-                          <AlertTriangle size={13} />
-                          <span>{isEn ? `Limitations and weaknesses (${selectedOp.cons.length})` : `Ograniczenia i słabe punkty (${selectedOp.cons.length})`}</span>
-                        </div>
-                        <ul className="ae-facts-list">
-                          {selectedOp.cons.map((con, idx) => (
-                            <li key={idx} className="ae-fact-item fact-con">
-                              <AlertTriangle size={13} className="ae-fact-icon" />
-                              <span>{con}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* SI2PEM ground truth note */}
-                    <div className="ae-dossier-footer">
-                      <ShieldCheck size={12} color="#10b981" />
-                      <span>
-                        {selectedOp.si2pemStationsCount} {isEn ? 'stations with SI2PEM included' : 'stacji z SI2PEM uwzględnionych'}
-                        {selectedOp.unverifiedStationsCount > 0 && (isEn ? ` · ${selectedOp.unverifiedStationsCount} UKE permits excluded (no SI2PEM report)` : ` · ${selectedOp.unverifiedStationsCount} pozwoleń UKE odrzucono (brak pomiaru SI2PEM)`)}
-                      </span>
-                    </div>
                   </div>
-                )}
-              </>
-            ) : null}
-          </div>
-        </>
+
+                  {selectedOp.verdict && <p className="ae-verdict">{selectedOp.verdict}</p>}
+
+                  {selectedOp.servingStation && (() => {
+                    const s = selectedOp.servingStation!;
+                    const rows: Array<[string, React.ReactNode, string?]> = [
+                      [isEn ? 'Station' : 'Stacja', s.stationId || s.id],
+                      [isEn ? 'Distance' : 'Odległość', formatDist(s.distanceKm)],
+                      [isEn ? 'Antenna height' : 'Wysokość anten', `${s.antennaHeightM} m n.p.t.${s.heightKnown === false ? (isEn ? ' (assumed)' : ' (przyjęto)') : ''}`],
+                      [isEn ? 'Sector' : 'Sektor', s.sectorKnown === false ? (isEn ? 'no data' : 'brak danych') : `${s.bestSectorAzimuth}° (${isEn ? 'off by' : 'odchylenie'} ${s.sectorDeviationDeg.toFixed(1).replace('.', ',')}°)`],
+                      [isEn ? 'Line of sight' : 'Widoczność', s.losKnown === false ? (isEn ? 'not checked' : 'nie sprawdzono') : s.isLosClear ? (isEn ? 'clear' : 'czysta') : `${isEn ? 'obstructed' : 'przesłonięta'} ${s.obstructionM.toFixed(1).replace('.', ',')} m`, s.losKnown === false ? '' : s.isLosClear ? 'is-ok' : 'is-warn'],
+                      ['5G C-Band', s.hasCband5G ? '3600 MHz (n78)' : (isEn ? 'none' : 'brak')],
+                    ];
+                    if (s.isNetworks) rows.push(['NetWorkS!', `${isEn ? 'shared with' : 'współdzielona z'} ${partnerOf(selectedOp)}`]);
+                    return (
+                      <dl className="ae-kv">
+                        {rows.map(([k, v, tone]) => (
+                          <div key={k}>
+                            <dt>{k}</dt>
+                            <dd className={tone || ''} title={k === (isEn ? 'Station' : 'Stacja') ? s.address : undefined}>{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    );
+                  })()}
+
+                  {isRated(selectedOp) && (
+                    <div className="ae-breakdown">
+                      {breakdown.map(b => (
+                        <div key={b.key} className="ae-breakdown-row">
+                          <span>{b.label}</span>
+                          <span className="ae-breakdown-track" aria-hidden="true"><span style={{ width: `${(b.value / b.max) * 100}%` }} /></span>
+                          <b>{b.value}<small>/{b.max}</small></b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedOp.pros.length > 0 && (
+                    <div className="ae-facts">
+                      <span className="ae-group-title">{isEn ? 'In favour' : 'Na plus'}</span>
+                      <ul>
+                        {selectedOp.pros.map((pro, idx) => (
+                          <li key={idx} className="is-pro"><CheckCircle2 size={13} /><span>{pro}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {selectedOp.cons.length > 0 && (
+                    <div className="ae-facts">
+                      <span className="ae-group-title">{isEn ? 'Against' : 'Na minus'}</span>
+                      <ul>
+                        {selectedOp.cons.map((con, idx) => (
+                          <li key={idx} className="is-con"><AlertTriangle size={13} /><span>{con}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="ae-sources">
+                    <span className="ae-src-badge">UKE + SI2PEM</span>
+                    <span>
+                      {isEn
+                        ? `${selectedOp.si2pemStationsCount} stations with SI2PEM included`
+                        : `${selectedOp.si2pemStationsCount} ${selectedOp.si2pemStationsCount === 1 ? 'stacja' : 'stacji'} z SI2PEM w ocenie`}
+                      {selectedOp.unverifiedStationsCount > 0 &&
+                        (isEn
+                          ? ` · ${selectedOp.unverifiedStationsCount} without SI2PEM left out`
+                          : ` · ${selectedOp.unverifiedStationsCount} bez pomiaru SI2PEM pominięto`)}
+                    </span>
+                  </p>
+                </section>
+              )}
+            </>
+          ) : null}
+        </div>
       )}
     </div>
   );

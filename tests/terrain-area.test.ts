@@ -81,7 +81,11 @@ test('the area audit rates only what it knows and says what it could not check',
     for (const name of ['Orange', 'T-Mobile'] as const) {
       const op = result.operators.find(o => o.operator === name)!;
       assert.equal(op.servingStation, null); assert.equal(op.isWinner, false);
+      // Nothing measured to rate: no made-up points, marked as not rated.
+      assert.equal(op.rated, false); assert.equal(op.score, 0);
     }
+    assert.equal(play.rated, true);
+    assert.ok(play.pros.some(p => /SI2PEM \(sprawdzono 2027-02-01\)/.test(p)), 'the date shown is when SI2PEM was checked, not a report date');
   } finally { db.close(); }
 });
 

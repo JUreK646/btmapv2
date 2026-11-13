@@ -263,6 +263,8 @@ export interface ServingStationInfo {
 
 export interface OperatorEvaluation {
   operator: 'Orange' | 'Play' | 'Plus' | 'T-Mobile';
+  /** False when the operator has no station with SI2PEM measurements in range: score and grade mean nothing then. */
+  rated?: boolean;
   isNetworks?: boolean;
   score: number;
   rank: number;
