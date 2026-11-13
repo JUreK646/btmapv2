@@ -6,6 +6,18 @@ import { isNewBand, newEntryWindow, type NewEntryWindow } from '../shared/newEnt
 
 const majorOperators = ['Orange', 'T-Mobile', 'Play', 'Plus', 'PKP PLK'];
 
+/**
+ * Which stations belong to the UKE registry view: those imported from the registry, and community
+ * records that carry at least one UKE permit. It used to be "the permit text contains /26", which only
+ * recognised permits issued in 2026.
+ */
+export const ukeViewSql = (alias = 't') => `(
+  ${alias}.source = 'UKE' OR ${alias}.addedBy = 'Import KML' OR EXISTS (
+    SELECT 1 FROM json_each(CASE WHEN json_valid(${alias}.operators) THEN ${alias}.operators ELSE '[]' END) uop, json_each(uop.value, '$.bands') ub
+    WHERE COALESCE(json_extract(ub.value, '$.permit'), '') <> ''
+  )
+)`;
+
 /** The "new" window anchored to the latest UKE registry this database has synced. */
 export function getNewEntryWindow(db: DatabaseSync): NewEntryWindow {
   const row = db.prepare("SELECT value FROM metadata WHERE key='ukeWykazDate'").get() as { value?: string } | undefined;
@@ -32,7 +44,7 @@ export function towerWhere(query: Record<string, unknown>, window: NewEntryWindo
 
   if (query.source && query.source !== 'ALL') {
     if (query.source === 'UKE') {
-      clauses.push("(t.source = 'UKE' OR t.addedBy = 'Import KML' OR t.operators LIKE '%/26%')");
+      clauses.push(ukeViewSql('t'));
     } else if (query.source === 'BTMAP') {
       clauses.push("(t.source = 'BTMAP' OR t.source = 'User')");
     } else {
@@ -131,7 +143,7 @@ export function towerWhere(query: Record<string, unknown>, window: NewEntryWindo
             AND (
               UPPER(json_extract(b5g.value, '$.mode')) = 'SA'
               OR (
-                (t.source = 'UKE' OR t.addedBy = 'Import KML' OR t.operators LIKE '%/26%')
+                ${ukeViewSql('t')}
                 AND REPLACE(json_extract(b5g.value, '$.band'), 'MHz', '') IN ('3600', '3500', '2600', '2100', '700')
               )
             )
