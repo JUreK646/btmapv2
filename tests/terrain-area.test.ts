@@ -104,6 +104,32 @@ test('when terrain data is down the audit reports line of sight as unknown, not 
   } finally { db.close(); }
 });
 
+test('UKE stations without an SI2PEM report are rated too; the report only adds points', async () => {
+  const db = areaFixture();
+  try {
+    // An Orange station from the UKE registry with no SI2PEM report.
+    db.prepare("INSERT INTO towers(id,stationId,address,province,lat,lng,operators,height,source,status) VALUES('UKE_orange','40925','Warszawa, C','Mazowieckie',52.2050,21.0002,?,40,'UKE','APPROVED')")
+      .run(JSON.stringify([{name: 'Orange', stationIds: ['40925'], azimuths: [180], bands: [{tech: 'LTE', band: '800'}, {tech: 'LTE', band: '1800'}]}]));
+    const result = await evaluateAreaCoverage(db, {centerLat: 52.2, centerLng: 21.0005, radiusM: 300}, upstream({gugik: gugik(() => '100.0')}));
+    const orange = result.operators.find(o => o.operator === 'Orange')!;
+    const play = result.operators.find(o => o.operator === 'Play')!;
+
+    assert.equal(orange.rated, true);
+    assert.ok(orange.score > 0);
+    assert.equal(orange.servingStation!.stationId, '40925');
+    assert.equal(orange.servingStation!.hasSi2pem, false);
+    assert.equal(orange.stationsCount, 1);
+    assert.equal(orange.si2pemStationsCount, 0);
+    assert.ok(orange.cons.some(c => /Brak sprawozdania z pomiarów PEM w SI2PEM/.test(c)));
+    assert.ok(!orange.pros.some(p => /SI2PEM/.test(p)));
+    // The same kind of station with a report gets the 6 SI2PEM points on top.
+    assert.equal(play.servingStation!.hasSi2pem, true);
+    assert.equal(play.scoreBreakdown.infrastructure - orange.scoreBreakdown.infrastructure, 6);
+    // T-Mobile shares Orange's station through NetWorkS!, so it is rated from it as well.
+    assert.equal(result.operators.find(o => o.operator === 'T-Mobile')!.servingStation!.isNetworks, true);
+  } finally { db.close(); }
+});
+
 test('with no confirmed station in range nobody is declared the best operator', async () => {
   const db = openDatabase(':memory:');
   try {

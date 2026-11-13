@@ -1640,7 +1640,10 @@
 .ae-presets button.active small { color: inherit; opacity: 0.8; }
 .ae-presets button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ae-slider { display: flex; align-items: center; gap: 12px; }
-.ae-slider input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.ae-slider input { flex: 1; min-width: 0; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; accent-color: var(--accent); }
+/* Only a keyboard focus is shown, as a rounded ring, not the rectangle a mouse click left behind. */
+.ae-slider input:focus { outline: none; }
+.ae-slider input:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 999px; }
 .ae-slider output { min-width: 52px; text-align: right; font-family: var(--mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 12px; font-weight: 700; color: var(--text); }
 
 /* Loading / error */

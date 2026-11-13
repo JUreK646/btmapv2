@@ -214,7 +214,7 @@ export default function AreaEvaluationDialog({
             <div className="ae-state">
               <span className="ae-state-ring"><Radar size={18} className="ae-spin-slow" /></span>
               <strong>{isEn ? 'Evaluating 4 operators…' : 'Ocenianie 4 operatorów…'}</strong>
-              <span>{isEn ? 'Nearest stations, sectors, bands, terrain and SI2PEM reports' : 'Najbliższe stacje, sektory, pasma, teren i raporty SI2PEM'}</span>
+              <span>{isEn ? 'UKE stations nearby, sectors, bands, terrain and SI2PEM reports' : 'Stacje UKE w pobliżu, sektory, pasma, teren i raporty SI2PEM'}</span>
             </div>
           ) : error ? (
             <div className="ae-state is-error">
@@ -243,6 +243,7 @@ export default function AreaEvaluationDialog({
                           s.losKnown === false ? (isEn ? 'LOS unknown' : 'LOS nieznany') : s.isLosClear ? (isEn ? 'LOS clear' : 'LOS czysty') : `LOS −${s.obstructionM.toFixed(1).replace('.', ',')} m`,
                           s.sectorKnown === false ? null : `${isEn ? 'sector' : 'sektor'} ${s.bestSectorAzimuth}° (${s.sectorDeviationDeg.toFixed(0)}°)`,
                           s.isNetworks ? 'NetWorkS!' : null,
+                          s.hasSi2pem ? 'SI2PEM' : null,
                         ].filter(Boolean)
                       : [];
                     return (
@@ -264,7 +265,7 @@ export default function AreaEvaluationDialog({
                             <span className="ae-rank-sub">
                               {s
                                 ? `${s.stationId || s.id} · ${formatDist(s.distanceKm)}${facts.length ? ` · ${facts.join(' · ')}` : ''}`
-                                : (isEn ? 'No station with SI2PEM measurements within 7.5 km' : 'Brak stacji z pomiarem SI2PEM w promieniu 7,5 km')}
+                                : (isEn ? 'No UKE-registered station within 7.5 km' : 'Brak stacji z wykazu UKE w promieniu 7,5 km')}
                             </span>
                           </span>
                           {rated ? (
@@ -365,13 +366,13 @@ export default function AreaEvaluationDialog({
                   <p className="ae-sources">
                     <span className="ae-src-badge">UKE + SI2PEM</span>
                     <span>
-                      {isEn
-                        ? `${selectedOp.si2pemStationsCount} stations with SI2PEM included`
-                        : `${selectedOp.si2pemStationsCount} ${selectedOp.si2pemStationsCount === 1 ? 'stacja' : 'stacji'} z SI2PEM w ocenie`}
-                      {selectedOp.unverifiedStationsCount > 0 &&
-                        (isEn
-                          ? ` · ${selectedOp.unverifiedStationsCount} without SI2PEM left out`
-                          : ` · ${selectedOp.unverifiedStationsCount} bez pomiaru SI2PEM pominięto`)}
+                      {(() => {
+                        const total = selectedOp.stationsCount ?? selectedOp.si2pemStationsCount + selectedOp.unverifiedStationsCount;
+                        const few = total % 10 >= 2 && total % 10 <= 4 && (total % 100 < 12 || total % 100 > 14);
+                        return isEn
+                          ? `${total} UKE stations within 7.5 km · ${selectedOp.si2pemStationsCount} with an SI2PEM report`
+                          : `${total} ${total === 1 ? 'stacja' : few ? 'stacje' : 'stacji'} UKE w promieniu 7,5 km · ${selectedOp.si2pemStationsCount} z raportem SI2PEM`;
+                      })()}
                     </span>
                   </p>
                 </section>

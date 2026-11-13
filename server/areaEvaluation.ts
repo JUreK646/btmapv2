@@ -81,9 +81,9 @@ export async function evaluateAreaCoverage(
         return false;
       });
 
-      // STRICT SI2PEM RULE:
-      // Only count stations that have registered SI2PEM reports!
-      const si2pemTowers = opTowers.filter(t => {
+      // Every station of the operator in the UKE registry (permits and device register) is evaluated.
+      // An SI2PEM measurement report is extra confirmation that counts in its favour, not a requirement.
+      const hasPemReport = (t: Tower) => {
         const directSummary = t.pemReportsByOperator?.[opName];
         if (directSummary && directSummary.count > 0) return true;
         if (isNetworksOp) {
@@ -91,13 +91,12 @@ export async function evaluateAreaCoverage(
           if (partnerSummary && partnerSummary.count > 0) return true;
         }
         return false;
-      });
+      };
+      const si2pemTowers = opTowers.filter(hasPemReport);
+      const withoutPemCount = opTowers.length - si2pemTowers.length;
 
-      const unverifiedTowers = opTowers.filter(t => !si2pemTowers.includes(t));
-
-      if (si2pemTowers.length === 0) {
-        // Disqualified operator in this location (no SI2PEM confirmed stations in range)
-        // Not rated: there is nothing measured to score, so no points and no grade are made up.
+      if (opTowers.length === 0) {
+        // Not rated: no station of this operator nearby, so no points and no grade are made up.
         return {
           operator: opName,
           rated: false,
@@ -112,20 +111,16 @@ export async function evaluateAreaCoverage(
             infrastructure: 0,
           },
           servingStation: null,
+          stationsCount: 0,
           si2pemStationsCount: 0,
-          unverifiedStationsCount: unverifiedTowers.length,
+          unverifiedStationsCount: 0,
           pros: [],
-          cons: [
-            'Brak jakiejkolwiek stacji bazowej z potwierdzonymi pomiarami w państwowym systemie SI2PEM w promieniu zasięgu.',
-            ...(unverifiedTowers.length > 0
-              ? [`Wykryto ${unverifiedTowers.length} stacji z papierowymi pozwoleniami UKE, ale bez zarejestrowanych pomiarów SI2PEM (zgodnie z zasadą zero-fikcji stacje te nie są zaliczane).`]
-              : ['Całkowity brak infrastruktury nadawczej w promieniu 7.5 km.']),
-          ],
-          verdict: 'Brak zweryfikowanego zasięgu w SI2PEM — niezalecany w tej lokalizacji.',
+          cons: ['Brak stacji tego operatora w wykazie UKE w promieniu 7,5 km.'],
+          verdict: 'Brak stacji w pobliżu — nie da się ocenić zasięgu.',
         };
       }
 
-    // Evaluate candidate SI2PEM stations for this operator
+    // Evaluate every station of this operator in range
     interface CandidateStation {
       tower: Tower;
       distanceKm: number;
@@ -143,13 +138,14 @@ export async function evaluateAreaCoverage(
       hasMidBand: boolean;
       isNetworksShared: boolean;
       networksPartner?: string;
+      hasSi2pem: boolean;
       pemReportDate?: string;
       pemReportNumber?: string;
     }
 
     const candidates: CandidateStation[] = [];
 
-    for (const t of si2pemTowers) {
+    for (const t of opTowers) {
       const dist = haversineDistanceKm(t.lat, t.lng, centerLat, centerLng);
       if (dist > searchDistKm) continue;
 
@@ -193,7 +189,8 @@ export async function evaluateAreaCoverage(
       const heightKnown = typeof t.height === 'number' && t.height > 0;
       const antennaHeightM = heightKnown ? t.height! : ASSUMED_ANTENNA_HEIGHT_M;
 
-      const pemSummary = t.pemReportsByOperator?.[opName] || (isNetworksOp ? t.pemReportsByOperator?.[partnerOp] : undefined);
+      const hasSi2pem = hasPemReport(t);
+      const pemSummary = hasSi2pem ? (t.pemReportsByOperator?.[opName] || (isNetworksOp ? t.pemReportsByOperator?.[partnerOp] : undefined)) : undefined;
 
       candidates.push({
         tower: t,
@@ -212,6 +209,7 @@ export async function evaluateAreaCoverage(
         hasMidBand,
         isNetworksShared,
         networksPartner: isNetworksShared ? partnerOp : undefined,
+        hasSi2pem,
         pemReportDate: pemSummary?.checkedAt?.slice(0, 10),
       });
     }
@@ -226,11 +224,12 @@ export async function evaluateAreaCoverage(
         isWinner: false,
         scoreBreakdown: { terrainLos: 0, spectrumBands: 0, sectorAlignment: 0, infrastructure: 0 },
         servingStation: null,
+        stationsCount: 0,
         si2pemStationsCount: 0,
-        unverifiedStationsCount: unverifiedTowers.length,
+        unverifiedStationsCount: 0,
         pros: [],
-        cons: ['Stacje SI2PEM tego operatora znajdują się poza efektywnym zasięgiem radiowym (> 7.5 km).'],
-        verdict: 'Brak stacji w zasięgu.',
+        cons: ['Stacje tego operatora są dalej niż 7,5 km.'],
+        verdict: 'Brak stacji w pobliżu — nie da się ocenić zasięgu.',
       };
     }
 
@@ -337,11 +336,13 @@ export async function evaluateAreaCoverage(
     else if (bestCandidate.antennaHeightM >= 25) infraScore += 4;
     else infraScore += 2;
 
-    if (si2pemTowers.length >= 3) infraScore += 6; // Redundancy
-    else if (si2pemTowers.length >= 2) infraScore += 4;
+    // Redundancy: further stations of the operator within 3 km can take over when one is busy or down.
+    const nearbyCount = candidates.filter(c => c.distanceKm <= 3).length;
+    if (nearbyCount >= 3) infraScore += 6;
+    else if (nearbyCount >= 2) infraScore += 4;
     else infraScore += 2;
 
-    infraScore += 6; // Confirmed SI2PEM certified measurements
+    if (bestCandidate.hasSi2pem) infraScore += 6; // Its emissions confirmed by an accredited PEM measurement
 
     const totalScore = Math.min(100, Math.max(0, terrainLosScore + spectrumScore + sectorScore + infraScore));
 
@@ -420,7 +421,12 @@ export async function evaluateAreaCoverage(
 
     // Verified SI2PEM report
     // pemReportDate is when BTMap last checked SI2PEM, not the date of the report.
-    pros.push(`Stacja ma sprawozdanie z pomiarów PEM w SI2PEM${bestCandidate.pemReportDate ? ` (sprawdzono ${bestCandidate.pemReportDate})` : ''}.`);
+    if (bestCandidate.hasSi2pem) {
+      pros.push(`Stacja ma sprawozdanie z pomiarów PEM w SI2PEM${bestCandidate.pemReportDate ? ` (sprawdzono ${bestCandidate.pemReportDate})` : ''}.`);
+    } else {
+      cons.push('Brak sprawozdania z pomiarów PEM w SI2PEM dla tej stacji – ocena opiera się na wykazie UKE.');
+    }
+    if (nearbyCount >= 3) pros.push(`${nearbyCount} stacje operatora w promieniu 3 km – zapas na wypadek przeciążenia lub awarii jednej z nich.`);
 
     // Grade and Verdict
     let grade: OperatorEvaluation['grade'] = 'C';
@@ -476,7 +482,7 @@ export async function evaluateAreaCoverage(
         hasCband5G: bestCandidate.hasCband5G,
         hasLowBand: bestCandidate.hasLowBand,
         hasMidBand: bestCandidate.hasMidBand,
-        hasSi2pem: true,
+        hasSi2pem: bestCandidate.hasSi2pem,
         pemReportDate: bestCandidate.pemReportDate,
         isLosClear,
         obstructionM,
@@ -485,8 +491,9 @@ export async function evaluateAreaCoverage(
         heightKnown: bestCandidate.heightKnown,
         losKnown,
       },
+      stationsCount: opTowers.length,
       si2pemStationsCount: si2pemTowers.length,
-      unverifiedStationsCount: unverifiedTowers.length,
+      unverifiedStationsCount: withoutPemCount,
       pros,
       cons,
       verdict,
@@ -505,8 +512,8 @@ export async function evaluateAreaCoverage(
 
   const winner = evaluations[0];
   const summaryRecommendation = !winner.servingStation
-    ? 'W promieniu 7,5 km żaden z czterech operatorów nie ma stacji z pomiarami zarejestrowanymi w SI2PEM, więc nie da się wskazać najlepszego operatora dla tej lokalizacji.'
-    : `Na podstawie analizy ukształtowania terenu LiDAR (NMT/NMPT), wysokości masztów, orientacji sektorów oraz pasm w pozwoleniach UKE i państwowym rejestrze SI2PEM, najlepsze warunki radiowe dla wyznaczonej działki (${areaKm2} km²) zapewnia ${winner.operator} (${winner.score}/100 pkt).`;
+    ? 'W promieniu 7,5 km żaden z czterech operatorów nie ma stacji w wykazie UKE, więc nie da się wskazać najlepszego operatora dla tej lokalizacji.'
+    : `Na podstawie stacji z wykazu UKE (pozwolenia i rejestr urządzeń), ukształtowania terenu LiDAR (NMT/NMPT), wysokości masztów, kierunków sektorów, pasm oraz pomiarów SI2PEM najlepsze warunki radiowe dla wyznaczonego obszaru (${areaKm2} km²) zapewnia ${winner.operator} (${winner.score}/100 pkt).`;
 
   return {
     center: [centerLat, centerLng],

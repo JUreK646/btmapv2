@@ -277,7 +277,11 @@ export interface OperatorEvaluation {
     infrastructure: number;
   };
   servingStation: ServingStationInfo | null;
+  /** Stations of the operator (or its NetWorkS! partner) in the UKE registry within the search distance. */
+  stationsCount?: number;
+  /** Of those, stations with an SI2PEM measurement report. */
   si2pemStationsCount: number;
+  /** Of those, stations without an SI2PEM report (still evaluated). */
   unverifiedStationsCount: number;
   pros: string[];
   cons: string[];
