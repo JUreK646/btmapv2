@@ -259,6 +259,16 @@ export function openDatabase(
     COMMIT;`);
   }
 
+  // The KML file is a copy of the UKE registry, not community submissions. V3 filed it under BTMap,
+  // so the BTMap database looked full although nobody had added a station.
+  if (!db.prepare("SELECT value FROM metadata WHERE key='kmlIsUkeRegistryV4'").get()) {
+    db.exec(`BEGIN;
+      UPDATE towers SET source='UKE' WHERE addedBy = 'Import KML';
+      DELETE FROM registry_snapshots WHERE source='BTMAP';
+      INSERT OR REPLACE INTO metadata(key,value) VALUES('kmlIsUkeRegistryV4','1');
+    COMMIT;`);
+  }
+
   db.function('fold', { deterministic: true }, value =>
     String(value ?? '')
       .normalize('NFD')

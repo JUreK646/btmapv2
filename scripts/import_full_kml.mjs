@@ -184,7 +184,8 @@ const updateStmt = db.prepare(`
       stationId = COALESCE(NULLIF(stationId, ''), ?),
       address = COALESCE(NULLIF(address, ''), ?),
       province = COALESCE(NULLIF(province, ''), ?),
-      addedBy = 'Import KML'
+      addedBy = 'Import KML',
+      source = 'UKE'
   WHERE id = ?
 `);
 

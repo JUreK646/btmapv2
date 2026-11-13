@@ -1,8 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {readFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join, resolve} from 'node:path';
 import {openDatabase} from '../server/database.ts';
 import {getTowers} from '../server/query.ts';
 import {computeGrowthCounters} from '../server/stats.ts';
@@ -48,13 +49,34 @@ test('server faults are answered with a fixed message and bad input with a 4xx',
   }
 });
 
+test('KML-imported registry stations filed under BTMap are moved back to UKE on startup', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'btmap-kml-'));
+  const file = join(dir, 'db.sqlite');
+  try {
+    let db = openDatabase(file);
+    const insert = db.prepare("INSERT INTO towers(id,address,province,lat,lng,operators,source,addedBy,status) VALUES(?,'A','Mazowieckie',52.2,21.0,'[]',?,?,'APPROVED')");
+    insert.run('UKE_kml', 'BTMAP', 'Import KML');
+    insert.run('community', 'BTMAP', 'Anna');
+    // A database migrated by the earlier rule, before this fix.
+    db.prepare("DELETE FROM metadata WHERE key='kmlIsUkeRegistryV4'").run();
+    db.close();
+
+    db = openDatabase(file);
+    const source = (id: string) => String(db.prepare('SELECT source FROM towers WHERE id=?').get(id)!.source);
+    assert.equal(source('UKE_kml'), 'UKE');
+    assert.equal(source('community'), 'BTMAP', 'real community stations stay in BTMap');
+    assert.deepEqual(getTowers(db, {source: 'BTMAP'}).items.map(t => t.id), ['community']);
+    db.close();
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
 test('the UKE view is defined by registry data, not by the year in a permit number', () => {
   const db = openDatabase(':memory:');
   try {
     const insert = db.prepare("INSERT INTO towers(id,address,province,lat,lng,operators,source,addedBy,status) VALUES(?,?,'Mazowieckie',52.2,21.0,?,?,?,'APPROVED')");
     const ops = (name: string, permit?: string) => JSON.stringify([{name, bands: [{tech: 'LTE', band: '1800', ...(permit === undefined ? {} : {permit})}]}]);
     insert.run('registry', 'A', ops('Orange', 'REJ/1/1/1/26 [P]'), 'UKE', 'AutoSync BIP UKE');
-    insert.run('kml', 'B', ops('Play', ''), 'BTMAP', 'Import KML');
+    insert.run('kml', 'B', ops('Play', ''), 'UKE', 'Import KML');
     // A community record carrying a permit from another year used to fall out of the UKE view.
     insert.run('older-permit', 'C', ops('T-Mobile', 'UMTS/2/0001/3/19 [zmP]'), 'BTMAP', 'Anna');
     insert.run('next-year', 'D', ops('Play', 'REJ/1/2/1/27 [P]'), 'BTMAP', 'Anna');
@@ -64,7 +86,7 @@ test('the UKE view is defined by registry data, not by the year in a permit numb
 
     const ids = (source: string) => getTowers(db, {source, limit: '100'}).items.map(t => String(t.id)).sort();
     assert.deepEqual(ids('UKE'), ['kml', 'next-year', 'older-permit', 'registry']);
-    assert.deepEqual(ids('BTMAP'), ['community-empty-permit', 'community-plus', 'kml', 'next-year', 'older-permit']);
+    assert.deepEqual(ids('BTMAP'), ['community-empty-permit', 'community-plus', 'next-year', 'older-permit']);
     assert.equal(ids('ALL').length, 6);
 
     const counters = computeGrowthCounters(db, 'UKE');
