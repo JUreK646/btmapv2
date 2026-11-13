@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
-import { mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { mkdirSync, existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
@@ -27,6 +27,19 @@ type User = { id: string; email: string; nick: string; role: string; points: num
 const publicUser = (user: Record<string, unknown>) => ({ id:user.id, email:user.email, nick:user.nick, role:user.role, points:user.points, level:user.level });
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0,max) : '';
+/** The released version, read from package.json so it is stated in one place. */
+const APP_VERSION = (() => {
+  try { return String(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version || 'unknown'); }
+  catch { return 'unknown'; }
+})();
+/**
+ * Answers 500 with a fixed message. The underlying error goes to the server log only: its text can
+ * contain SQL, file paths or upstream URLs that are of no use to a visitor.
+ */
+const serverError = (res: Response, error: unknown, message: string) => {
+  console.error(`[API] ${message}`, error);
+  res.status(500).json({ error: message });
+};
 /** Optional numeric cell field: a finite number, or undefined so it is left out of the stored record. */
 const cellNumber = (value: unknown) => value === null || value === undefined || String(value).trim() === '' || !Number.isFinite(Number(value)) ? undefined : Number(value);
 
@@ -54,7 +67,9 @@ export function createApp(
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Cache-Control','no-store');
     if (!['GET','HEAD','OPTIONS'].includes(req.method) && req.headers.origin) {
-      const origin = new URL(req.headers.origin);
+      // "null" (sandboxed pages, some redirects) and other unparsable values are simply not an allowed origin.
+      let origin: URL;
+      try { origin = new URL(req.headers.origin); } catch { return res.status(403).json({error:'Niedozwolone źródło żądania.'}); }
       const allowed = [req.headers.host, process.env.PUBLIC_HOST, 'localhost:5173','127.0.0.1:5173','localhost:5174','127.0.0.1:5174','localhost:5175','127.0.0.1:5175','localhost:4173','127.0.0.1:4173'];
       const isLocal = origin.hostname === 'localhost' || origin.hostname === '127.0.0.1';
       if (!allowed.includes(origin.host) && !isLocal) return res.status(403).json({error:'Niedozwolone źródło żądania.'});
@@ -124,7 +139,7 @@ export function createApp(
     let radiolines={total:0,new:0};
     try{const row=db.prepare('SELECT COUNT(*) AS total,COALESCE(SUM(isNew),0) AS fresh FROM radiolines').get()!;radiolines={total:Number(row.total),new:Number(row.fresh)};}
     catch{radiolines={total:count('SELECT COUNT(*) AS count FROM radiolines'),new:0};}
-    const data={status:'ok',version:'2.0.3',stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces,radiolines},metadata,newEntries:getNewEntryWindow(db)};
+    const data={status:'ok',version:APP_VERSION,stats:{towers:totalTowers,btmapTowers,ukeTowers,operators,technologies,provinces,radiolines},metadata,newEntries:getNewEntryWindow(db)};
     cachedStats={at:Date.now(),data}; res.json(data);
   });
   app.get('/api/stats', (req, res) => {
@@ -133,7 +148,7 @@ export function createApp(
       const stats = getTelecomStats(db, source);
       res.json(stats);
     } catch (e) {
-      res.status(500).json({ error: (e as Error).message || 'Błąd pobierania statystyk.' });
+      serverError(res, e, 'Błąd pobierania statystyk.');
     }
   });
   app.get('/api/kmz/catalog', (req, res) => {
@@ -142,7 +157,7 @@ export function createApp(
       const source = typeof req.query.source === 'string' ? req.query.source : 'ALL';
       res.json(getKmzCatalog(db, { type, source }));
     } catch (e) {
-      res.status(500).json({ error: (e as Error).message || 'Błąd generowania katalogu KMZ.' });
+      serverError(res, e, 'Błąd generowania katalogu KMZ.');
     }
   });
   app.get('/api/kmz/download', (req, res) => {
@@ -157,7 +172,7 @@ export function createApp(
       res.setHeader('Content-Length', String(buffer.length));
       res.send(buffer);
     } catch (e) {
-      res.status(500).json({ error: (e as Error).message || 'Błąd generowania pliku KMZ.' });
+      serverError(res, e, 'Błąd generowania pliku KMZ.');
     }
   });
   app.get('/api/towers',(req,res)=>{try{res.json(getTowers(db,req.query));}catch(e){res.status(400).json({error:(e as Error).message});}});
@@ -196,7 +211,7 @@ export function createApp(
     } catch (e) {
       // No elevation data is an upstream outage, reported as such instead of a profile over invented terrain.
       if (e instanceof TerrainDataUnavailableError) return res.status(502).json({ error: e.message });
-      res.status(500).json({ error: (e as Error).message || 'Błąd wyliczania profilu terenu.' });
+      serverError(res, e, 'Błąd wyliczania profilu terenu.');
     }
   });
   app.get('/api/area-evaluation', areaLimit, async (req, res) => {
@@ -352,11 +367,17 @@ export function createApp(
         const filePath = resolve(uploadsDir, filename);
 
         // Auto-orient based on EXIF, downscale large phone camera resolutions, and compress to crisp WebP
-        await sharp(buffer)
-          .rotate()
-          .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
-          .webp({ quality: 82, effort: 4 })
-          .toFile(filePath);
+        try {
+          await sharp(buffer)
+            .rotate()
+            .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 82, effort: 4 })
+            .toFile(filePath);
+        } catch {
+          // Not an image, or a format the decoder cannot read: the sender's problem, not a server fault.
+          try { unlinkSync(filePath); } catch { /* nothing was written */ }
+          return res.status(400).json({ error: 'Nie udało się odczytać zdjęcia. Użyj pliku JPG, PNG lub WebP.' });
+        }
 
         photoUrl = `/api/uploads/${filename}`;
         db.prepare('INSERT INTO photos (id, towerId, userNick, url, caption, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
@@ -382,7 +403,7 @@ export function createApp(
       };
       res.status(201).json(comment);
     } catch (err) {
-      res.status(500).json({ error: (err as Error).message || 'Wystąpił błąd podczas dodawania komentarza.' });
+      serverError(res, err, 'Wystąpił błąd podczas dodawania komentarza.');
     }
   });
 
