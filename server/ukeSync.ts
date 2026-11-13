@@ -67,14 +67,27 @@ export function inferProvinceFromTerytOrCoords(teryt: string, lat: number, lng: 
   return best;
 }
 
+/**
+ * Degrees packed as a number DDMMSS (or DDDMMSS), e.g. 530806 = 53°08'06". Some UKE sheets (the
+ * private-network list) store coordinates this way; read as decimal degrees they are far out of range.
+ */
+function packedDms(value: number): number | null {
+  if (Math.abs(value) <= 180) return value;
+  const sign = value < 0 ? -1 : 1;
+  const n = Math.abs(value);
+  const deg = Math.floor(n / 10000), min = Math.floor(n / 100) % 100, sec = n % 100;
+  if (deg > 180 || min >= 60 || sec >= 60) return null;
+  return sign * Math.round((deg + min / 60 + sec / 3600) * 1e6) / 1e6;
+}
+
 export function parseDmsCoord(raw: unknown): number | null {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return packedDms(raw);
   if (!raw) return null;
   const s = String(raw).trim();
   if (!s) return null;
 
   const plain = parseFloat(s.replace(',', '.'));
-  if (Number.isFinite(plain) && /^[+-]?\d+([.,]\d+)?$/.test(s)) return plain;
+  if (Number.isFinite(plain) && /^[+-]?\d+([.,]\d+)?$/.test(s)) return packedDms(plain);
 
   const match = s.match(/(\d+)\s*[°\D]?\s*([NnSsEeWw])?\s*(\d+)\s*['\s]\s*(\d+(?:[.,]\d+)?)/);
   if (match) {
@@ -217,10 +230,14 @@ export function parseUkeRows(rows: unknown[][], defaultTech: string, defaultBand
   let used = 0;
   // Not every registry file has antenna azimuths; when a column is present they are kept with the operator.
   const azimuthCol = col('azymut');
+  // Lists that span a frequency range (private networks) give the range per row, e.g. "3900-4000".
+  const rangeCol = col('zakres częstotliwości');
+  let dataRows = 0;
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (!row || !row.length) continue;
+    if (!row || !row.length || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) continue;
+    dataRows++;
 
     const lat = parseDmsCoord(row[latCol]);
     const lng = parseDmsCoord(row[lngCol]);
@@ -290,17 +307,24 @@ export function parseUkeRows(rows: unknown[][], defaultTech: string, defaultBand
       if (azimuths.length > 0) op.azimuths = azimuths;
     }
 
+    const rowBand = rangeCol >= 0 ? String(row[rangeCol] ?? '').match(/(\d{3,5})/)?.[1] : undefined;
+    const band = rowBand || defaultBand;
     const bandEntry = {
       tech: defaultTech,
-      band: defaultBand,
+      band,
       status: 'Pozwolenie',
       permit,
     };
 
-    if (!op.bands.some(b => b.tech === defaultTech && b.band === defaultBand && b.permit === permit)) {
+    if (!op.bands.some(b => b.tech === defaultTech && b.band === band && b.permit === permit)) {
       op.bands.push(bandEntry);
     }
     used++;
+  }
+  // Rows exist but none could be placed in Poland: the coordinates are in a format this parser does not
+  // read. Treated as an error, not as an empty list, so a band is never wiped from every station.
+  if (dataRows > 0 && used === 0) {
+    throw new Error(`Żaden z ${dataRows} wierszy arkusza nie ma współrzędnych w Polsce w odczytywalnym formacie.`);
   }
   return used;
 }
@@ -332,8 +356,9 @@ export function findRemovedStations(db: DatabaseSync, keptIds: Set<string>, unre
     if (keptIds.has(row.id)) return false;
     if (!unreadBands.size) return true;
     try {
+      // Matched by technology: a supplementary file may give a different band per row.
       const ops = JSON.parse(row.operators) as Array<{ bands?: Array<{ tech?: string; band?: string }> }>;
-      return !ops.some(op => (op.bands || []).some(b => unreadBands.has(`${b.tech}|${b.band}`)));
+      return !ops.some(op => (op.bands || []).some(b => unreadBands.has(String(b.tech))));
     } catch {
       return true;
     }
@@ -406,7 +431,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
       } catch (err) {
         const reason = `Nie udało się wczytać pliku ${item.filename}: ${(err as Error).message}`;
         if (item.recognised) throw new Error(reason);
-        unreadBands.add(`${item.tech}|${item.band}`);
+        unreadBands.add(item.tech);
         console.warn(`[UKE Sync] ${reason} Plik dodatkowy – pominięto.`);
       }
     }

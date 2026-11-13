@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {basename, join} from 'node:path';
 import type {DatabaseSync} from 'node:sqlite';
 import {openDatabase} from '../server/database.ts';
-import {parseTechAndBand, parseUkeRows, selectRegistryFiles, syncUkeWykaz} from '../server/ukeSync.ts';
+import {parseDmsCoord, parseTechAndBand, parseUkeRows, selectRegistryFiles, syncUkeWykaz} from '../server/ukeSync.ts';
 
 const DIR = '/download/gfx/bip/pl/defaultaktualnosci/140/12/101/';
 const page = (...names: string[]) => `<html><body><ul>${names.map(n => `<li><a href="${DIR}${n}">${n}</a> - 1,4 MB plik XLSX</li>`).join('')}</ul><a href="/inna/strona.html">x</a></body></html>`;
@@ -42,6 +42,33 @@ test('a sheet with an unknown layout is an error, an empty list is not', () => {
   assert.equal(parseUkeRows([HEADER], 'LTE', '1800', new Map()), 0);
   assert.throws(() => parseUkeRows([['Podmiot', 'Lokalizacja', 'Częstotliwość'], ['X', 'Y', 'Z']], 'LTE', '1800', new Map()), /nieznany układ.*operator.*szerokość.*długość.*id stacji/s);
   assert.throws(() => parseUkeRows([], 'LTE', '1800', new Map()), /pusty/);
+});
+
+test('the private-network list is read: packed DDMMSS coordinates and a frequency range per row', () => {
+  // Layout and values as in sieci_prywatne_3800-4200_mhz_stan_na_2026-11-04.xlsx on BIP UKE.
+  const header = ['Nazwa Operatora', 'Nr Decyzji', 'Rodzaj decyzji', 'Data ważności', 'Dł. geogr. stacji', 'Szer. geogr. stacji', 'Miejscowość', 'Lokalizacja', 'IdStacji', 'TERYT', 'Rodzaj stacji', 'Zakres częstotliwości [MHz]'];
+  const rows = [
+    header,
+    ['Teldat sp. z o.o. sp. k.', 'DC.WSR.5101.22271.2025', 'P', new Date('2026-12-31T00:00:00Z'), 180137, 530806, 'Bydgoszcz', 'Cicha 19-27', 'NET5G PLMN 00101', 461011, 'małej mocy', '3900-4000'],
+    ['Adamed Pharma S.A.', 'DC.WSR.5101.24335.2026', 'P', new Date('2027-04-30T00:00:00Z'), 192152, 514005, 'Pabianice', 'Piłsudskiego 5', 'ADA0001', 1008021, 'małej mocy', '3800-3900'],
+  ];
+  const stations = new Map();
+  assert.equal(parseUkeRows(rows, 'Inne', '3800', stations), 2);
+  const [bydgoszcz, pabianice] = [...stations.values()];
+  assert.equal(bydgoszcz.lat, 53.135); assert.equal(bydgoszcz.lng, 18.026944);
+  assert.equal(bydgoszcz.province, 'Kujawsko-pomorskie');
+  assert.deepEqual(bydgoszcz.operators[0].bands.map((b: {tech: string; band: string}) => `${b.tech} ${b.band}`), ['Inne 3900']);
+  assert.deepEqual(pabianice.operators[0].bands.map((b: {band: string}) => b.band), ['3800']);
+  assert.match(bydgoszcz.operators[0].bands[0].permit, /DC\.WSR\.5101\.22271\.2025 \[P\] - expires 2026-12-31/);
+
+  // Packed values are recognised whether stored as numbers or text; plain degrees are left alone.
+  assert.equal(parseDmsCoord(530806), 53.135);
+  assert.equal(parseDmsCoord('180137'), 18.026944);
+  assert.equal(parseDmsCoord(52.2297), 52.2297);
+  assert.equal(parseDmsCoord(536006), null, '60 minutes is not a valid DDMMSS value');
+
+  // Rows whose coordinates cannot be read at all are an error, not an empty list.
+  assert.throws(() => parseUkeRows([header, ['X', 'D/1', 'P', '', 'brak', 'brak', 'Y', 'Z', 'ID1', '', '', '']], 'Inne', '3800', new Map()), /Żaden z 1 wierszy/);
 });
 
 /** A fake BIP UKE: a page listing files, each file served as bytes; sheets are "read" from the map below. */
