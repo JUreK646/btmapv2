@@ -1,30 +1,24 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import {
   Activity,
   ArrowDownToLine,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Cpu,
   Database,
+  Info,
   Layers,
   MapPin,
   Radio,
   RadioTower,
   RefreshCw,
-  ShieldCheck,
+  Route,
+  Ruler,
   Signal,
-  Sparkles,
-  TrendingUp,
-  BarChart3,
-  Calendar,
   Zap,
   X,
-  Info,
 } from 'lucide-react';
 import type { Health } from '../types';
 import { api, formatNumber } from '../lib/api';
-import { operatorColor } from '../lib/constants';
 import { useI18n } from '../lib/i18n';
 import '../stats.css';
 
@@ -201,130 +195,70 @@ interface TelecomStats {
   updatedAt: string;
 }
 
-const TECH_COLORS: Record<string, string> = {
-  '5G': '#a855f7',
-  LTE: '#0ea5e9',
-  UMTS: '#10b981',
-  GSM: '#f59e0b',
-  'GSM-R': '#6366f1',
-  IOT: '#ec4899',
-  CDMA: '#64748b',
-  Inne: '#94a3b8',
-};
+/**
+ * The four network operators, always in this order. The order is chosen so that neighbouring colours stay
+ * distinguishable for colour-blind readers (checked with the dataviz palette validator: the brand pair
+ * Plus green / T-Mobile pink is not, so they are never adjacent). Everyone else is folded into "Others".
+ */
+const PRIMARY_OPS = ['Plus', 'Orange', 'Play', 'T-Mobile'] as const;
+const OP_COLORS: Record<string, string> = { Plus: '#10b981', Orange: '#f97316', Play: '#8b5cf6', 'T-Mobile': '#ec4899' };
+const OTHERS_COLOR = 'var(--st-others)';
+/** One series in a chart (technologies, radio link bands, shares) uses one colour for every bar. */
+const SERIES_COLOR = 'var(--st-series)';
 
-const RADIOLINE_BAND_COLORS: Record<string, string> = {
-  '80 GHz (E-Band)': '#a855f7',
-  '38 GHz': '#0ea5e9',
-  '32 GHz': '#06b6d4',
-  '23 GHz': '#10b981',
-  '18 GHz': '#f59e0b',
-  '15 GHz': '#f97316',
-  '11 / 13 GHz': '#6366f1',
-  '7 / 8 GHz': '#ec4899',
-};
-
-function getOperatorColor(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes('play')) return '#8b5cf6';
-  if (n.includes('orange')) return '#f97316';
-  if (n.includes('plus') || n.includes('towerlink')) return '#10b981';
-  if (n.includes('t-mobile')) return '#ec4899';
-  if (n.includes('pkp') || n.includes('plk')) return '#0066cc';
-  if (n.includes('emitel')) return '#06b6d4';
-  if (n.includes('netia')) return '#14b8a6';
-  if (n.includes('tauron')) return '#eab308';
-  if (n.includes('exatel')) return '#6366f1';
-  if (n.includes('pge')) return '#f43f5e';
-  return operatorColor(name);
-}
-
-interface OperatorColorTheme {
-  primary: string;
-  gradient: string;
-  border: string;
-  glow: string;
-  text: string;
-}
-
-function getOperatorTheme(name: string): OperatorColorTheme {
+function primaryOperator(name: string): string | null {
   const n = (name || '').toLowerCase();
-  if (n.includes('plus') || n.includes('towerlink') || n.includes('polkomtel')) {
-    return {
-      primary: '#10b981',
-      gradient: 'linear-gradient(180deg, #34d399 0%, #059669 100%)',
-      border: 'rgba(52, 211, 153, 0.4)',
-      glow: 'rgba(16, 185, 129, 0.25)',
-      text: '#6ee7b7',
-    };
-  }
-  if (n.includes('t-mobile') || n.includes('tmobile')) {
-    return {
-      primary: '#ec4899',
-      gradient: 'linear-gradient(180deg, #f472b6 0%, #db2777 100%)',
-      border: 'rgba(244, 114, 182, 0.4)',
-      glow: 'rgba(236, 72, 153, 0.25)',
-      text: '#f472b6',
-    };
-  }
-  if (n.includes('orange')) {
-    return {
-      primary: '#f97316',
-      gradient: 'linear-gradient(180deg, #fb923c 0%, #ea580c 100%)',
-      border: 'rgba(251, 146, 60, 0.4)',
-      glow: 'rgba(249, 115, 22, 0.25)',
-      text: '#fb923c',
-    };
-  }
-  if (n.includes('play')) {
-    return {
-      primary: '#8b5cf6',
-      gradient: 'linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%)',
-      border: 'rgba(167, 139, 250, 0.4)',
-      glow: 'rgba(139, 92, 246, 0.25)',
-      text: '#c4b5fd',
-    };
-  }
-  if (n.includes('pkp') || n.includes('plk')) {
-    return {
-      primary: '#0284c7',
-      gradient: 'linear-gradient(180deg, #38bdf8 0%, #0284c7 100%)',
-      border: 'rgba(56, 189, 248, 0.4)',
-      glow: 'rgba(2, 132, 199, 0.25)',
-      text: '#7dd3fc',
-    };
-  }
-  if (n.includes('pge')) {
-    return {
-      primary: '#f59e0b',
-      gradient: 'linear-gradient(180deg, #fbbf24 0%, #d97706 100%)',
-      border: 'rgba(251, 191, 36, 0.4)',
-      glow: 'rgba(245, 158, 11, 0.25)',
-      text: '#fde047',
-    };
-  }
-  if (n.includes('emitel')) {
-    return {
-      primary: '#06b6d4',
-      gradient: 'linear-gradient(180deg, #22d3ee 0%, #0891b2 100%)',
-      border: 'rgba(34, 211, 238, 0.4)',
-      glow: 'rgba(6, 182, 212, 0.25)',
-      text: '#67e8f9',
-    };
-  }
-  return {
-    primary: '#64748b',
-    gradient: 'linear-gradient(180deg, #94a3b8 0%, #475569 100%)',
-    border: 'rgba(148, 163, 184, 0.3)',
-    glow: 'rgba(100, 116, 139, 0.2)',
-    text: '#cbd5e1',
-  };
+  if (n.includes('plus') || n.includes('polkomtel') || n.includes('towerlink')) return 'Plus';
+  if (n.includes('orange')) return 'Orange';
+  if (n.includes('play') || /\bp4\b/.test(n)) return 'Play';
+  if (n.includes('t-mobile') || n.includes('tmobile')) return 'T-Mobile';
+  return null;
 }
 
+const opColor = (name: string) => {
+  const primary = primaryOperator(name);
+  return primary ? OP_COLORS[primary] : OTHERS_COLOR;
+};
+
+interface Segment {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+  detail?: string;
+}
+
+/** Sums counts per network operator in the fixed order, with every other licensee in one "Others" segment. */
+function operatorSegments(parts: Array<{ operator: string; count: number }>, othersLabel: string): Segment[] {
+  const sums = new Map<string, number>();
+  const others = new Map<string, number>();
+  for (const part of parts) {
+    const primary = primaryOperator(part.operator);
+    if (primary) sums.set(primary, (sums.get(primary) || 0) + part.count);
+    else if (part.count > 0) others.set(part.operator, (others.get(part.operator) || 0) + part.count);
+  }
+  const segments: Segment[] = PRIMARY_OPS.map((op) => ({ key: op, label: op, value: sums.get(op) || 0, color: OP_COLORS[op] }));
+  const otherTotal = [...others.values()].reduce((a, b) => a + b, 0);
+  if (otherTotal > 0) {
+    segments.push({
+      key: '__others',
+      label: othersLabel,
+      value: otherTotal,
+      color: OTHERS_COLOR,
+      detail: [...others].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([name, count]) => `${name}: ${formatNumber(count)}`).join('\n'),
+    });
+  }
+  return segments;
+}
+
+const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
+const percentFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 });
 function formatPct(value: number): string {
   if (value <= 0) return '0%';
-  if (value < 0.1) return '<0.1%';
-  return `${value.toFixed(1)}%`;
+  if (value < 0.1) return '<0,1%';
+  return `${percentFormat.format(value)}%`;
 }
+const formatKm = (value: number) => `${new Intl.NumberFormat('pl-PL', { maximumFractionDigits: value < 100 ? 1 : 0 }).format(value)} km`;
 
 export function StatsView({
   health,
@@ -353,13 +287,6 @@ export function StatsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [techFilter, setTechFilter] = useState<string>('ALL');
-  const [opFilter, setOpFilter] = useState<string>('ALL');
-  const [hoveredBandKey, setHoveredBandKey] = useState<string | null>(null);
-  const [hoveredProvKey, setHoveredProvKey] = useState<string | null>(null);
-  const [hoveredTech, setHoveredTech] = useState<string | null>(null);
-  const [hoveredOp, setHoveredOp] = useState<string | null>(null);
-  const [selectedTimelineIdx, setSelectedTimelineIdx] = useState<number | null>(null);
-  const [showComparison, setShowComparison] = useState(false);
   const [growthSource, setGrowthSource] = useState<'UKE' | 'BTMAP'>('UKE');
   const [growthPeriodIdx, setGrowthPeriodIdx] = useState<number>(0);
   const [growthBandMode, setGrowthBandMode] = useState<'cells' | 'stations'>('cells');
@@ -389,9 +316,6 @@ export function StatsView({
       .then((data) => {
         statsCacheRef.current[src] = data;
         setStats(data);
-        if (data.timeline && data.timeline.length > 0) {
-          setSelectedTimelineIdx(data.timeline.length - 1);
-        }
       })
       .catch((e) => {
         if (!statsCacheRef.current[src]) {
@@ -415,106 +339,17 @@ export function StatsView({
     }
   }, [apiSource, fetchStats]);
 
+  const othersLabel = isPl ? 'Pozostali' : 'Others';
+
   const filteredBands = useMemo(() => {
     if (!stats) return [];
-    return stats.bands
-      .filter((b) => {
-        if (techFilter === 'ALL') return true;
-        if (techFilter === 'OTHER') return !['5G', 'LTE', 'UMTS', 'GSM'].includes(b.tech);
-        return b.tech === techFilter;
-      })
-      .map((b) => {
-        if (opFilter === 'ALL') return b;
-        const opItems = b.operators.filter((o) => o.operator === opFilter);
-        const opTotal = opItems.reduce((sum, o) => sum + o.count, 0);
-        return {
-          ...b,
-          total: opTotal,
-          operators: opItems,
-        };
-      })
-      .filter((b) => b.total > 0);
-  }, [stats, techFilter, opFilter]);
-
-  const maxBandTotal = useMemo(() => {
-    if (!filteredBands.length) return 1;
-    return Math.max(...filteredBands.map((b) => b.total), 1);
-  }, [filteredBands]);
-
-  const filteredProvinces = useMemo(() => {
-    if (!stats) return [];
-    if (opFilter === 'ALL') return stats.provinces;
-    return stats.provinces
-      .map((p) => {
-        const opItems = p.operators.filter((o) => o.operator === opFilter);
-        const opTotal = opItems.reduce((sum, o) => sum + o.count, 0);
-        return {
-          ...p,
-          total: opTotal,
-          operators: opItems,
-        };
-      })
-      .sort((a, b) => b.total - a.total);
-  }, [stats, opFilter]);
-
-  const maxProvinceTotal = useMemo(() => {
-    if (!filteredProvinces.length) return 1;
-    return Math.max(...filteredProvinces.map((p) => p.total), 1);
-  }, [filteredProvinces]);
-
-  // Donut slices for Technologies based on mutually exclusive permit share (sums to 100%)
-  const techDonutSlices = useMemo(() => {
-    if (!stats || !stats.technologies.length) return [];
-    const totalPermits = stats.technologies.reduce((acc, t) => acc + t.permits, 0) || 1;
-    let cumulative = 0;
-    return stats.technologies.map((t) => {
-      const fraction = t.permits / totalPermits;
-      const start = cumulative;
-      cumulative += fraction;
-      return {
-        ...t,
-        fraction,
-        start,
-        color: TECH_COLORS[t.tech] || TECH_COLORS.Inne,
-      };
+    return stats.bands.filter((b) => {
+      if (b.total <= 0) return false;
+      if (techFilter === 'ALL') return true;
+      if (techFilter === 'OTHER') return !['5G', 'LTE', 'UMTS', 'GSM'].includes(b.tech);
+      return b.tech === techFilter;
     });
-  }, [stats]);
-
-  // Donut slices for Operators based on station assignments
-  const operatorDonutSlices = useMemo(() => {
-    if (!stats || !stats.operators.length) return [];
-    const totalOpTowers = stats.operators.reduce((acc, o) => acc + o.towers, 0) || 1;
-    let cumulative = 0;
-    return stats.operators.map((op) => {
-      const fraction = op.towers / totalOpTowers;
-      const start = cumulative;
-      cumulative += fraction;
-      return {
-        ...op,
-        fraction,
-        start,
-        color: getOperatorColor(op.name),
-      };
-    });
-  }, [stats]);
-
-  // Donut slices for Radioline Bands
-  const radiolineBandSlices = useMemo(() => {
-    if (!stats || !stats.radiolines?.bands.length) return [];
-    const totalLinks = stats.radiolines.totalLinks || 1;
-    let cumulative = 0;
-    return stats.radiolines.bands.map((b) => {
-      const fraction = b.total / totalLinks;
-      const start = cumulative;
-      cumulative += fraction;
-      return {
-        ...b,
-        fraction,
-        start,
-        color: RADIOLINE_BAND_COLORS[b.band] || '#64748b',
-      };
-    });
-  }, [stats]);
+  }, [stats, techFilter]);
 
   const exportCsv = () => {
     if (!stats) return;
@@ -562,7 +397,7 @@ export function StatsView({
 
   if (error || healthError) {
     return (
-      <section className="content-view stats-dashboard">
+      <section className="gr-view st-view">
         <div className="empty-state spacious">
           <Activity size={36} />
           <h2>{isPl ? 'Statystyki są chwilowo niedostępne' : 'Statistics are temporarily unavailable'}</h2>
@@ -581,58 +416,11 @@ export function StatsView({
     );
   }
 
-  const sectionMeta: Record<StatsSection, { title: string; subtitle: string; badge: string }> = {
-    uke: {
-      title: isPl ? 'Rejestr pozwoleń radiowych UKE' : 'UKE Radio Permit Registry',
-      subtitle: isPl
-        ? 'Struktura stacji bazowych, operatorów MNO oraz przydziałów pasm częstotliwości na podstawie oficjalnego wykazu Urzędu Komunikacji Elektronicznej.'
-        : 'Base station infrastructure, MNO distribution, and frequency band allocations from the official UKE registry.',
-      badge: stats?.dataQuality.ukeWykazDate
-        ? isPl
-          ? `Wykaz UKE: ${stats.dataQuality.ukeWykazDate}`
-          : `UKE Registry: ${stats.dataQuality.ukeWykazDate}`
-        : 'Rejestr UKE',
-    },
-    radiolines: {
-      title: isPl ? 'Radiolinie UKE (linie punkt–punkt)' : 'UKE Microwave Links (Point-to-Point)',
-      subtitle: isPl
-        ? 'Analiza łączy mikrofalowych w pasmach od 7 GHz do 86 GHz (E-Band), rozkład operatorów oraz długość przęseł transmisyjnych w Polsce.'
-        : 'Analysis of point-to-point microwave backhaul links across 7 GHz – 86 GHz (E-Band), operators, and hop distances.',
-      badge: isPl ? 'Baza radiolinii UKE' : 'UKE Microwave Registry',
-    },
-    btmap: {
-      title: isPl ? 'Wewnętrzna baza stacji BTMap' : 'BTMap Internal Station Database',
-      subtitle: isPl
-        ? 'Zestawienie zweryfikowanych fizycznie stacji bazowych, sektorów oraz parametrów radiowych (CID, ECI, PCI, EARFCN) utrzymywanych przez społeczność.'
-        : 'Summary of community-verified base stations, sectors, and cellular parameters (CID, ECI, PCI, EARFCN).',
-      badge: isPl ? 'Baza społeczności BTMap' : 'BTMap Community DB',
-    },
-    growth: {
-      title: isPl ? 'Nowe stacje i pasma w wykazie' : 'New Sites & Band Additions',
-      subtitle: isPl
-        ? 'Miesięczny raport przyrostu stacji i komórek wg operatora oraz rozkład nowości w pasmach GSM, UMTS, LTE i 5G.'
-        : 'Monthly base station and cellular additions by operator, with detailed breakdown across GSM, UMTS, LTE, and 5G bands.',
-      badge: isPl ? 'Raport miesięczny' : 'Monthly Report',
-    },
-    quality: {
-      title: isPl ? 'Jakość danych i nasycenie sieci' : 'Data Quality & Network Modernization',
-      subtitle: isPl
-        ? 'Wskaźniki kompletności danych geograficznych, agregacji pasm LTE-Advanced, wdrożeń 5G C-Band (3.6 GHz) oraz integracji pomiarów SI2PEM.'
-        : 'Completeness metrics for geographic coordinates, LTE-Advanced carrier aggregation, 5G C-Band (3.6 GHz), and SI2PEM reports.',
-      badge: isPl ? 'Audyt spójności bazy' : 'Database Integrity Audit',
-    },
-  };
-
-  const currentMeta = sectionMeta[activeSection];
-  const radius = 58;
-  const circumference = 2 * Math.PI * radius;
-
   if (activeSection === 'growth') {
     const reports = stats?.monthlyReports || [];
     const safeIdx = Math.min(Math.max(0, growthPeriodIdx), Math.max(0, reports.length - 1));
     const activeReport = reports[safeIdx];
     const hasComparison = Boolean(activeReport?.comparedTo);
-    const PRIMARY_OPS = ['Plus', 'T-Mobile', 'Orange', 'Play'];
     const bandUnit = growthBandMode === 'cells' ? (isPl ? 'sektorów' : 'sectors') : (isPl ? 'stacji' : 'sites');
 
     type BarRow = { key: string; label: string; total: number; newCount: number; color: string; detail?: string };
@@ -642,16 +430,16 @@ export function StatsView({
     const toRows = (list: StatsGrowthOperatorBar[]): BarRow[] => {
       const rows: BarRow[] = PRIMARY_OPS.map((name) => {
         const found = list.find((o) => o.operator === name);
-        return { key: name, label: name, total: found?.total ?? 0, newCount: found?.newCount ?? 0, color: getOperatorTheme(name).primary };
+        return { key: name, label: name, total: found?.total ?? 0, newCount: found?.newCount ?? 0, color: OP_COLORS[name] };
       });
-      const others = list.filter((o) => !PRIMARY_OPS.includes(o.operator) && o.total > 0).sort((a, b) => b.total - a.total);
+      const others = list.filter((o) => !(PRIMARY_OPS as readonly string[]).includes(o.operator) && o.total > 0).sort((a, b) => b.total - a.total);
       if (others.length) {
         rows.push({
           key: '__others',
           label: isPl ? 'Pozostali' : 'Others',
           total: others.reduce((sum, o) => sum + o.total, 0),
           newCount: others.reduce((sum, o) => sum + o.newCount, 0),
-          color: 'var(--gr-others)',
+          color: OTHERS_COLOR,
           detail: others.map((o) => `${o.operator}: ${formatNumber(o.total)}`).join('\n'),
         });
       }
@@ -714,7 +502,7 @@ export function StatsView({
     );
 
     return (
-      <section className="gr-view">
+      <section className="gr-view" key="growth">
         <header className="gr-header">
           <div className="gr-heading">
             <h1>{isPl ? 'Przyrost w wykazach' : 'Registry growth'}</h1>
@@ -858,1503 +646,426 @@ export function StatsView({
     );
   }
 
-  return (
-    <section className="content-view stats-dashboard">
-      {/* Top Header */}
-      <header className="stats-header">
-        <div className="stats-header-title">
-          <div className="stats-title-badge-row">
-            <span className="stats-source-tag">
-              <Database size={12} />
-              {currentMeta.badge}
+  // ---------------------------------------------------------------------------
+  // Shared building blocks for the registry, radio link, BTMap and quality views
+  // ---------------------------------------------------------------------------
+  const tile = (label: string, value: string, sub?: string, icon?: ReactNode) => (
+    <article className="st-tile" key={label}>
+      <div className="st-tile-head">
+        <span>{label}</span>
+        {icon && <span className="st-tile-icon" aria-hidden="true">{icon}</span>}
+      </div>
+      <strong className="st-tile-value">{value}</strong>
+      {sub && <span className="st-tile-sub">{sub}</span>}
+    </article>
+  );
+
+  const card = (title: string, subtitle: string | null, body: ReactNode, opts: { wide?: boolean; actions?: ReactNode; key?: string } = {}) => (
+    <article className={`gr-card st-card ${opts.wide ? 'is-wide' : ''}`} key={opts.key ?? title}>
+      <header className="st-card-head">
+        <div>
+          <h2>{title}</h2>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        {opts.actions}
+      </header>
+      {body}
+    </article>
+  );
+
+  const dotLabel = (label: string, color: string) => (
+    <>
+      <i className="st-dot" style={{ background: color }} aria-hidden="true" />
+      <span>{label}</span>
+    </>
+  );
+
+  type RankRow = { key: string; name: string; label: ReactNode; value: number; color: string; note?: string; detail?: string };
+
+  /**
+   * Ranked horizontal bars. With `whole` the track stands for that total (a share meter);
+   * otherwise bars are scaled to the largest row.
+   */
+  const ranked = (rows: RankRow[], unit: string, whole?: number) => {
+    const scale = whole && whole > 0 ? whole : Math.max(...rows.map((r) => r.value), 1);
+    return (
+      <ul className="st-rank">
+        {rows.map((r) => (
+          <li key={r.key} className="st-rank-row" title={`${r.name}: ${formatNumber(r.value)} ${unit}${r.note ? ` · ${r.note}` : ''}${r.detail ? `\n\n${r.detail}` : ''}`}>
+            <span className="st-rank-label">{r.label}</span>
+            <span className="st-rank-track" aria-hidden="true">
+              <span className="st-rank-fill" style={{ width: `${Math.min(100, (r.value / scale) * 100)}%`, background: r.color }} />
             </span>
-            <div className="stats-section-pills" role="tablist" aria-label={isPl ? 'Sekcje statystyk' : 'Statistics sections'}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeSection === 'uke'}
-                className={activeSection === 'uke' ? 'active' : ''}
-                onClick={() => setSection('uke')}
-              >
-                {isPl ? 'Rejestr UKE' : 'UKE Registry'}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeSection === 'radiolines'}
-                className={activeSection === 'radiolines' ? 'active' : ''}
-                onClick={() => setSection('radiolines')}
-              >
-                {isPl ? 'Radiolinie UKE' : 'Microwave Links'}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeSection === 'btmap'}
-                className={activeSection === 'btmap' ? 'active' : ''}
-                onClick={() => setSection('btmap')}
-              >
-                {isPl ? 'Wewnętrzna baza' : 'Internal DB'}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={(activeSection as string) === 'growth'}
-                className={(activeSection as string) === 'growth' ? 'active' : ''}
-                onClick={() => setSection('growth')}
-              >
-                {isPl ? 'Nowe stacje i pasma' : 'New Sites & Bands'}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeSection === 'quality'}
-                className={activeSection === 'quality' ? 'active' : ''}
-                onClick={() => setSection('quality')}
-              >
-                {isPl ? 'Jakość danych' : 'Data Quality'}
-              </button>
-            </div>
-          </div>
-          <h1>{currentMeta.title}</h1>
-          <p>{currentMeta.subtitle}</p>
+            <span className="st-rank-value">{formatNumber(r.value)}</span>
+            <span className="st-rank-note">{r.note ?? ''}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  const legend = (segments: Segment[]) => (
+    <ul className="st-legend" aria-label={isPl ? 'Legenda' : 'Legend'}>
+      {segments.map((s) => (
+        <li key={s.key}>
+          <i style={{ background: s.color }} aria-hidden="true" />
+          {s.label}
+        </li>
+      ))}
+    </ul>
+  );
+
+  type StackRow = { key: string; name: string; label: ReactNode; total: number; segments: Segment[] };
+
+  /** One segmented bar per row: length = row total (scaled to the largest row), parts = operators in fixed order. */
+  const stacked = (rows: StackRow[], unit: string) => {
+    const max = Math.max(...rows.map((r) => r.total), 1);
+    return (
+      <ul className="st-stack">
+        {rows.map((r) => {
+          const parts = r.segments.filter((s) => s.value > 0);
+          const partsTotal = parts.reduce((sum, s) => sum + s.value, 0) || 1;
+          return (
+            <li
+              key={r.key}
+              className="st-stack-row"
+              title={[`${r.name}: ${formatNumber(r.total)} ${unit}`, ...parts.map((s) => `${s.label}: ${formatNumber(s.value)} (${formatPct(share(s.value, partsTotal))})`)].join('\n')}
+            >
+              <span className="st-stack-label">{r.label}</span>
+              <span className="st-stack-track" aria-hidden="true">
+                <span className="st-stack-bar" style={{ width: `${(r.total / max) * 100}%` }}>
+                  {parts
+                    .filter((s) => share(s.value, partsTotal) >= 0.5)
+                    .map((s) => (
+                      <span key={s.key} style={{ flexGrow: s.value, background: s.color }} />
+                    ))}
+                </span>
+              </span>
+              <span className="st-stack-value">{formatNumber(r.total)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
+  const legendSegments = operatorSegments([], othersLabel).concat([{ key: '__others', label: othersLabel, value: 0, color: OTHERS_COLOR }]);
+
+  const segmentedControl = <T extends string>(value: T, options: Array<{ value: T; label: string }>, onChange: (next: T) => void, label: string) => (
+    <div className="gr-segmented st-filter" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" className={value === o.value ? 'is-active' : ''} aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
+          <span>{o.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const titles: Record<Exclude<StatsSection, 'growth'>, { pl: string; en: string }> = {
+    uke: { pl: 'Rejestr UKE', en: 'UKE registry' },
+    radiolines: { pl: 'Radiolinie UKE', en: 'UKE radio links' },
+    btmap: { pl: 'Baza BTMap', en: 'BTMap database' },
+    quality: { pl: 'Jakość danych', en: 'Data quality' },
+  };
+  const section = activeSection as Exclude<StatsSection, 'growth'>;
+  const dq = stats?.dataQuality;
+  const metaLine =
+    section === 'uke'
+      ? dq?.ukeWykazDate ? (isPl ? `Wykaz pozwoleń radiowych · stan na ${dq.ukeWykazDate}` : `Radio permit registry · as of ${dq.ukeWykazDate}`) : (isPl ? 'Wykaz pozwoleń radiowych' : 'Radio permit registry')
+      : section === 'radiolines'
+      ? dq?.radiolinesUpdatedAt ? (isPl ? `Pozwolenia na linie radiowe · aktualizacja ${dq.radiolinesUpdatedAt.slice(0, 10)}` : `Radio link permits · updated ${dq.radiolinesUpdatedAt.slice(0, 10)}`) : (isPl ? 'Pozwolenia na linie radiowe' : 'Radio link permits')
+      : section === 'btmap'
+      ? (isPl ? 'Stacje zgłoszone i zweryfikowane przez społeczność' : 'Stations submitted and verified by the community')
+      : (isPl ? 'Kompletność danych i stan źródeł' : 'Completeness and source status');
+
+  // ---------------------------------------------------------------------------
+  // Registry / BTMap view
+  // ---------------------------------------------------------------------------
+  const renderStations = (s: TelecomStats) => {
+    const isBtmap = section === 'btmap';
+    const total = s.summary.totalTowers;
+    if (isBtmap && total === 0) {
+      return (
+        <div className="gr-notice" role="note">
+          <Info size={16} aria-hidden="true" />
+          <span>
+            {isPl
+              ? `Baza BTMap nie ma jeszcze zatwierdzonych stacji. W rejestrze UKE jest ${formatNumber(s.summary.ukeTowers)} lokalizacji – stacje możesz dodawać z widoku mapy.`
+              : `The BTMap database has no approved stations yet. The UKE registry holds ${formatNumber(s.summary.ukeTowers)} locations – add stations from the map.`}
+          </span>
+        </div>
+      );
+    }
+    const nr = s.technologies.find((t) => t.tech === '5G');
+    const opSegments = operatorSegments(s.operators.map((o) => ({ operator: o.name, count: o.towers })), othersLabel).filter((x) => x.value > 0);
+    const techNames: Record<string, string> = { '5G': '5G NR', LTE: 'LTE', UMTS: 'UMTS', GSM: 'GSM', 'GSM-R': 'GSM-R', IOT: 'IoT', CDMA: 'CDMA' };
+    const unitStations = isPl ? 'stacji' : 'sites';
+    const bandTech = (tech: string) => (tech === '5G' ? 'NR' : tech);
+    return (
+      <>
+        <div className="st-tiles">
+          {tile(isBtmap ? (isPl ? 'Stacje w bazie' : 'Stations') : (isPl ? 'Lokalizacje w rejestrze' : 'Registry locations'), formatNumber(total), isBtmap ? (isPl ? 'zatwierdzone stacje BTMap' : 'approved BTMap stations') : (isPl ? 'unikalne lokalizacje stacji' : 'unique station locations'), <RadioTower size={16} />)}
+          {isBtmap
+            ? tile(isPl ? 'Sektory' : 'Sectors', formatNumber(s.summary.totalCells), isPl ? 'z danymi komórek' : 'with cell data', <Layers size={16} />)
+            : tile(isPl ? 'Pozwolenia radiowe' : 'Radio permits', formatNumber(s.summary.totalPermits), total > 0 ? (isPl ? `średnio ${percentFormat.format(s.summary.totalPermits / total)} na lokalizację` : `${percentFormat.format(s.summary.totalPermits / total)} per location on average`) : undefined, <Layers size={16} />)}
+          {tile(isPl ? 'Stacje 5G NR' : '5G NR sites', formatNumber(nr?.towers ?? 0), isPl ? `${formatPct(share(nr?.towers ?? 0, total))} wszystkich stacji` : `${formatPct(share(nr?.towers ?? 0, total))} of all sites`, <Signal size={16} />)}
+          {tile(isPl ? 'Stacje 5G C-Band' : '5G C-Band sites', formatNumber(s.dataQuality.fiveGCBandTowers), isPl ? `pasmo n78 · ${formatPct(share(s.dataQuality.fiveGCBandTowers, total))} stacji` : `n78 · ${formatPct(share(s.dataQuality.fiveGCBandTowers, total))} of sites`, <Zap size={16} />)}
         </div>
 
-        <div className="stats-header-controls">
-          <div className="stats-action-buttons">
-            <button
-              type="button"
-              className="secondary-button stats-export-btn"
-              onClick={exportCsv}
-              disabled={!stats || loading}
-              title={isPl ? 'Eksportuj dane widoku do pliku CSV' : 'Export current view to CSV'}
-            >
-              <ArrowDownToLine size={15} />
-              <span>{isPl ? 'Eksport CSV' : 'Export CSV'}</span>
-            </button>
-            <button
-              type="button"
-              className="icon-button stats-refresh-btn"
-              onClick={() => fetchStats(apiSource)}
-              disabled={loading}
-              aria-label={isPl ? 'Odśwież dane' : 'Refresh data'}
-              title={isPl ? 'Odśwież dane' : 'Refresh data'}
-            >
-              <RefreshCw size={16} className={loading ? 'spin' : ''} />
-            </button>
-          </div>
+        <div className="st-grid">
+          {card(
+            isPl ? 'Operatorzy' : 'Operators',
+            isPl ? 'Liczba stacji każdego operatora i udział we wszystkich stacjach' : 'Sites per operator and share of all sites',
+            ranked(
+              opSegments.map((x) => ({ key: x.key, name: x.label, label: dotLabel(x.label, x.color), value: x.value, color: x.color, note: formatPct(share(x.value, total)), detail: x.detail })),
+              unitStations
+            )
+          )}
+          {card(
+            isPl ? 'Technologie' : 'Technologies',
+            isPl ? 'Stacje z co najmniej jednym pasmem danej technologii' : 'Sites with at least one band of the technology',
+            ranked(
+              [...s.technologies].filter((t) => t.towers > 0).sort((a, b) => b.towers - a.towers).map((t) => ({ key: t.tech, name: techNames[t.tech] || t.tech, label: <span>{techNames[t.tech] || t.tech}</span>, value: t.towers, color: SERIES_COLOR, note: formatPct(t.percent) })),
+              unitStations
+            )
+          )}
+          {card(
+            isPl ? 'Pasma' : 'Bands',
+            isPl ? 'Stacje nadające w każdym paśmie, z podziałem na operatorów' : 'Sites transmitting in each band, split by operator',
+            <>
+              {legend(legendSegments)}
+              {filteredBands.length ? (
+                stacked(
+                  filteredBands.map((b) => ({
+                    key: b.key,
+                    name: `${b.tech} ${b.band} MHz`,
+                    label: (
+                      <>
+                        <span className="gr-tech" data-tech={bandTech(b.tech)}>{bandTech(b.tech)}</span>
+                        <span>{b.band} <small>MHz</small></span>
+                      </>
+                    ),
+                    total: b.total,
+                    segments: operatorSegments(b.operators, othersLabel),
+                  })),
+                  unitStations
+                )
+              ) : (
+                <p className="gr-empty">{isPl ? 'Brak pasm dla wybranej technologii.' : 'No bands for the selected technology.'}</p>
+              )}
+            </>,
+            {
+              wide: true,
+              actions: segmentedControl(
+                techFilter,
+                [
+                  { value: 'ALL', label: isPl ? 'Wszystkie' : 'All' },
+                  { value: '5G', label: '5G' },
+                  { value: 'LTE', label: 'LTE' },
+                  { value: 'UMTS', label: 'UMTS' },
+                  { value: 'GSM', label: 'GSM' },
+                  { value: 'OTHER', label: isPl ? 'Inne' : 'Other' },
+                ],
+                setTechFilter,
+                isPl ? 'Technologia' : 'Technology'
+              ),
+            }
+          )}
+          {card(
+            isPl ? 'Województwa' : 'Provinces',
+            isPl ? 'Stacje w każdym województwie, z podziałem na operatorów' : 'Sites per province, split by operator',
+            <>
+              {legend(legendSegments)}
+              {stacked(
+                s.provinces.filter((p) => p.total > 0).map((p) => ({ key: p.province, name: p.province, label: <span>{p.province}</span>, total: p.total, segments: operatorSegments(p.operators, othersLabel) })),
+                unitStations
+              )}
+            </>,
+            { wide: true }
+          )}
+          {isBtmap && s.comparison && s.comparison.bands.length > 0 &&
+            card(
+              isPl ? 'Pasma: rejestr UKE a baza BTMap' : 'Bands: UKE registry vs BTMap',
+              isPl ? 'Liczba wpisów pasma w obu źródłach' : 'Band entries in both sources',
+              <div className="st-table-wrap">
+                <table className="st-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{isPl ? 'Pasmo' : 'Band'}</th>
+                      <th scope="col" className="is-num">{isPl ? 'Rejestr UKE' : 'UKE registry'}</th>
+                      <th scope="col" className="is-num">BTMap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.comparison.bands.map((cb) => (
+                      <tr key={cb.key}>
+                        <td>{cb.tech} {cb.band} MHz</td>
+                        <td className="is-num">{formatNumber(cb.ukeTotal)}</td>
+                        <td className="is-num">{formatNumber(cb.btmapTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>,
+              { wide: true }
+            )}
+        </div>
+      </>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // Radio link view
+  // ---------------------------------------------------------------------------
+  const renderRadiolines = (s: TelecomStats) => {
+    const rl = s.radiolines;
+    const unitLinks = isPl ? 'linii' : 'links';
+    return (
+      <>
+        <div className="st-tiles">
+          {tile(isPl ? 'Linie radiowe' : 'Radio links', formatNumber(rl.totalLinks), rl.newLinks > 0 ? (isPl ? `${formatNumber(rl.newLinks)} nowych w ostatnim wykazie` : `${formatNumber(rl.newLinks)} new in the latest registry`) : undefined, <Radio size={16} />)}
+          {tile(isPl ? 'Łączna długość' : 'Total length', formatKm(rl.totalLengthKm), isPl ? 'suma długości wszystkich przęseł' : 'sum of all hops', <Route size={16} />)}
+          {tile(isPl ? 'Średnia długość' : 'Average length', formatKm(rl.avgDistanceKm), isPl ? 'jednego przęsła' : 'per hop', <Ruler size={16} />)}
+          {tile(isPl ? 'Najdłuższe przęsło' : 'Longest hop', formatKm(rl.maxDistanceKm), undefined, <MapPin size={16} />)}
+        </div>
+        <div className="st-grid">
+          {card(
+            isPl ? 'Operatorzy' : 'Operators',
+            isPl ? 'Liczba linii i średnia długość przęsła' : 'Links and average hop length',
+            ranked(
+              rl.operators.map((o) => ({ key: o.name, name: o.name, label: dotLabel(o.name, opColor(o.group)), value: o.links, color: opColor(o.group), note: `${formatPct(o.percent)} · ${formatKm(o.avgDistanceKm)}` })),
+              unitLinks
+            )
+          )}
+          {card(
+            isPl ? 'Pasma częstotliwości' : 'Frequency bands',
+            isPl ? 'Liczba linii i średnia długość przęsła w paśmie' : 'Links and average hop length per band',
+            ranked(
+              rl.bands.map((b) => ({ key: b.band, name: `${b.band} (${b.rangeLabel})`, label: <span>{b.band}</span>, value: b.total, color: SERIES_COLOR, note: b.total > 0 && b.avgDistanceKm > 0 ? `${formatPct(b.percent)} · ${formatKm(b.avgDistanceKm)}` : formatPct(b.percent) })),
+              unitLinks
+            )
+          )}
+          {card(
+            isPl ? 'Województwa' : 'Provinces',
+            isPl ? 'Linie w każdym województwie (wg nadajnika), z podziałem na operatorów' : 'Links per province (by transmitter), split by operator',
+            <>
+              {legend(legendSegments)}
+              {stacked(
+                rl.provinces.filter((p) => p.total > 0).map((p) => ({ key: p.province, name: p.province, label: <span>{p.province}</span>, total: p.total, segments: operatorSegments(p.operators, othersLabel) })),
+                unitLinks
+              )}
+            </>,
+            { wide: true }
+          )}
+        </div>
+      </>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // Data quality view
+  // ---------------------------------------------------------------------------
+  const renderQuality = (s: TelecomStats) => {
+    const q = s.dataQuality;
+    const total = q.totalTowers;
+    const unitStations = isPl ? 'stacji' : 'sites';
+    const sources = [
+      { key: 'uke', name: isPl ? 'Wykaz stacji bazowych UKE' : 'UKE base station registry', detail: isPl ? 'pozwolenia GSM / UMTS / LTE / 5G' : 'GSM / UMTS / LTE / 5G permits', records: `${formatNumber(q.ukeTowers)} ${unitStations} · ${formatNumber(s.summary.totalPermits)} ${isPl ? 'pozwoleń' : 'permits'}`, state: q.ukeWykazDate || '—' },
+      { key: 'rl', name: isPl ? 'Wykaz linii radiowych UKE' : 'UKE radio link registry', detail: isPl ? 'przęsła punkt–punkt 7–86 GHz' : 'point-to-point hops, 7–86 GHz', records: `${formatNumber(s.radiolines.totalLinks)} ${isPl ? 'linii' : 'links'}`, state: q.radiolinesUpdatedAt ? q.radiolinesUpdatedAt.slice(0, 10) : '—' },
+      { key: 'pem', name: 'SI2PEM', detail: isPl ? 'harmonogram i sprawozdania z pomiarów PEM' : 'EMF measurement schedule and reports', records: `${formatNumber(q.pemPlansCount)} ${isPl ? 'pomiarów w harmonogramie' : 'scheduled'} · ${formatNumber(q.pemCachedReports)} ${isPl ? 'raportów' : 'reports'}`, state: isPl ? 'na bieżąco z API' : 'live API' },
+      { key: 'btmap', name: isPl ? 'Baza BTMap' : 'BTMap database', detail: isPl ? 'zgłoszenia społeczności' : 'community submissions', records: `${formatNumber(q.btmapTowers)} ${unitStations}`, state: health ? (isPl ? 'połączona' : 'connected') : '—' },
+    ];
+    return (
+      <>
+        <div className="st-tiles">
+          {tile(isPl ? 'Pełny adres' : 'Full address', formatPct(share(q.withFullAddress, total)), isPl ? `${formatNumber(q.withFullAddress)} z ${formatNumber(total)} stacji` : `${formatNumber(q.withFullAddress)} of ${formatNumber(total)} sites`, <MapPin size={16} />)}
+          {tile(isPl ? 'Województwo z rejestru' : 'Province from registry', formatPct(share(q.withExplicitProvince, total)), isPl ? `${formatNumber(q.inferredProvince)} ustalonych ze współrzędnych` : `${formatNumber(q.inferredProvince)} inferred from coordinates`, <Database size={16} />)}
+          {tile(isPl ? 'Pomiary PEM w harmonogramie' : 'Scheduled EMF measurements', formatNumber(q.pemPlansCount), 'SI2PEM', <Activity size={16} />)}
+          {tile(isPl ? 'Zapisane raporty PEM' : 'Saved EMF reports', formatNumber(q.pemCachedReports), isPl ? `dla ${formatNumber(q.pemCachedTowers)} stacji` : `for ${formatNumber(q.pemCachedTowers)} sites`, <Signal size={16} />)}
+        </div>
+        <div className="st-grid">
+          {card(
+            isPl ? '5G i współdzielenie masztów' : '5G and shared masts',
+            isPl ? 'Odsetek wszystkich stacji spełniających warunek' : 'Share of all sites meeting the condition',
+            ranked(
+              [
+                { key: 'dss', name: isPl ? '5G w pasmach FDD (DSS)' : '5G in FDD bands (DSS)', value: q.fiveGDssTowers },
+                { key: 'cband', name: isPl ? '5G C-Band (n78)' : '5G C-Band (n78)', value: q.fiveGCBandTowers },
+                { key: 'shared', name: isPl ? 'Maszt z ≥2 operatorami' : 'Mast with ≥2 operators', value: q.collocatedTowers },
+              ].map((r) => ({ ...r, label: <span>{r.name}</span>, color: SERIES_COLOR, note: formatPct(share(r.value, total)) })),
+              unitStations,
+              total
+            )
+          )}
+          {card(
+            isPl ? 'Źródła danych' : 'Data sources',
+            isPl ? 'Liczba rekordów i stan każdego źródła' : 'Records and status of each source',
+            <div className="st-table-wrap">
+              <table className="st-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{isPl ? 'Źródło' : 'Source'}</th>
+                    <th scope="col">{isPl ? 'Rekordy' : 'Records'}</th>
+                    <th scope="col">{isPl ? 'Stan' : 'Status'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((src) => (
+                    <tr key={src.key}>
+                      <td>
+                        <strong>{src.name}</strong>
+                        <small>{src.detail}</small>
+                      </td>
+                      <td>{src.records}</td>
+                      <td>{src.state}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  const title = titles[section] ?? titles.uke;
+  return (
+    // Keyed by section so switching sections starts at the top instead of keeping the previous scroll position.
+    <section className="gr-view st-view" key={section}>
+      <header className="gr-header">
+        <div className="gr-heading">
+          <h1>{isPl ? title.pl : title.en}</h1>
+          <p className="gr-meta">
+            <span>{metaLine}</span>
+          </p>
+        </div>
+        <div className="gr-actions">
+          <button type="button" className="st-btn" onClick={exportCsv} disabled={!stats || loading} title={isPl ? 'Pobierz dane tego widoku jako CSV' : 'Download this view as CSV'}>
+            <ArrowDownToLine size={15} />
+            <span>CSV</span>
+          </button>
+          <button type="button" className="gr-icon-btn" onClick={() => fetchStats(apiSource)} disabled={loading} aria-label={isPl ? 'Odśwież dane' : 'Refresh data'} title={isPl ? 'Odśwież dane' : 'Refresh data'}>
+            <RefreshCw size={16} className={loading ? 'spin' : ''} />
+          </button>
         </div>
       </header>
 
       {loading && !stats ? (
-        <div className="stats-skeleton-grid">
-          <div className="stats-kpi-grid">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="stats-skeleton-card kpi" />
-            ))}
-          </div>
-          <div className="stats-row-2col">
-            <div className="stats-skeleton-card chart" />
-            <div className="stats-skeleton-card chart" />
-          </div>
-          <div className="stats-skeleton-card wide" />
+        <div className="gr-loading">
+          <RefreshCw className="spin" size={20} />
+          <span>{isPl ? 'Wczytywanie…' : 'Loading…'}</span>
         </div>
       ) : stats ? (
         <>
-          {/* =========================================================
-              SECTION 1 & 3: REJESTR UKE / WEWNĘTRZNA BAZA BTMAP
-             ========================================================= */}
-          {(activeSection === 'uke' || activeSection === 'btmap') && (
-            <>
-              <div className="stats-kpi-grid">
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {activeSection === 'btmap'
-                        ? isPl
-                          ? 'Stacje w bazie BTMap'
-                          : 'BTMap Stations'
-                        : isPl
-                        ? 'Lokalizacje w rejestrze UKE'
-                        : 'UKE Registry Locations'}
-                    </span>
-                    <span className="stats-kpi-icon blue">
-                      <RadioTower size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">{formatNumber(stats.summary.totalTowers)}</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {activeSection === 'btmap'
-                        ? isPl
-                          ? 'Zweryfikowane przez społeczność'
-                          : 'Community verified locations'
-                        : isPl
-                        ? 'Unikalne lokalizacje stacji bazowych'
-                        : 'Unique base station coordinates'}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {activeSection === 'btmap'
-                        ? isPl
-                          ? 'Zweryfikowane komórki'
-                          : 'Verified Cells'
-                        : isPl
-                        ? 'Pozwolenia radiowe UKE'
-                        : 'UKE Radio Permits'}
-                    </span>
-                    <span className="stats-kpi-icon purple">
-                      <Layers size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">
-                    {formatNumber(activeSection === 'btmap' ? stats.summary.totalCells : stats.summary.totalPermits)}
-                  </strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {stats.summary.totalTowers > 0
-                        ? isPl
-                          ? `Średnio ${(stats.summary.totalPermits / stats.summary.totalTowers).toFixed(1)} wpisów na stację`
-                          : `Avg ${(stats.summary.totalPermits / stats.summary.totalTowers).toFixed(1)} entries per station`
-                        : isPl
-                        ? 'Sektory z danymi CID / PCI / EARFCN'
-                        : 'Sectors with CID / PCI / EARFCN'}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Stacje 5G (NR)' : '5G (NR) Stations'}
-                    </span>
-                    <span className="stats-kpi-icon emerald">
-                      <Sparkles size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">
-                    {formatNumber(stats.technologies.find((t) => t.tech === '5G')?.towers ?? 0)}
-                  </strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `${formatPct(stats.technologies.find((t) => t.tech === '5G')?.percent ?? 0)} wszystkich stacji (${formatNumber(stats.dataQuality.fiveGCBandTowers)} C-Band)`
-                        : `${formatPct(stats.technologies.find((t) => t.tech === '5G')?.percent ?? 0)} of all stations (${formatNumber(stats.dataQuality.fiveGCBandTowers)} C-Band)`}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Stacje wielopasmowe LTE-A' : 'Multi-band LTE-A Sites'}
-                    </span>
-                    <span className="stats-kpi-icon amber">
-                      <Cpu size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">{formatNumber(stats.dataQuality.multiBandLteTowers)}</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {stats.summary.totalTowers > 0
-                        ? isPl
-                          ? `${((stats.dataQuality.multiBandLteTowers / stats.summary.totalTowers) * 100).toFixed(1)}% stacji z agregacją ≥3 pasm LTE`
-                          : `${((stats.dataQuality.multiBandLteTowers / stats.summary.totalTowers) * 100).toFixed(1)}% sites with ≥3 LTE bands`
-                        : isPl
-                        ? 'Agregacja min. 3 pasm częstotliwości LTE'
-                        : 'Carrier aggregation of ≥3 LTE bands'}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Nowe stacje w wykazie' : 'New Sites in Update'}
-                    </span>
-                    <span className="stats-kpi-icon emerald">
-                      <TrendingUp size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">
-                    +{formatNumber(stats.summary.latestNewTowers || (stats.timeline?.[stats.timeline.length - 1]?.totalNew ?? 0))}
-                  </strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {stats.timeline?.[stats.timeline.length - 1]
-                        ? isPl
-                          ? `Aktualizacja: ${stats.timeline[stats.timeline.length - 1].label}`
-                          : `Update: ${stats.timeline[stats.timeline.length - 1].label}`
-                        : isPl
-                        ? 'Brak danych o przyroście'
-                        : 'No growth data'}
-                    </span>
-                  </div>
-                </article>
-              </div>
-
-              {stats.summary.totalTowers === 0 ? (
-                <article className="stats-panel stats-empty-btmap">
-                  <div className="stats-empty-btmap-inner">
-                    <Radio size={32} />
-                    <div>
-                      <h2>
-                        {isPl
-                          ? 'Wewnętrzna baza społeczności BTMap nie zawiera jeszcze zatwierdzonych stacji'
-                          : 'The BTMap internal community database has no approved stations yet'}
-                      </h2>
-                      <p>
-                        {isPl
-                          ? `W bazie znajduje się obecnie ${formatNumber(stats.summary.ukeTowers)} oficjalnych lokalizacji z rejestru UKE oraz ${formatNumber(stats.radiolines.totalLinks)} linii radiowych. Możesz dodać lub zweryfikować pierwszą stację bezpośrednio z widoku mapy.`
-                          : `The database currently holds ${formatNumber(stats.summary.ukeTowers)} official UKE locations and ${formatNumber(stats.radiolines.totalLinks)} microwave links. You can submit and verify stations directly from the map.`}
-                      </p>
-                      <div className="stats-empty-actions">
-                        <button type="button" className="primary-button" onClick={() => setSection('uke')}>
-                          {isPl ? 'Zobacz statystyki Rejestru UKE' : 'View UKE Registry Statistics'}
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => setSection('quality')}>
-                          {isPl ? 'Sprawdź jakość danych' : 'Check Data Quality'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {stats.comparison && stats.comparison.bands.length > 0 && (
-                    <div style={{ marginTop: '24px', borderTop: '1px solid var(--line)', paddingTop: '20px' }}>
-                      <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>
-                        {isPl ? 'Zestawienie pasm częstotliwości: Baza wewnętrzna vs Rejestr UKE' : 'Band Comparison: Internal DB vs UKE Registry'}
-                      </h3>
-                      <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '14px' }}>
-                        {isPl
-                          ? 'Porównanie pasm częstotliwości zarejestrowanych w oficjalnym wykazie UKE oraz zweryfikowanych komórek w bazie BTMap.'
-                          : 'Comparison of frequency bands registered in the official UKE registry vs verified BTMap cells.'}
-                      </p>
-                      <div className="stats-comparison-table-wrap">
-                        <table className="stats-comparison-table">
-                          <thead>
-                            <tr>
-                              <th>{isPl ? 'Pasmo radiowe' : 'Radio Band'}</th>
-                              <th>{isPl ? 'Rejestr UKE (pozwolenia)' : 'UKE Registry (permits)'}</th>
-                              <th>{isPl ? 'Baza wewnętrzna BTMap' : 'BTMap Internal DB'}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {stats.comparison.bands.slice(0, 12).map((cb) => (
-                              <tr key={cb.key}>
-                                <td><strong>{cb.tech} {cb.band} MHz</strong></td>
-                                <td><span style={{ color: '#38bdf8', fontWeight: 700 }}>{formatNumber(cb.ukeTotal)}</span></td>
-                                <td><span style={{ color: '#10b981', fontWeight: 700 }}>{formatNumber(cb.btmapTotal)}</span></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ) : (
-                <>
-                  {/* Row 1: Technology & Operator Distribution */}
-                  <div className="stats-row-2col">
-                    {/* Technology Card */}
-                    <article className="stats-panel">
-                      <div className="stats-panel-head">
-                        <div>
-                          <h2>{isPl ? 'Podział według technologii' : 'Distribution by Technology'}</h2>
-                          <p>
-                            {isPl
-                              ? 'Wykres kołowy obrazuje udział w ogólnej puli pozwoleń (100%), a kolumna prawa penetrację na stacjach.'
-                              : 'Donut chart shows share of total permits (100%); right column shows station penetration.'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="stats-donut-layout">
-                        <div className="stats-donut-box">
-                          <svg viewBox="0 0 160 160" className="stats-donut-svg">
-                            <circle
-                              cx="80"
-                              cy="80"
-                              r={radius}
-                              fill="transparent"
-                              stroke="var(--line)"
-                              strokeWidth="18"
-                            />
-                            {techDonutSlices.map((slice) => {
-                              const dash = slice.fraction * circumference;
-                              const offset = -slice.start * circumference;
-                              const isHovered = hoveredTech === slice.tech;
-                              return (
-                                <circle
-                                  key={slice.tech}
-                                  cx="80"
-                                  cy="80"
-                                  r={radius}
-                                  fill="transparent"
-                                  stroke={slice.color}
-                                  strokeWidth={isHovered ? '22' : '18'}
-                                  strokeDasharray={`${dash} ${circumference}`}
-                                  strokeDashoffset={offset}
-                                  transform="rotate(-90 80 80)"
-                                  className="stats-donut-segment"
-                                  style={{
-                                    opacity: hoveredTech && !isHovered ? 0.35 : 1,
-                                  }}
-                                  onMouseEnter={() => setHoveredTech(slice.tech)}
-                                  onMouseLeave={() => setHoveredTech(null)}
-                                />
-                              );
-                            })}
-                          </svg>
-                          <div className="stats-donut-center">
-                            {hoveredTech ? (
-                              <>
-                                <span>{hoveredTech}</span>
-                                <strong>
-                                  {formatPct(
-                                    techDonutSlices.find((s) => s.tech === hoveredTech)?.permitPercent ?? 0
-                                  )}
-                                </strong>
-                                <small>{isPl ? 'pozwoleń' : 'of permits'}</small>
-                              </>
-                            ) : (
-                              <>
-                                <span>{isPl ? 'Pozwolenia' : 'Permits'}</span>
-                                <strong>{formatNumber(stats.summary.totalPermits)}</strong>
-                                <small>100%</small>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="stats-legend-list">
-                          {techDonutSlices.map((item) => (
-                            <div
-                              key={item.tech}
-                              className={`stats-legend-item ${hoveredTech === item.tech ? 'is-hovered' : ''}`}
-                              onMouseEnter={() => setHoveredTech(item.tech)}
-                              onMouseLeave={() => setHoveredTech(null)}
-                            >
-                              <div className="stats-legend-main">
-                                <span className="stats-legend-dot" style={{ background: item.color }} />
-                                <strong className="stats-legend-name">{item.tech}</strong>
-                                <span className="stats-legend-badge">
-                                  {formatPct(item.permitPercent)} {isPl ? 'pozw.' : 'permits'}
-                                </span>
-                              </div>
-                              <div className="stats-legend-metrics">
-                                <strong>{formatNumber(item.towers)} {isPl ? 'stacji' : 'sites'}</strong>
-                                <small>
-                                  {formatPct(item.percent)} {isPl ? 'stacji' : 'sites'} · {formatNumber(item.permits)} {isPl ? 'pozw.' : 'perm.'}
-                                </small>
-                              </div>
-                              <div className="stats-legend-bar-track">
-                                <div
-                                  className="stats-legend-bar-fill"
-                                  style={{
-                                    width: `${Math.min(100, item.percent)}%`,
-                                    background: item.color,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </article>
-
-                    {/* Operator Card */}
-                    <article className="stats-panel">
-                      <div className="stats-panel-head">
-                        <div>
-                          <h2>{isPl ? 'Podział według operatora' : 'Distribution by Operator'}</h2>
-                          <p>
-                            {isPl
-                              ? 'Liczba obsługiwanych lokalizacji oraz łączna pula pozwoleń radiowych każdego operatora.'
-                              : 'Number of active base station locations and total radio permits per operator.'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="stats-donut-layout">
-                        <div className="stats-donut-box">
-                          <svg viewBox="0 0 160 160" className="stats-donut-svg">
-                            <circle
-                              cx="80"
-                              cy="80"
-                              r={radius}
-                              fill="transparent"
-                              stroke="var(--line)"
-                              strokeWidth="18"
-                            />
-                            {operatorDonutSlices.map((slice) => {
-                              const dash = slice.fraction * circumference;
-                              const offset = -slice.start * circumference;
-                              const isHovered = hoveredOp === slice.name;
-                              return (
-                                <circle
-                                  key={slice.name}
-                                  cx="80"
-                                  cy="80"
-                                  r={radius}
-                                  fill="transparent"
-                                  stroke={slice.color}
-                                  strokeWidth={isHovered ? '22' : '18'}
-                                  strokeDasharray={`${dash} ${circumference}`}
-                                  strokeDashoffset={offset}
-                                  transform="rotate(-90 80 80)"
-                                  className="stats-donut-segment"
-                                  style={{
-                                    opacity: hoveredOp && !isHovered ? 0.35 : 1,
-                                  }}
-                                  onMouseEnter={() => setHoveredOp(slice.name)}
-                                  onMouseLeave={() => setHoveredOp(null)}
-                                />
-                              );
-                            })}
-                          </svg>
-                          <div className="stats-donut-center">
-                            {hoveredOp ? (
-                              <>
-                                <span>{hoveredOp}</span>
-                                <strong>
-                                  {formatPct(
-                                    operatorDonutSlices.find((s) => s.name === hoveredOp)?.percent ?? 0
-                                  )}
-                                </strong>
-                                <small>{isPl ? 'lokalizacji' : 'of sites'}</small>
-                              </>
-                            ) : (
-                              <>
-                                <span>{isPl ? 'Lokalizacje' : 'Locations'}</span>
-                                <strong>{formatNumber(stats.summary.totalTowers)}</strong>
-                                <small>{stats.operators.length} {isPl ? 'oper.' : 'ops'}</small>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="stats-legend-list">
-                          {operatorDonutSlices.map((op) => (
-                            <div
-                              key={op.name}
-                              className={`stats-legend-item ${hoveredOp === op.name ? 'is-hovered' : ''}`}
-                              onMouseEnter={() => setHoveredOp(op.name)}
-                              onMouseLeave={() => setHoveredOp(null)}
-                            >
-                              <div className="stats-legend-main">
-                                <span className="stats-legend-dot" style={{ background: op.color }} />
-                                <strong className="stats-legend-name">{op.name}</strong>
-                                <span className="stats-legend-badge">{formatPct(op.percent)}</span>
-                              </div>
-                              <div className="stats-legend-metrics">
-                                <strong>{formatNumber(op.towers)} {isPl ? 'stacji' : 'sites'}</strong>
-                                <small>
-                                  {formatNumber(op.permits)} {isPl ? 'pozw.' : 'perm.'} ({formatPct(op.permitPercent)})
-                                </small>
-                              </div>
-                              <div className="stats-legend-bar-track">
-                                <div
-                                  className="stats-legend-bar-fill"
-                                  style={{
-                                    width: `${Math.max(1.5, Math.min(100, op.percent))}%`,
-                                    background: op.color,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </article>
-                  </div>
-
-                  {/* Operator Filter Bar for Detailed Charts */}
-                  <div className="stats-global-filter-bar">
-                    <span className="stats-filter-label">
-                      {isPl ? 'Filtruj wykresy pasm i województw wg operatora:' : 'Filter band & province charts by operator:'}
-                    </span>
-                    <div className="stats-op-pills">
-                      <button
-                        type="button"
-                        className={opFilter === 'ALL' ? 'active' : ''}
-                        onClick={() => setOpFilter('ALL')}
-                      >
-                        {isPl ? 'Wszyscy operatorzy' : 'All operators'}
-                      </button>
-                      {stats.operators.slice(0, 5).map((op) => (
-                        <button
-                          key={op.name}
-                          type="button"
-                          className={opFilter === op.name ? 'active' : ''}
-                          onClick={() => setOpFilter(opFilter === op.name ? 'ALL' : op.name)}
-                        >
-                          <i style={{ background: getOperatorColor(op.name) }} />
-                          {op.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Row 1.5: Station Growth & Timeline (ile stacji nowych doszło) */}
-                  {stats.timeline && stats.timeline.length > 0 && (
-                    <article className="stats-panel stats-panel-wide">
-                      <div className="stats-panel-head">
-                        <div>
-                          <div className="stats-panel-title-row">
-                            <TrendingUp size={18} className="stats-panel-title-icon" />
-                            <h2>
-                              {isPl
-                                ? 'Przyrost stacji (ile stacji nowych doszło)'
-                                : 'Station Growth & New Additions Timeline'}
-                            </h2>
-                          </div>
-                          <p>
-                            {isPl
-                              ? activeSection === 'btmap'
-                                ? 'Liczba stacji dodanych do bazy wewnętrznej BTMap przez społeczność w kolejnych okresach z podziałem na operatorów i pasma.'
-                                : 'Liczba nowych stacji bazowych dodanych w kolejnych aktualizacjach rejestru UKE z podziałem na operatorów i pasma.'
-                              : 'Number of new base stations added across updates broken down by operator and technology.'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="stats-timeline-wrap">
-                        {/* KPI Row */}
-                        <div className="stats-timeline-kpi-row">
-                          <div className="stats-timeline-kpi-box">
-                            <span className="label">
-                              {isPl ? 'Nowe stacje w ostatniej aktualizacji' : 'New stations in latest update'}
-                            </span>
-                            <span className="val">
-                              +{formatNumber(stats.summary.latestNewTowers || (stats.timeline[stats.timeline.length - 1]?.totalNew ?? 0))}
-                            </span>
-                            <span className="sub">
-                              {isPl
-                                ? `Data: ${stats.timeline[stats.timeline.length - 1]?.label || '—'}`
-                                : `Date: ${stats.timeline[stats.timeline.length - 1]?.period || '—'}`}
-                            </span>
-                          </div>
-                          <div className="stats-timeline-kpi-box">
-                            <span className="label">
-                              {isPl ? 'Średnio na aktualizację' : 'Average per update'}
-                            </span>
-                            <span className="val">
-                              +{formatNumber(
-                                Math.round(
-                                  stats.timeline.reduce((sum, t) => sum + t.totalNew, 0) / stats.timeline.length
-                                )
-                              )}
-                            </span>
-                            <span className="sub">
-                              {isPl
-                                ? `Łącznie ${stats.timeline.length} zarejestrowanych partii aktualizacji`
-                                : `${stats.timeline.length} recorded update batches`}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Interactive Bar Chart */}
-                        <div className="stats-timeline-chart-box">
-                          <div className="stats-timeline-columns">
-                            {(() => {
-                              const maxNew = Math.max(...stats.timeline.map((t) => t.totalNew), 1);
-                              return stats.timeline.map((item, idx) => {
-                                const isSelected = (selectedTimelineIdx ?? (stats.timeline!.length - 1)) === idx;
-                                const barHeight = Math.max(26, Math.round((item.totalNew / maxNew) * 160));
-                                return (
-                                  <button
-                                    key={item.period}
-                                    type="button"
-                                    className={`stats-timeline-col ${isSelected ? 'is-active' : ''}`}
-                                    onClick={() => setSelectedTimelineIdx(idx)}
-                                    title={`${item.label}: +${formatNumber(item.totalNew)} stacji`}
-                                  >
-                                    <span className="stats-timeline-count-badge">
-                                      +{formatNumber(item.totalNew)}
-                                    </span>
-                                    <div
-                                      className="stats-timeline-bar-track"
-                                      style={{ height: `${barHeight}px` }}
-                                    >
-                                      {item.operators.map((op) => {
-                                        const pct = (op.count / item.totalNew) * 100;
-                                        return (
-                                          <div
-                                            key={op.operator}
-                                            className="stats-timeline-segment"
-                                            style={{
-                                              height: `${pct}%`,
-                                              background: getOperatorColor(op.operator),
-                                            }}
-                                            title={`${op.operator}: +${formatNumber(op.count)}`}
-                                          />
-                                        );
-                                      })}
-                                    </div>
-                                    <span className="stats-timeline-date-label">
-                                      {item.label}
-                                    </span>
-                                  </button>
-                                );
-                              });
-                            })()}
-                          </div>
-
-                          {/* Selected Period Details */}
-                          {(() => {
-                            const currentIdx = selectedTimelineIdx ?? (stats.timeline.length - 1);
-                            const current = stats.timeline[currentIdx];
-                            if (!current) return null;
-                            return (
-                              <div className="stats-timeline-details-panel">
-                                <div className="stats-timeline-detail-head">
-                                  <strong>
-                                    {isPl
-                                      ? `Szczegóły aktualizacji z dnia ${current.label}`
-                                      : `Update details: ${current.label}`}
-                                  </strong>
-                                  <span>
-                                    +{formatNumber(current.totalNew)} {isPl ? 'nowych stacji' : 'new stations'}
-                                  </span>
-                                </div>
-                                <div className="stats-timeline-ops-grid">
-                                  {current.operators.map((op) => (
-                                    <div key={op.operator} className="stats-timeline-op-chip">
-                                      <span className="stats-timeline-op-title">
-                                        <i style={{ background: getOperatorColor(op.operator) }} />
-                                        {op.operator}
-                                      </span>
-                                      <span className="stats-timeline-op-num">
-                                        +{formatNumber(op.count)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                                {current.topBands && current.topBands.length > 0 && (
-                                  <div className="stats-timeline-topbands">
-                                    <strong>{isPl ? 'Najważniejsze nowe pasma w tym wykazie:' : 'Top new bands in this update:'}</strong>
-                                    {current.topBands.map((b) => (
-                                      <span key={b.band} className="stats-timeline-band-pill">
-                                        {b.band} (+{formatNumber(b.count)})
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </article>
-                  )}
-
-                  {/* Row 2: Unique Stations by Band */}
-                  <article className="stats-panel stats-panel-wide">
-                    <div className="stats-panel-head">
-                      <div>
-                        <h2>{isPl ? 'Unikalne stacje według pasma (ile danego pasma)' : 'Unique Stations by Frequency Band'}</h2>
-                        <p>
-                          {isPl
-                            ? 'Liczba stacji bazowych wyposażonych w poszczególne pasma radiowe z podziałem na operatorów.'
-                            : 'Number of base stations equipped with each frequency band broken down by operator.'}
-                        </p>
-                      </div>
-                      <div className="stats-panel-actions-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        {stats.comparison && stats.comparison.bands.length > 0 && (
-                          <button
-                            type="button"
-                            className={`stats-compare-toggle-btn ${showComparison ? 'is-active' : ''}`}
-                            onClick={() => setShowComparison(!showComparison)}
-                            title={isPl ? 'Porównaj pasma pomiędzy Rejestrem UKE a Bazą wewnętrzną BTMap' : 'Compare bands between UKE Registry and BTMap Internal DB'}
-                          >
-                            <BarChart3 size={14} />
-                            <span>
-                              {isPl
-                                ? showComparison
-                                  ? 'Ukryj porównanie baz'
-                                  : 'Porównaj pasma: BTMap vs UKE'
-                                : showComparison
-                                ? 'Hide Comparison'
-                                : 'Compare Bands: BTMap vs UKE'}
-                            </span>
-                          </button>
-                        )}
-                        <div className="stats-tech-filter-pills">
-                        {(['ALL', '5G', 'LTE', 'UMTS', 'GSM', 'OTHER'] as const).map((tf) => (
-                          <button
-                            key={tf}
-                            type="button"
-                            className={techFilter === tf ? 'active' : ''}
-                            onClick={() => setTechFilter(tf)}
-                          >
-                            {tf === 'ALL'
-                              ? isPl
-                                ? 'Wszystkie'
-                                : 'All'
-                              : tf === 'OTHER'
-                              ? isPl
-                                ? 'Inne'
-                                : 'Other'
-                              : tf}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                    {showComparison && stats.comparison && stats.comparison.bands.length > 0 && (
-                      <div className="stats-comparison-panel">
-                        <div className="stats-comparison-table-wrap">
-                          <table className="stats-comparison-table">
-                            <thead>
-                              <tr>
-                                <th>{isPl ? 'Pasmo radiowe' : 'Radio Band'}</th>
-                                <th>{isPl ? 'Rejestr UKE (pozwolenia)' : 'UKE Registry (permits)'}</th>
-                                <th>{isPl ? 'Baza wewnętrzna BTMap' : 'BTMap Internal DB'}</th>
-                                <th>{isPl ? 'Wizualizacja proporcji' : 'Ratio'}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {stats.comparison.bands.map((cb) => {
-                                const maxVal = Math.max(cb.ukeTotal, cb.btmapTotal, 1);
-                                const ukeW = (cb.ukeTotal / maxVal) * 100;
-                                const btmapW = (cb.btmapTotal / maxVal) * 100;
-                                return (
-                                  <tr key={cb.key}>
-                                    <td>
-                                      <strong>{cb.tech} {cb.band} MHz</strong>
-                                    </td>
-                                    <td>
-                                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                                        {formatNumber(cb.ukeTotal)}
-                                      </span>
-                                    </td>
-                                    <td>
-                                      <span style={{ color: '#10b981', fontWeight: 700 }}>
-                                        {formatNumber(cb.btmapTotal)}
-                                      </span>
-                                    </td>
-                                    <td>
-                                      <div className="stats-comparison-bar-track">
-                                        <div
-                                          className="stats-comparison-bar-uke"
-                                          style={{ width: `${ukeW}%` }}
-                                          title={`UKE: ${formatNumber(cb.ukeTotal)}`}
-                                        />
-                                        <div
-                                          className="stats-comparison-bar-btmap"
-                                          style={{ width: `${btmapW}%` }}
-                                          title={`BTMap: ${formatNumber(cb.btmapTotal)}`}
-                                        />
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="stats-stacked-bars">
-                      {filteredBands.map((b) => {
-                        const widthPct = Math.max(2, (b.total / maxBandTotal) * 100);
-                        const isHovered = hoveredBandKey === b.key;
-                        return (
-                          <div
-                            key={b.key}
-                            className={`stats-bar-row ${isHovered ? 'is-hovered' : ''}`}
-                            onMouseEnter={() => setHoveredBandKey(b.key)}
-                            onMouseLeave={() => setHoveredBandKey(null)}
-                          >
-                            <div className="stats-bar-label">
-                              <span
-                                className="stats-tech-tag"
-                                style={{
-                                  background: `${TECH_COLORS[b.tech] || TECH_COLORS.Inne}1f`,
-                                  color: TECH_COLORS[b.tech] || TECH_COLORS.Inne,
-                                  borderColor: `${TECH_COLORS[b.tech] || TECH_COLORS.Inne}45`,
-                                }}
-                              >
-                                {b.tech}
-                              </span>
-                              <strong>{b.band} MHz</strong>
-                            </div>
-
-                            <div className="stats-bar-track-wrap">
-                              <div className="stats-bar-stacked" style={{ width: `${widthPct}%` }}>
-                                {b.operators.map((op) => {
-                                  const segPct = b.total > 0 ? (op.count / b.total) * 100 : 0;
-                                  return (
-                                    <div
-                                      key={op.operator}
-                                      className="stats-bar-segment"
-                                      style={{
-                                        width: `${segPct}%`,
-                                        background: getOperatorColor(op.operator),
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-
-                              {isHovered && (
-                                <div className="stats-bar-tooltip" role="tooltip">
-                                  <div className="stats-bar-tooltip-head">
-                                    <strong>{b.tech} {b.band} MHz</strong>
-                                    <span>{formatNumber(b.total)} {isPl ? 'stacji' : 'sites'}</span>
-                                  </div>
-                                  <div className="stats-bar-tooltip-list">
-                                    {b.operators.map((op) => (
-                                      <div key={op.operator} className="stats-bar-tooltip-item">
-                                        <span>
-                                          <i style={{ background: getOperatorColor(op.operator) }} />
-                                          {op.operator}
-                                        </span>
-                                        <strong>
-                                          {formatNumber(op.count)}{' '}
-                                          <small>({((op.count / b.total) * 100).toFixed(1)}%)</small>
-                                        </strong>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="stats-bar-value">
-                              <strong>{formatNumber(b.total)}</strong>
-                              <small>
-                                {stats.summary.totalTowers > 0
-                                  ? `${((b.total / stats.summary.totalTowers) * 100).toFixed(1)}%`
-                                  : ''}
-                              </small>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </article>
-
-                  {/* Row 3: Unique Stations by Province */}
-                  <article className="stats-panel stats-panel-wide">
-                    <div className="stats-panel-head">
-                      <div>
-                        <h2>{isPl ? 'Unikalne stacje według województwa' : 'Unique Stations by Province'}</h2>
-                        <p>
-                          {isPl
-                            ? `Rozkład wszystkich ${formatNumber(stats.summary.totalTowers)} lokalizacji w 16 województwach.`
-                            : `Geographic breakdown of all ${formatNumber(stats.summary.totalTowers)} locations across 16 provinces.`}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="stats-stacked-bars">
-                      {filteredProvinces.map((p, idx) => {
-                        const widthPct = Math.max(2, (p.total / maxProvinceTotal) * 100);
-                        const isHovered = hoveredProvKey === p.province;
-                        return (
-                          <div
-                            key={p.province}
-                            className={`stats-bar-row ${isHovered ? 'is-hovered' : ''}`}
-                            onMouseEnter={() => setHoveredProvKey(p.province)}
-                            onMouseLeave={() => setHoveredProvKey(null)}
-                          >
-                            <div className="stats-bar-label province-label">
-                              <span className="stats-rank-num">{idx + 1}.</span>
-                              <strong>{p.province}</strong>
-                            </div>
-
-                            <div className="stats-bar-track-wrap">
-                              <div className="stats-bar-stacked" style={{ width: `${widthPct}%` }}>
-                                {p.operators.map((op) => {
-                                  const segPct = p.total > 0 ? (op.count / p.total) * 100 : 0;
-                                  return (
-                                    <div
-                                      key={op.operator}
-                                      className="stats-bar-segment"
-                                      style={{
-                                        width: `${segPct}%`,
-                                        background: getOperatorColor(op.operator),
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-
-                              {isHovered && (
-                                <div className="stats-bar-tooltip" role="tooltip">
-                                  <div className="stats-bar-tooltip-head">
-                                    <strong>{p.province}</strong>
-                                    <span>{formatNumber(p.total)} {isPl ? 'stacji' : 'sites'}</span>
-                                  </div>
-                                  <div className="stats-bar-tooltip-list">
-                                    {p.operators.map((op) => (
-                                      <div key={op.operator} className="stats-bar-tooltip-item">
-                                        <span>
-                                          <i style={{ background: getOperatorColor(op.operator) }} />
-                                          {op.operator}
-                                        </span>
-                                        <strong>{formatNumber(op.count)}</strong>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="stats-bar-value">
-                              <strong>{formatNumber(p.total)}</strong>
-                              <small>
-                                {stats.summary.totalTowers > 0
-                                  ? `${((p.total / stats.summary.totalTowers) * 100).toFixed(1)}%`
-                                  : ''}
-                              </small>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </article>
-                </>
-              )}
-            </>
-          )}
-
-          {/* =========================================================
-              SECTION 2: RADIOLINIE UKE
-             ========================================================= */}
-          {activeSection === 'radiolines' && stats.radiolines && (
-            <>
-              <div className="stats-kpi-grid">
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Linie radiowe UKE' : 'UKE Microwave Links'}
-                    </span>
-                    <span className="stats-kpi-icon blue">
-                      <Radio size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">{formatNumber(stats.radiolines.totalLinks)}</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `Zarejestrowane przęsła punkt-punkt (${formatNumber(stats.radiolines.newLinks)} nowych)`
-                        : `Point-to-point hops (${formatNumber(stats.radiolines.newLinks)} new)`}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Łączna długość przęseł' : 'Total Hop Distance'}
-                    </span>
-                    <span className="stats-kpi-icon emerald">
-                      <MapPin size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">{formatNumber(stats.radiolines.totalLengthKm)} km</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `Średni dystans: ${stats.radiolines.avgDistanceKm} km · maks. ${stats.radiolines.maxDistanceKm} km`
-                        : `Avg hop: ${stats.radiolines.avgDistanceKm} km · max ${stats.radiolines.maxDistanceKm} km`}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Pasmo E-Band (71–86 GHz)' : 'E-Band (71–86 GHz)'}
-                    </span>
-                    <span className="stats-kpi-icon purple">
-                      <Signal size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">
-                    {formatNumber(
-                      stats.radiolines.bands.find((b) => b.band.includes('80 GHz'))?.total ?? 0
-                    )}
-                  </strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `${stats.radiolines.bands.find((b) => b.band.includes('80 GHz'))?.percent ?? 0}% wszystkich radiolinii (wysoka przepustowość)`
-                        : `${stats.radiolines.bands.find((b) => b.band.includes('80 GHz'))?.percent ?? 0}% of all links (high capacity)`}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Udział 4 operatorów MNO' : '4 MNO Operators Share'}
-                    </span>
-                    <span className="stats-kpi-icon amber">
-                      <Layers size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">
-                    {formatPct(
-                      stats.radiolines.operators
-                        .filter((o) => ['Play', 'Plus', 'T-Mobile', 'Orange'].includes(o.group))
-                        .reduce((s, o) => s + o.percent, 0)
-                    )}
-                  </strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? 'Play, Plus (Towerlink), T-Mobile i Orange Polska'
-                        : 'Play, Plus (Towerlink), T-Mobile & Orange'}
-                    </span>
-                  </div>
-                </article>
-              </div>
-
-              <div className="stats-row-2col">
-                {/* Radioline Bands Card */}
-                <article className="stats-panel">
-                  <div className="stats-panel-head">
-                    <div>
-                      <h2>{isPl ? 'Pasma częstotliwości radiolinii (GHz)' : 'Microwave Frequency Bands (GHz)'}</h2>
-                      <p>
-                        {isPl
-                          ? 'Podział na pasma ITU wraz ze średnią długością przęsła w kilometrach.'
-                          : 'Breakdown by ITU frequency band and average hop distance in km.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="stats-donut-layout">
-                    <div className="stats-donut-box">
-                      <svg viewBox="0 0 160 160" className="stats-donut-svg">
-                        <circle
-                          cx="80"
-                          cy="80"
-                          r={radius}
-                          fill="transparent"
-                          stroke="var(--line)"
-                          strokeWidth="18"
-                        />
-                        {radiolineBandSlices.map((slice) => {
-                          const dash = slice.fraction * circumference;
-                          const offset = -slice.start * circumference;
-                          const isHovered = hoveredTech === slice.band;
-                          return (
-                            <circle
-                              key={slice.band}
-                              cx="80"
-                              cy="80"
-                              r={radius}
-                              fill="transparent"
-                              stroke={slice.color}
-                              strokeWidth={isHovered ? '22' : '18'}
-                              strokeDasharray={`${dash} ${circumference}`}
-                              strokeDashoffset={offset}
-                              transform="rotate(-90 80 80)"
-                              className="stats-donut-segment"
-                              onMouseEnter={() => setHoveredTech(slice.band)}
-                              onMouseLeave={() => setHoveredTech(null)}
-                            />
-                          );
-                        })}
-                      </svg>
-                      <div className="stats-donut-center">
-                        <span>{isPl ? 'Radiolinie' : 'Links'}</span>
-                        <strong>{formatNumber(stats.radiolines.totalLinks)}</strong>
-                        <small>7–86 GHz</small>
-                      </div>
-                    </div>
-
-                    <div className="stats-legend-list">
-                      {radiolineBandSlices.map((b) => (
-                        <div
-                          key={b.band}
-                          className={`stats-legend-item ${hoveredTech === b.band ? 'is-hovered' : ''}`}
-                          onMouseEnter={() => setHoveredTech(b.band)}
-                          onMouseLeave={() => setHoveredTech(null)}
-                        >
-                          <div className="stats-legend-main">
-                            <span className="stats-legend-dot" style={{ background: b.color }} />
-                            <strong className="stats-legend-name">{b.band}</strong>
-                            <span className="stats-legend-badge">{formatPct(b.percent)}</span>
-                          </div>
-                          <div className="stats-legend-metrics">
-                            <strong>{formatNumber(b.total)} {isPl ? 'linii' : 'links'}</strong>
-                            <small>{isPl ? `śr. ${b.avgDistanceKm} km` : `avg ${b.avgDistanceKm} km`}</small>
-                          </div>
-                          <div className="stats-legend-bar-track">
-                            <div
-                              className="stats-legend-bar-fill"
-                              style={{
-                                width: `${Math.max(2, b.percent)}%`,
-                                background: b.color,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </article>
-
-                {/* Radioline Operators Card */}
-                <article className="stats-panel">
-                  <div className="stats-panel-head">
-                    <div>
-                      <h2>{isPl ? 'Operatorzy linii radiowych' : 'Microwave Link Operators'}</h2>
-                      <p>
-                        {isPl
-                          ? 'Najwięksi dysponenci linii radiowych w Polsce wraz ze średnią długością przęsła.'
-                          : 'Largest microwave link operators in Poland with average hop distance.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="stats-legend-list">
-                    {stats.radiolines.operators.map((op) => {
-                      const color = getOperatorColor(op.name);
-                      return (
-                        <div key={op.name} className="stats-legend-item">
-                          <div className="stats-legend-main">
-                            <span className="stats-legend-dot" style={{ background: color }} />
-                            <strong className="stats-legend-name">{op.name}</strong>
-                            <span className="stats-legend-badge">{formatPct(op.percent)}</span>
-                          </div>
-                          <div className="stats-legend-metrics">
-                            <strong>{formatNumber(op.links)} {isPl ? 'linii' : 'links'}</strong>
-                            <small>{isPl ? `śr. ${op.avgDistanceKm} km` : `avg ${op.avgDistanceKm} km`}</small>
-                          </div>
-                          <div className="stats-legend-bar-track">
-                            <div
-                              className="stats-legend-bar-fill"
-                              style={{
-                                width: `${Math.max(1.5, op.percent)}%`,
-                                background: color,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </article>
-              </div>
-
-              {/* Radiolines by Province */}
-              <article className="stats-panel stats-panel-wide">
-                <div className="stats-panel-head">
-                  <div>
-                    <h2>{isPl ? 'Linie radiowe według województwa' : 'Microwave Links by Province'}</h2>
-                    <p>
-                      {isPl
-                        ? 'Rozkład przęseł radioliniowych w 16 województwach z podziałem na operatorów.'
-                        : 'Distribution of microwave hops across 16 provinces by operator.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="stats-stacked-bars">
-                  {stats.radiolines.provinces.map((p, idx) => {
-                    const maxRlProv = stats.radiolines.provinces[0]?.total || 1;
-                    const widthPct = Math.max(2, (p.total / maxRlProv) * 100);
-                    return (
-                      <div key={p.province} className="stats-bar-row">
-                        <div className="stats-bar-label province-label">
-                          <span className="stats-rank-num">{idx + 1}.</span>
-                          <strong>{p.province}</strong>
-                        </div>
-                        <div className="stats-bar-track-wrap">
-                          <div className="stats-bar-stacked" style={{ width: `${widthPct}%` }}>
-                            {p.operators.map((op) => (
-                              <div
-                                key={op.operator}
-                                className="stats-bar-segment"
-                                style={{
-                                  width: `${(op.count / p.total) * 100}%`,
-                                  background: getOperatorColor(op.operator),
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                        <div className="stats-bar-value">
-                          <strong>{formatNumber(p.total)}</strong>
-                          <small>{((p.total / stats.radiolines.totalLinks) * 100).toFixed(1)}%</small>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
-            </>
-          )}
-
-          {/* =========================================================
-              SECTION 4: JAKOŚĆ DANYCH
-             ========================================================= */}
-          {activeSection === 'quality' && stats.dataQuality && (
-            <>
-              <div className="stats-kpi-grid">
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Spójność lokalizacji GPS' : 'GPS Coordinate Integrity'}
-                    </span>
-                    <span className="stats-kpi-icon emerald">
-                      <CheckCircle2 size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">100.0%</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `${formatNumber(stats.dataQuality.withFullAddress)} z ${formatNumber(stats.dataQuality.totalTowers)} stacji z pełnym adresem`
-                        : `${formatNumber(stats.dataQuality.withFullAddress)} of ${formatNumber(stats.dataQuality.totalTowers)} with full address`}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Pokrycie województw' : 'Province Attribution'}
-                    </span>
-                    <span className="stats-kpi-icon blue">
-                      <ShieldCheck size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">
-                    {stats.dataQuality.totalTowers > 0
-                      ? `${((stats.dataQuality.withExplicitProvince / stats.dataQuality.totalTowers) * 100).toFixed(1)}%`
-                      : '100%'}
-                  </strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `${formatNumber(stats.dataQuality.withExplicitProvince)} z UKE + ${formatNumber(stats.dataQuality.inferredProvince)} przypisanych z koordynatów`
-                        : `${formatNumber(stats.dataQuality.withExplicitProvince)} explicit + ${formatNumber(stats.dataQuality.inferredProvince)} inferred`}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Stacje 5G C-Band (3.6 GHz)' : '5G C-Band (3.6 GHz) Sites'}
-                    </span>
-                    <span className="stats-kpi-icon purple">
-                      <Sparkles size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">{formatNumber(stats.dataQuality.fiveGCBandTowers)}</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {stats.dataQuality.totalTowers > 0
-                        ? isPl
-                          ? `${((stats.dataQuality.fiveGCBandTowers / stats.dataQuality.totalTowers) * 100).toFixed(1)}% wszystkich stacji w kraju`
-                          : `${((stats.dataQuality.fiveGCBandTowers / stats.dataQuality.totalTowers) * 100).toFixed(1)}% of all sites nationwide`
-                        : ''}
-                    </span>
-                  </div>
-                </article>
-
-                <article className="stats-kpi-card">
-                  <div className="stats-kpi-top">
-                    <span className="stats-kpi-label">
-                      {isPl ? 'Plany pomiarowe SI2PEM' : 'SI2PEM Measurement Plans'}
-                    </span>
-                    <span className="stats-kpi-icon amber">
-                      <Activity size={17} />
-                    </span>
-                  </div>
-                  <strong className="stats-kpi-value">{formatNumber(stats.dataQuality.pemPlansCount)}</strong>
-                  <div className="stats-kpi-foot">
-                    <span>
-                      {isPl
-                        ? `${formatNumber(stats.dataQuality.pemCachedReports)} raportów PEM w pamięci podręcznej (${stats.dataQuality.pemCachedTowers} stacji)`
-                        : `${formatNumber(stats.dataQuality.pemCachedReports)} cached PEM reports (${stats.dataQuality.pemCachedTowers} sites)`}
-                    </span>
-                  </div>
-                </article>
-              </div>
-
-              <div className="stats-row-2col">
-                <article className="stats-panel">
-                  <div className="stats-panel-head">
-                    <div>
-                      <h2>{isPl ? 'Nasycenie technologiczne i modernizacja sieci' : 'Network Modernization & Capacity Indicators'}</h2>
-                      <p>
-                        {isPl
-                          ? 'Odsetek stacji bazowych spełniających kryteria nowoczesnej sieci wielopasmowej.'
-                          : 'Share of base stations meeting multi-band and next-generation deployment criteria.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="stats-quality-list">
-                    {[
-                      {
-                        label: isPl ? 'Agregacja LTE-Advanced (≥3 pasma LTE na stacji)' : 'LTE-Advanced CA (≥3 LTE bands per site)',
-                        count: stats.dataQuality.multiBandLteTowers,
-                        total: stats.dataQuality.totalTowers,
-                        color: '#0ea5e9',
-                      },
-                      {
-                        label: isPl ? 'Komplet pasm LTE-Advanced Pro (≥4 pasma LTE)' : 'Full LTE-Advanced Pro (≥4 LTE bands)',
-                        count: stats.dataQuality.fourBandLteTowers,
-                        total: stats.dataQuality.totalTowers,
-                        color: '#38bdf8',
-                      },
-                      {
-                        label: isPl ? '5G DSS / FDD (pasma 2100 / 1800 / 700 MHz)' : '5G DSS / FDD (2100 / 1800 / 700 MHz)',
-                        count: stats.dataQuality.fiveGDssTowers,
-                        total: stats.dataQuality.totalTowers,
-                        color: '#a855f7',
-                      },
-                      {
-                        label: isPl ? '5G C-Band (pasmo n78 · 3500 / 3600 MHz)' : '5G C-Band (n78 · 3500 / 3600 MHz)',
-                        count: stats.dataQuality.fiveGCBandTowers,
-                        total: stats.dataQuality.totalTowers,
-                        color: '#c084fc',
-                      },
-                      {
-                        label: isPl ? 'Kolokacja operatorów (≥2 operatorów w promieniu 60 m)' : 'Site Co-location (≥2 operators within 60 m)',
-                        count: stats.dataQuality.collocatedTowers,
-                        total: stats.dataQuality.totalTowers,
-                        color: '#10b981',
-                      },
-                    ].map((item) => {
-                      const pct = item.total > 0 ? (item.count / item.total) * 100 : 0;
-                      return (
-                        <div key={item.label} className="stats-quality-item">
-                          <div className="stats-quality-item-head">
-                            <span>{item.label}</span>
-                            <strong>
-                              {formatNumber(item.count)} <small>({pct.toFixed(1)}%)</small>
-                            </strong>
-                          </div>
-                          <div className="stats-legend-bar-track">
-                            <div
-                              className="stats-legend-bar-fill"
-                              style={{ width: `${Math.min(100, pct)}%`, background: item.color }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </article>
-
-                <article className="stats-panel">
-                  <div className="stats-panel-head">
-                    <div>
-                      <h2>{isPl ? 'Stan rejestrów i źródeł danych' : 'Data Sources & Registry Status'}</h2>
-                      <p>
-                        {isPl
-                          ? 'Podsumowanie tabel w bazie SQLite oraz dat ostatnich synchronizacji.'
-                          : 'Summary of SQLite database tables and latest synchronization timestamps.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="stats-registry-table-wrap">
-                    <table className="stats-registry-table">
-                      <thead>
-                        <tr>
-                          <th>{isPl ? 'Rejestr / Moduł' : 'Registry / Source'}</th>
-                          <th>{isPl ? 'Liczba rekordów' : 'Records'}</th>
-                          <th>{isPl ? 'Stan danych' : 'Status / Date'}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>
-                            <strong>{isPl ? 'Wykaz stacji bazowych UKE' : 'UKE Base Station Registry'}</strong>
-                            <small>{isPl ? 'Pozwolenia radiowe GSM / UMTS / LTE / 5G' : 'GSM / UMTS / LTE / 5G permits'}</small>
-                          </td>
-                          <td>
-                            <strong>{formatNumber(stats.dataQuality.ukeTowers)}</strong> {isPl ? 'stacji' : 'sites'}
-                            <br />
-                            <small>{formatNumber(stats.summary.totalPermits)} {isPl ? 'pozwoleń' : 'permits'}</small>
-                          </td>
-                          <td>
-                            <span className="stats-status-pill ok">
-                              {stats.dataQuality.ukeWykazDate || 'Aktywny'}
-                            </span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <strong>{isPl ? 'Wykaz linii radiowych UKE' : 'UKE Microwave Links'}</strong>
-                            <small>{isPl ? 'Przęsła punkt–punkt 7–86 GHz' : 'Point-to-point 7–86 GHz links'}</small>
-                          </td>
-                          <td>
-                            <strong>{formatNumber(stats.radiolines.totalLinks)}</strong> {isPl ? 'linii' : 'links'}
-                            <br />
-                            <small>{formatNumber(stats.radiolines.newLinks)} {isPl ? 'nowych' : 'new'}</small>
-                          </td>
-                          <td>
-                            <span className="stats-status-pill ok">
-                              {stats.dataQuality.radiolinesUpdatedAt
-                                ? stats.dataQuality.radiolinesUpdatedAt.slice(0, 10)
-                                : 'Aktywny'}
-                            </span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <strong>{isPl ? 'System Informacyjny SI2PEM' : 'SI2PEM Radiation Registry'}</strong>
-                            <small>{isPl ? 'Plany i sprawozdania z pomiarów pola EM' : 'EM field measurement plans & reports'}</small>
-                          </td>
-                          <td>
-                            <strong>{formatNumber(stats.dataQuality.pemPlansCount)}</strong> {isPl ? 'planów' : 'plans'}
-                            <br />
-                            <small>{formatNumber(stats.dataQuality.pemCachedReports)} {isPl ? 'raportów w cache' : 'cached reports'}</small>
-                          </td>
-                          <td>
-                            <span className="stats-status-pill ok">SI2PEM API</span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <strong>{isPl ? 'Wewnętrzna baza BTMap' : 'BTMap Internal Database'}</strong>
-                            <small>{isPl ? 'Zgłoszenia i weryfikacje społeczności' : 'Community submissions & cells'}</small>
-                          </td>
-                          <td>
-                            <strong>{formatNumber(stats.dataQuality.btmapTowers)}</strong> {isPl ? 'stacji' : 'sites'}
-                          </td>
-                          <td>
-                            <span className="stats-status-pill neutral">
-                              {health ? (isPl ? 'Połączona' : 'Connected') : (isPl ? 'Aktywna' : 'Active')}
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </article>
-              </div>
-            </>
-          )}
-
-          {/* Dynamic Data Verification Footer */}
-          <footer className="stats-footer-note">
-            <ShieldCheck size={16} />
-            <p>
-              {isPl
-                ? `Dane wyliczane bezpośrednio z bazy SQLite: ${formatNumber(stats.summary.ukeTowers)} lokalizacji UKE (${formatNumber(stats.summary.totalPermits)} pozwoleń radiowych), ${formatNumber(stats.radiolines.totalLinks)} linii radiowych oraz ${formatNumber(stats.summary.btmapTowers)} stacji w wewnętrznej bazie BTMap.`
-                : `Metrics computed directly from SQLite: ${formatNumber(stats.summary.ukeTowers)} UKE locations (${formatNumber(stats.summary.totalPermits)} permits), ${formatNumber(stats.radiolines.totalLinks)} microwave links, and ${formatNumber(stats.summary.btmapTowers)} internal BTMap stations.`}
-            </p>
-          </footer>
+          {(section === 'uke' || section === 'btmap') && renderStations(stats)}
+          {section === 'radiolines' && renderRadiolines(stats)}
+          {section === 'quality' && renderQuality(stats)}
+          <p className="st-footnote">
+            {isPl
+              ? `Dane z bazy aplikacji: ${formatNumber(stats.summary.ukeTowers)} lokalizacji UKE (${formatNumber(stats.summary.totalPermits)} pozwoleń), ${formatNumber(stats.radiolines.totalLinks)} linii radiowych i ${formatNumber(stats.summary.btmapTowers)} stacji BTMap.`
+              : `From the app database: ${formatNumber(stats.summary.ukeTowers)} UKE locations (${formatNumber(stats.summary.totalPermits)} permits), ${formatNumber(stats.radiolines.totalLinks)} radio links and ${formatNumber(stats.summary.btmapTowers)} BTMap stations.`}
+          </p>
         </>
       ) : null}
     </section>
