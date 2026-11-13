@@ -685,8 +685,11 @@ function parseRadiolineChannels(line: Radioline): RadiolineChannel[] {
       // Fallback below
     }
   }
-  const freqGHz = Number(((line.frequency || 15000) / 1000).toFixed(1));
-  return [{ dir: 'A → B', freqGHz, pol: 'H', mbps: 150 }];
+  // No channel list in the registry row: one entry with only what the row itself states.
+  // Unknown values stay empty (0 / '') and are shown as "no data", never as typical figures.
+  const stored = Number(line.frequency) || 0;
+  const freqGHz = Number((stored > 1000 ? stored / 1000 : stored).toFixed(1));
+  return [{ dir: 'A → B', freqGHz, pol: '', mbps: 0 }];
 }
 
 function RadiolineDetailsDialog({
@@ -714,8 +717,8 @@ function RadiolineDetailsDialog({
 
   const brand = getRadiolineBrand(line);
   const distanceKm = line.distanceKm ?? computeHaversineKm(line.latA, line.lngA, line.latB, line.lngB);
-  const mode = line.mode || '1+0';
-  const capacityText = line.capacityText || '150 Mbps';
+  const mode = line.mode || '—';
+  const capacityText = line.capacityText || 'brak danych';
   const ch = channels[activeIdx] || channels[0];
 
   const isAB = ch?.dir !== 'B → A';
@@ -884,7 +887,7 @@ function RadiolineDetailsDialog({
                   <Gauge size={14} /> Szybkość transmisji
                 </span>
                 <strong className="rl-param-value">
-                  {ch?.mbps != null ? `${ch.mbps} Mbps` : 'Brak danych'}
+                  {ch?.mbps ? `${ch.mbps} Mbps` : 'Brak danych'}
                 </strong>
               </div>
             </div>
@@ -1104,8 +1107,8 @@ function RadiolineCard({
 
   const brand = getRadiolineBrand(line);
   const distanceKm = line.distanceKm ?? computeHaversineKm(line.latA, line.lngA, line.latB, line.lngB);
-  const mode = line.mode || '1+0';
-  const capacityText = line.capacityText || '150 Mbps';
+  const mode = line.mode || '—';
+  const capacityText = line.capacityText || 'brak danych';
 
   const channels = useMemo(() => parseRadiolineChannels(line), [line]);
 
@@ -1178,7 +1181,7 @@ function RadiolineCard({
             <span className="rl-ch-dir">{ch.dir}</span>
             <span className="rl-ch-freq">{ch.freqGHz} GHz</span>
             <span className="rl-ch-pol">{ch.pol}</span>
-            <span className="rl-ch-speed">{ch.mbps} Mbps</span>
+            <span className="rl-ch-speed">{ch.mbps ? `${ch.mbps} Mbps` : 'brak danych'}</span>
           </div>
         ))}
       </div>

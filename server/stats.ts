@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { ukeViewSql } from './query.ts';
 
 export interface StatsOperatorItem {
   name: string;
@@ -264,7 +265,10 @@ function computeRadiolinesStats(db: DatabaseSync): StatsRadiolinesData {
     curOp.distSum += dist;
     opStats.set(displayOp, curOp);
 
-    const bInfo = classifyRadiolineBand(Number(r.frequency) || 0);
+    // A link without a recorded frequency is not counted under the lowest band.
+    const bInfo = Number(r.frequency) > 0
+      ? classifyRadiolineBand(Number(r.frequency))
+      : { band: 'Brak danych', rangeLabel: 'częstotliwość nieznana', order: 99 };
     let curBand = bandStats.get(bInfo.band);
     if (!curBand) {
       curBand = { rangeLabel: bInfo.rangeLabel, order: bInfo.order, count: 0, distSum: 0, ops: new Map() };
@@ -426,7 +430,7 @@ export function computeGrowthCounters(db: DatabaseSync, source: GrowthSource): G
   const sql = source === 'ALL'
     ? "SELECT operators FROM towers WHERE status='APPROVED'"
     : source === 'UKE'
-    ? "SELECT operators FROM towers WHERE status='APPROVED' AND (source='UKE' OR addedBy='Import KML' OR operators LIKE '%Plus%' OR operators LIKE '%/26%')"
+    ? `SELECT operators FROM towers WHERE status='APPROVED' AND ${ukeViewSql('towers')}`
     : "SELECT operators FROM towers WHERE status='APPROVED' AND source=?";
 
   const rows = (source === 'ALL' || source === 'UKE' ? db.prepare(sql).all() : db.prepare(sql).all(source)) as Array<{ operators: string }>;
@@ -656,7 +660,7 @@ export function getTelecomStats(db: DatabaseSync, rawSource?: string): TelecomSt
   const sql = source === 'ALL'
     ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED'"
     : source === 'UKE'
-    ? "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND (source='UKE' OR addedBy='Import KML' OR operators LIKE '%Plus%' OR operators LIKE '%/26%')"
+    ? `SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND ${ukeViewSql('towers')}`
     : "SELECT id, lat, lng, stationId, address, province, operators, source, createdAt FROM towers WHERE status='APPROVED' AND source=?";
 
   type TowerRow = {

@@ -1,12 +1,11 @@
-import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { ensureKmzSchemaAndColumns, normalizeProvinceName, rebuildKmzFiles } from './kmzExport.ts';
+import { extractZip } from './zip.ts';
 
 const DANE_GOV_DATASET_URL = 'https://api.dane.gov.pl/1.4/datasets/1066/resources';
-const FALLBACK_ZIP_URL = 'https://api.dane.gov.pl/media/resources/20260430/wykaz_pozwolen_linie_radiowe.zip';
 const HARDWARE_REF_ZIP_URL = 'https://api.dane.gov.pl/media/resources/20260430/wykaz_pozwolen_linie_radiowe.zip';
 
 export interface RadiolineChannelRecord {
@@ -108,28 +107,24 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   return Math.round(d * 100) / 100;
 }
 
-function calcChannelMbps(widthMhz: unknown, modStr: unknown, rawSpeedStr: unknown): number {
-  const w = parseFloat(String(widthMhz || ''));
+/**
+ * One-way capacity of a channel in Mb/s, or 0 when the registry gives nothing to base it on.
+ * The registry's own figure comes first; otherwise it is derived from the declared channel width and
+ * modulation. A missing value is never replaced by a typical one.
+ */
+export function calcChannelMbps(widthMhz: unknown, modStr: unknown, rawSpeedStr: unknown): number {
+  const declared = String(rawSpeedStr ?? '').replace(',', '.').match(/(\d+(?:\.\d+)?)/);
+  if (declared && parseFloat(declared[1]) > 0) return Math.round(parseFloat(declared[1]));
+
+  const w = parseFloat(String(widthMhz ?? '').replace(',', '.'));
   const mod = String(modStr || '').toUpperCase();
   const qamMatch = mod.match(/(\d+)\s*QAM/);
   if (w > 0 && qamMatch) {
-    const qam = parseInt(qamMatch[1], 10);
-    const bits = Math.log2(qam);
-    if (bits > 0) {
-      return Math.round(w * bits * 0.85065);
-    }
+    const bits = Math.log2(parseInt(qamMatch[1], 10));
+    if (bits > 0) return Math.round(w * bits * 0.85065);
   }
-  if (w > 0 && mod.includes('QPSK')) {
-    return Math.round(w * 2 * 0.85065);
-  }
-  const numMatch = String(rawSpeedStr || '').match(/(\d+(?:\.\d+)?)/);
-  if (numMatch) {
-    return Math.round(parseFloat(numMatch[1]));
-  }
-  if (w > 0) {
-    return Math.round(w * 7.5);
-  }
-  return 100;
+  if (w > 0 && mod.includes('QPSK')) return Math.round(w * 2 * 0.85065);
+  return 0;
 }
 
 function normalizeRadiolineOperator(raw: unknown): { operator: string; display: string } {
@@ -186,7 +181,7 @@ async function resolveLatestUkeZipUrl(): Promise<{ url: string; title: string }>
     // Fallback to dane.gov.pl
   }
   try {
-    const res = await fetch(DANE_GOV_DATASET_URL);
+    const res = await fetch(DANE_GOV_DATASET_URL, { signal: AbortSignal.timeout(20000) });
     if (res.ok) {
       const json = (await res.json()) as {
         data?: Array<{
@@ -213,12 +208,9 @@ async function resolveLatestUkeZipUrl(): Promise<{ url: string; title: string }>
       }
     }
   } catch {
-    // Fallback to known URL
+    // Reported below
   }
-  return {
-    url: FALLBACK_ZIP_URL,
-    title: 'Wykaz pozwoleń radiowych dla stacji linii radiowych UKE',
-  };
+  throw new Error('Nie udało się ustalić adresu aktualnego wykazu linii radiowych (BIP UKE ani dane.gov.pl).');
 }
 
 interface HardwareRefEntry {
@@ -257,7 +249,9 @@ function parseSharedStrings(extractXlsxDir: string): string[] {
           .replace(/&lt;/g, '<')
           .replace(/&gt;/g, '>')
           .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
+          .replace(/&apos;/g, "'")
+          .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+          .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
       );
     }
   }
@@ -289,7 +283,7 @@ async function loadHardwareReferenceMap(workDir: string): Promise<Map<string, Ha
     const cachedHwZip = resolve(process.cwd(), 'data', 'uke_rl_hw_ref.zip');
     if (!existsSync(cachedHwZip)) {
       console.log(`[Radiolines Sync] Pobieranie słownika sprzętowego UKE (41 kolumn) z: ${HARDWARE_REF_ZIP_URL}`);
-      const res = await fetch(HARDWARE_REF_ZIP_URL);
+      const res = await fetch(HARDWARE_REF_ZIP_URL, { signal: AbortSignal.timeout(120000) });
       if (!res.ok) return hwMap;
       writeFileSync(cachedHwZip, Buffer.from(await res.arrayBuffer()));
     }
@@ -297,10 +291,10 @@ async function loadHardwareReferenceMap(workDir: string): Promise<Map<string, Ha
     const hwXlsxDir = resolve(workDir, 'hw_xlsx');
     mkdirSync(hwZipDir, { recursive: true });
     mkdirSync(hwXlsxDir, { recursive: true });
-    execSync(`tar -xf "${cachedHwZip}" -C "${hwZipDir}"`);
+    await extractZip(cachedHwZip, hwZipDir);
     const xlsxFile = readdirSync(hwZipDir).find(f => f.toLowerCase().endsWith('.xlsx'));
     if (!xlsxFile) return hwMap;
-    execSync(`tar -xf "${resolve(hwZipDir, xlsxFile)}" -C "${hwXlsxDir}"`);
+    await extractZip(resolve(hwZipDir, xlsxFile), hwXlsxDir);
 
     const sst = parseSharedStrings(hwXlsxDir);
     const parseRow = makeRowParser(sst);
@@ -384,24 +378,25 @@ export async function syncRadiolinesFromUke(
   try {
     let zipPath = options.localZipPath ? resolve(options.localZipPath) : '';
 
-    if (!zipPath || !existsSync(zipPath)) {
-      const cachedZip = resolve(process.cwd(), 'data', 'temp_rl.zip');
-      if (existsSync(cachedZip)) {
-        console.log(`[Radiolines Sync] Korzystanie z pobranego archiwum UKE: ${cachedZip}`);
-        zipPath = cachedZip;
-      } else {
-        const { url } = await resolveLatestUkeZipUrl();
-        console.log(`[Radiolines Sync] Pobieranie wykazu linii radiowych UKE z: ${url}`);
-        const res = await fetch(url);
-        if (!res.ok) {
-          throw new Error(`Błąd pobierania archiwum UKE: HTTP ${res.status}`);
-        }
-        const buffer = Buffer.from(await res.arrayBuffer());
-        const urlFilename = url.split('/').pop() || 'uke_radiolines.zip';
-        zipPath = resolve(workDir, urlFilename);
-        writeFileSync(zipPath, buffer);
-        console.log(`[Radiolines Sync] Pobrano ${(buffer.length / 1024 / 1024).toFixed(2)} MB (${urlFilename}).`);
+    if (options.localZipPath && !existsSync(zipPath)) {
+      throw new Error(`Nie znaleziono pliku wykazu: ${zipPath}`);
+    }
+    if (!zipPath) {
+      // Always the current registry. A leftover archive in data/ is not picked up implicitly, because it
+      // would be reused forever and the map would silently stay on an old registry.
+      const { url } = await resolveLatestUkeZipUrl();
+      console.log(`[Radiolines Sync] Pobieranie wykazu linii radiowych UKE z: ${url}`);
+      const res = await fetch(url, { signal: AbortSignal.timeout(300000) });
+      if (!res.ok) {
+        throw new Error(`Błąd pobierania archiwum UKE: HTTP ${res.status}`);
       }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      // The saved name is fixed: nothing taken from the remote URL ends up in a path.
+      const downloadName = new URL(url).pathname.toLowerCase().endsWith('.xlsx') ? 'uke_radiolines.xlsx' : 'uke_radiolines.zip';
+      const dateInUrl = url.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+      zipPath = resolve(workDir, dateInUrl ? downloadName.replace('.', `_${dateInUrl}.`) : downloadName);
+      writeFileSync(zipPath, buffer);
+      console.log(`[Radiolines Sync] Pobrano ${(buffer.length / 1024 / 1024).toFixed(2)} MB.`);
     }
 
     let xlsxPath = zipPath;
@@ -409,7 +404,7 @@ export async function syncRadiolinesFromUke(
     if (!zipPath.toLowerCase().endsWith('.xlsx')) {
       const extractZipDir = resolve(workDir, 'zip_contents');
       mkdirSync(extractZipDir, { recursive: true });
-      execSync(`tar -xf "${zipPath}" -C "${extractZipDir}"`);
+      await extractZip(zipPath, extractZipDir);
 
       const found = readdirSync(extractZipDir).find(f => f.toLowerCase().endsWith('.xlsx'));
       if (!found) {
@@ -423,7 +418,7 @@ export async function syncRadiolinesFromUke(
     const extractXlsxDir = resolve(workDir, 'xlsx_contents');
     mkdirSync(extractXlsxDir, { recursive: true });
     console.log(`[Radiolines Sync] Rozpakowywanie arkusza: ${xlsxFile}...`);
-    execSync(`tar -xf "${xlsxPath}" -C "${extractXlsxDir}"`);
+    await extractZip(xlsxPath, extractXlsxDir);
 
     // 1. Parse sharedStrings.xml
     const sharedStrings = parseSharedStrings(extractXlsxDir);
@@ -473,6 +468,10 @@ export async function syncRadiolinesFromUke(
           c.forEach((name, idx) => {
             if (name) colMap.set(name.trim(), idx);
           });
+          const missingColumns = ['Dl_geo_Tx', 'Sz_geo_Tx', 'Dl_geo_Rx', 'Sz_geo_Rx', 'f [GHz]'].filter(name => !colMap.has(name));
+          if (missingColumns.length) {
+            throw new Error(`Arkusz wykazu linii radiowych ma nieznany układ – brak kolumn: ${missingColumns.join(', ')}.`);
+          }
           if (!colMap.has('Typ_ant_Tx')) {
             hwMap = await loadHardwareReferenceMap(workDir);
           }
@@ -494,10 +493,10 @@ export async function syncRadiolinesFromUke(
         const rawOp = String(get('Operator') || '').trim();
         const freqGHz = parseFloat(get('f [GHz]') || '0') || 0;
         const freqMHz = freqGHz > 0 ? Math.round(freqGHz * 1000) : undefined;
-        const pol = String(get('Polaryzacja') || 'H').trim().toUpperCase();
+        const pol = String(get('Polaryzacja') || '').trim().toUpperCase();
 
-        const coordKey = `${txLat.toFixed(4)},${txLon.toFixed(4)}|${rxLat.toFixed(4)},${rxLon.toFixed(4)}|${freqMHz ?? 0}|${pol}`;
-        const permitKey = permitId ? `P:${permitId}|${freqMHz ?? 0}|${pol}|${txLat.toFixed(3)}` : '';
+        const coordKey = `${txLat.toFixed(4)},${txLon.toFixed(4)}|${rxLat.toFixed(4)},${rxLon.toFixed(4)}|${freqMHz ?? 0}|${pol || 'H'}`;
+        const permitKey = permitId ? `P:${permitId}|${freqMHz ?? 0}|${pol || 'H'}|${txLat.toFixed(3)}` : '';
         const hw = hwMap ? (hwMap.get(permitKey) || hwMap.get(coordKey)) : undefined;
 
         const rawModulation = get('Rodz_modu-lacji') ?? hw?.modulation;
@@ -582,6 +581,10 @@ export async function syncRadiolinesFromUke(
     // 3. Write aggregated radiolines to SQLite
     console.log(`[Radiolines Sync] Zapisywanie ${linksMap.size} unikalnych przęseł radioliniowych (${totalChannels} kanałów) do bazy...`);
 
+    if (linksMap.size === 0) {
+      throw new Error('W wykazie nie znaleziono żadnej linii radiowej. Zapisane dane pozostają bez zmian.');
+    }
+
     ensureKmzSchemaAndColumns(db);
     const existingRows = db.prepare('SELECT id FROM radiolines').all() as Array<{ id: string }>;
     const existingIds = new Set(existingRows.map(r => r.id));
@@ -622,14 +625,17 @@ export async function syncRadiolinesFromUke(
         // Calculate link capacity (sum of one-way directional channels)
         const sumAb = abChannels.reduce((acc, ch) => acc + ch.mbps, 0);
         const sumBa = baChannels.reduce((acc, ch) => acc + ch.mbps, 0);
-        const maxOneWayMbps = Math.max(sumAb, sumBa, link.channels[0]?.mbps || 100);
+        const maxOneWayMbps = Math.max(sumAb, sumBa);
+        // Left empty when no channel of the link has a known capacity.
         const capacityText =
-          maxOneWayMbps >= 1000
+          maxOneWayMbps <= 0
+            ? null
+            : maxOneWayMbps >= 1000
             ? `${(maxOneWayMbps / 1000).toFixed(2)} Gbps`
             : `${Math.round(maxOneWayMbps)} Mbps`;
 
         const distanceKm = haversineKm(link.latA, link.lngA, link.latB, link.lngB);
-        const primaryFreqGHz = link.channels[0]?.freqGHz || 18.0;
+        const primaryFreqGHz = link.channels.find(ch => ch.freqGHz > 0)?.freqGHz ?? null;
         const id = 'RL_' + createHash('sha256').update(link.key).digest('hex').slice(0, 18);
         const province = normalizeProvinceName(link.channels[0]?.txProvince);
         const issueYm = link.channels[0]?.issueDate ? link.channels[0].issueDate.slice(3, 10) : '';
@@ -693,11 +699,14 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
 export function createRadiolineSync(db: DatabaseSync) {
   let timer: ReturnType<typeof setInterval> | null = null;
-  let running = false;
+  let running: Promise<void> | null = null;
 
-  async function checkAndSyncMonthlyRadiolines() {
-    if (running) return;
-    running = true;
+  function checkAndSyncMonthlyRadiolines() {
+    running ??= check().finally(() => { running = null; });
+    return running;
+  }
+
+  async function check() {
     try {
       const { url } = await resolveLatestUkeZipUrl();
       const lastUrlRow = db
@@ -714,8 +723,6 @@ export function createRadiolineSync(db: DatabaseSync) {
       }
     } catch (err) {
       console.warn('[Radiolines AutoSync] Błąd sprawdzania miesięcznego wykazu radiolinii UKE:', (err as Error).message);
-    } finally {
-      running = false;
     }
   }
 
@@ -727,12 +734,15 @@ export function createRadiolineSync(db: DatabaseSync) {
       timer = setInterval(() => {
         void checkAndSyncMonthlyRadiolines();
       }, TWELVE_HOURS_MS);
+      timer.unref();
     },
     async stop() {
       if (timer) {
         clearInterval(timer);
         timer = null;
       }
+      // Let a sync in progress finish its transaction before the database is closed.
+      await running;
     },
   };
 }
