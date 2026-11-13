@@ -512,16 +512,18 @@ export default function DetailsPanel({
               <Navigation size={14} />
               <span>{t.detailsNavigate}</span>
             </button>
-            <button
-              type="button"
-              className="header-profile-btn"
-              onClick={() => setHistoryOpen(true)}
-              title={isPl ? "Historia stacji i zmian pozwoleń UKE" : "Station & UKE permit history"}
-              aria-label={isPl ? "Historia stacji i zmian pozwoleń UKE" : "Station & UKE permit history"}
-            >
-              <History size={14} />
-              <span>{isPl ? 'Historia' : 'History'}</span>
-            </button>
+            {tower.source === 'BTMAP' && (
+              <button
+                type="button"
+                className="header-profile-btn"
+                onClick={() => setHistoryOpen(true)}
+                title={isPl ? "Historia zmian stacji w bazie BTMap" : "Station change history in the BTMap database"}
+                aria-label={isPl ? "Historia zmian stacji w bazie BTMap" : "Station change history in the BTMap database"}
+              >
+                <History size={14} />
+                <span>{isPl ? 'Historia' : 'History'}</span>
+              </button>
+            )}
             <button
               className="icon-button"
               onClick={() => void copy('link')}
@@ -589,30 +591,24 @@ export default function DetailsPanel({
 
       {/* Main scrollable body with facts and bands */}
       <div className="station-sheet-scroll">
-        {/* Station History Meta Bar */}
-        <button
-          type="button"
-          className="station-history-meta-bar"
-          onClick={() => setHistoryOpen(true)}
-        >
-          <span className="sh-meta-bar-dates">
-            {isPl
-              ? `Utworzono: ${formatRelativeTime(tower.createdAt, true)}`
-              : `Created: ${formatRelativeTime(tower.createdAt, false)}`}
-            {latestPermitYear > 0 && (
-              <>
-                <i className="sh-meta-dot">·</i>
-                {isPl
-                  ? `Ostatnia zmiana UKE: ${latestPermitYear} r.`
-                  : `Latest UKE permit: ${latestPermitYear}`}
-              </>
-            )}
-          </span>
-          <span className="sh-meta-bar-action">
-            <span>{isPl ? 'Oś czasu zmian' : 'Change history'}</span>
-            <ChevronRight size={13} />
-          </span>
-        </button>
+        {/* Change history: only for stations of the BTMap database, and only their changes there */}
+        {tower.source === 'BTMAP' && (
+          <button
+            type="button"
+            className="station-history-meta-bar"
+            onClick={() => setHistoryOpen(true)}
+          >
+            <span className="sh-meta-bar-dates">
+              {isPl
+                ? `Dodano do BTMap: ${formatRelativeTime(tower.createdAt, true)}`
+                : `Added to BTMap: ${formatRelativeTime(tower.createdAt, false)}`}
+            </span>
+            <span className="sh-meta-bar-action">
+              <span>{isPl ? 'Oś czasu zmian' : 'Change history'}</span>
+              <ChevronRight size={13} />
+            </span>
+          </button>
+        )}
 
         <dl className="station-facts">
           <div>

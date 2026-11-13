@@ -3,42 +3,41 @@ import assert from 'node:assert/strict';
 import {openDatabase} from '../server/database.ts';
 import {getTowerHistory, UNKNOWN_DATE} from '../server/towerHistory.ts';
 
-test('timeline entries without a known date say so instead of carrying a placeholder date', () => {
+test('the timeline lists only changes made in the BTMap database, with unknown dates said so', () => {
   const db = openDatabase(':memory:');
   try {
     const operators = [{name: 'Play', stationIds: ['WAW0001'], bands: [
       {tech: 'LTE', band: '1800', permit: 'REJ/1/5/1/23 [P] - expires 2099-12-31'},
-      {tech: 'LTE', band: '800', permit: 'DECYZJA-BEZ-ROKU'},
     ]}];
-    db.prepare("INSERT INTO towers(id,stationId,address,province,lat,lng,operators,source,addedBy,status,createdAt) VALUES('UKE_x','WAW0001','Warszawa','Mazowieckie',52.2,21.0,?,'UKE','Import KML','APPROVED',NULL)").run(JSON.stringify(operators));
-    db.prepare("INSERT INTO comments(id,towerId,userNick,text,createdAt) VALUES('c1','UKE_x','Tester','Stoi przy drodze','2027-02-03T10:15:00.000Z'),('c2','UKE_x','Tester','Bez daty','kiedyś')").run();
+    db.prepare("INSERT INTO towers(id,stationId,address,province,lat,lng,operators,source,addedBy,status,createdAt) VALUES('BTMAP_x','WAW0001','Warszawa','Mazowieckie',52.2,21.0,?,'BTMAP','Anna','APPROVED',NULL)").run(JSON.stringify(operators));
+    db.prepare("INSERT INTO comments(id,towerId,userNick,text,createdAt) VALUES('c1','BTMAP_x','Tester','Stoi przy drodze','2027-02-03T10:15:00.000Z'),('c2','BTMAP_x','Tester','Bez daty','kiedyś')").run();
+    db.prepare("INSERT INTO tower_history(id,towerId,userNick,changeType,title,createdAt) VALUES('h1','BTMAP_x','Anna','UPDATED','Poprawiono adres','2027-01-10T08:00:00.000Z')").run();
     db.prepare("INSERT INTO pem_reports_cache(key,tower,data,checkedAt) VALUES('k',?,?,1)").run(
-      JSON.stringify({id: 'UKE_x'}),
-      JSON.stringify({reports: [{id: 'r1', date: '2025-06-30', number: 'LAB/1/2025', laboratory: 'Lab'}, {id: 'r2', number: 'LAB/2', laboratory: 'Lab'}]}),
+      JSON.stringify({id: 'BTMAP_x'}),
+      JSON.stringify({reports: [{id: 'r1', date: '2025-06-30', number: 'LAB/1/2025', laboratory: 'Lab'}]}),
     );
 
-    const history = getTowerHistory(db, 'UKE_x')!;
+    const history = getTowerHistory(db, 'BTMAP_x')!;
     const today = new Date().toISOString().slice(0, 10);
-    const byId = Object.fromEntries(history.events.map(e => [e.id, e]));
+    const ids = history.events.map(e => e.id);
 
-    // Known dates are kept exactly.
-    assert.equal(byId['comment-c1'].dateGroup, '2027-02-03');
-    assert.equal(byId['pem-report-r1'].dateGroup, '2025-06-30');
-    assert.equal(byId['uke-permit-' + history.uke.permits.find(p => p.decisionYear === 2023)!.permitId].dateGroup, '2023');
+    // Only the station's own changes in BTMap: no UKE permits, no SI2PEM reports.
+    assert.ok(!ids.some(id => id.startsWith('uke-permit-') || id.startsWith('pem-report-')));
+    assert.deepEqual(history.events.map(e => e.dateGroup).slice(0, 2), ['2027-02-03', '2027-01-10']);
 
     // Unknown dates are marked as unknown: no fixed fallback, no "today".
     const unknown = history.events.filter(e => e.dateGroup === UNKNOWN_DATE);
-    assert.deepEqual(unknown.map(e => e.id).sort(), ['comment-c2', 'pem-report-r2', 'reg-UKE_x', 'uke-permit-' + history.uke.permits.find(p => !p.decisionYear)!.permitId].sort());
+    assert.deepEqual(unknown.map(e => e.id).sort(), ['comment-c2', 'reg-BTMAP_x']);
     assert.ok(unknown.every(e => e.createdAt === ''));
-    assert.equal(history.createdAt, '');
-    const serialized = JSON.stringify(history);
-    assert.doesNotMatch(serialized, /2026-10-10|2024-01-01/);
     assert.ok(!history.events.some(e => e.dateGroup === today || e.createdAt.startsWith(today)));
-
-    // Dated entries come first, newest on top; undated ones follow.
-    const order = history.events.map(e => e.dateGroup);
-    assert.deepEqual(order.slice(0, 3), ['2027-02-03', '2025-06-30', '2023']);
-    assert.ok(order.slice(3).every(group => group === UNKNOWN_DATE));
     assert.equal(history.updatedAt, '2027-02-03T10:15:00.000Z');
+  } finally { db.close(); }
+});
+
+test('a UKE registry station has no BTMap timeline', () => {
+  const db = openDatabase(':memory:');
+  try {
+    db.prepare("INSERT INTO towers(id,stationId,address,province,lat,lng,operators,source,addedBy,status,createdAt) VALUES('UKE_x','WAW0001','Warszawa','Mazowieckie',52.2,21.0,'[]','UKE','AutoSync BIP UKE','APPROVED','2026-11-13T10:00:00.000Z')").run();
+    assert.deepEqual(getTowerHistory(db, 'UKE_x')!.events, []);
   } finally { db.close(); }
 });

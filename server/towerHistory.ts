@@ -403,7 +403,7 @@ function buildRealTimelineEvents(
     time: regTime,
     createdAt: rawCreatedAt,
     kind: 'created',
-    title: isBtmap ? 'Zarejestrowano w społecznościowej bazie BTMap' : 'Rejestracja stacji w urzędowym wykazie UKE',
+    title: 'Zarejestrowano w bazie BTMap',
     subtitle: `Źródło: ${tower.source || 'UKE'}${tower.addedBy ? ` · ${tower.addedBy}` : ''}`
   });
 
@@ -558,7 +558,9 @@ export function getTowerHistory(db: DatabaseSync, towerId: string) {
     // Ignore cache parse error
   }
 
-  const events = buildRealTimelineEvents(tower, btmapTimeline, ukeAnalysis, pemTimeline);
+  // The timeline lists what happened to the station in the BTMap database only: edits, photos, comments
+  // and its creation there. UKE permits and SI2PEM reports have their own sections and are not mixed in.
+  const events = isBtmap ? buildRealTimelineEvents(tower, btmapTimeline, { ...ukeAnalysis, permits: [] }, []) : [];
   const updatedAt = events[0]?.createdAt || String(tower.createdAt || '');
 
   return {
