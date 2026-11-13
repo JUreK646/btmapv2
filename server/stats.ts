@@ -595,7 +595,7 @@ function buildGrowthReport(source: GrowthSource, current: RegistrySnapshot, prev
     source,
     metrics: {
       stations: metric('stations', 'Stacje bazowe', cur.totals.stations, bars(cur.stations, prev?.stations)),
-      cells: metric('cells', 'Komórki / Sektory', cur.totals.cells, bars(cur.cells, prev?.cells)),
+      cells: metric('cells', 'Sektory', cur.totals.cells, bars(cur.cells, prev?.cells)),
       cBand: metric('cBand', 'Stacje 5G C-Band (3.6 GHz)', cur.totals.cBand, bars(cur.cBand, prev?.cBand)),
       fourBandLte: metric('fourBandLte', 'Agregacja 4CA LTE', cur.totals.fourCa, bars(cur.fourCa, prev?.fourCa)),
       radiolines: metric('radiolines', 'Linie radiowe', cur.totals.radiolines, bars(cur.radiolines, prev?.radiolines)),

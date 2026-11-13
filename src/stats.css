@@ -1352,7 +1352,7 @@
 .gr-section-head p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 .gr-metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
 }
 .gr-band-grid {

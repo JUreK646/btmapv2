@@ -633,7 +633,7 @@ export function StatsView({
     const activeReport = reports[safeIdx];
     const hasComparison = Boolean(activeReport?.comparedTo);
     const PRIMARY_OPS = ['Plus', 'T-Mobile', 'Orange', 'Play'];
-    const bandUnit = growthBandMode === 'cells' ? (isPl ? 'komórek' : 'cells') : (isPl ? 'stacji' : 'sites');
+    const bandUnit = growthBandMode === 'cells' ? (isPl ? 'sektorów' : 'sectors') : (isPl ? 'stacji' : 'sites');
 
     type BarRow = { key: string; label: string; total: number; newCount: number; color: string; detail?: string };
 
@@ -797,9 +797,8 @@ export function StatsView({
               </div>
               <div className="gr-metric-grid">
                 {metricCard(activeReport.metrics.stations, <RadioTower size={16} />, isPl ? 'stacji' : 'sites')}
-                {metricCard(activeReport.metrics.cells, <Layers size={16} />, isPl ? 'komórek' : 'cells')}
+                {metricCard({ ...activeReport.metrics.cells, label: isPl ? 'Sektory' : 'Sectors' }, <Layers size={16} />, isPl ? 'sektorów' : 'sectors')}
                 {metricCard(activeReport.metrics.cBand, <Zap size={16} />, isPl ? 'stacji n78' : 'n78 sites')}
-                {metricCard(activeReport.metrics.fourBandLte, <Activity size={16} />, isPl ? 'stacji 4CA' : '4CA sites')}
                 {metricCard(activeReport.metrics.radiolines, <Signal size={16} />, isPl ? 'linii' : 'links')}
                 {metricCard(activeReport.metrics.permits, <Database size={16} />, isPl ? 'pozwoleń' : 'permits')}
               </div>
@@ -809,12 +808,12 @@ export function StatsView({
               <div className="gr-section-head">
                 <div>
                   <h2>{isPl ? 'Pasma' : 'Bands'}</h2>
-                  <p>{growthBandMode === 'cells' ? (isPl ? 'Liczba komórek w każdym paśmie' : 'Cells per band') : (isPl ? 'Liczba stacji nadających w każdym paśmie' : 'Sites transmitting in each band')}</p>
+                  <p>{growthBandMode === 'cells' ? (isPl ? 'Liczba sektorów w każdym paśmie' : 'Sectors per band') : (isPl ? 'Liczba stacji nadających w każdym paśmie' : 'Sites transmitting in each band')}</p>
                 </div>
                 {segmented(
                   growthBandMode,
                   [
-                    { value: 'cells' as const, label: isPl ? 'Komórki' : 'Cells', icon: <Layers size={13} /> },
+                    { value: 'cells' as const, label: isPl ? 'Sektory' : 'Sectors', icon: <Layers size={13} /> },
                     { value: 'stations' as const, label: isPl ? 'Stacje' : 'Sites', icon: <RadioTower size={13} /> },
                   ],
                   setGrowthBandMode,
