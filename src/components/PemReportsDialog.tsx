@@ -78,17 +78,23 @@ function clusterAzimuths(rawAngles: number[], thresholdDeg = 14): DirectionClust
 function DirectionDiagram({antennas}:{antennas:PemAntenna[]}){
   const rawAngles = antennas.flatMap(a => (a.azimuth === null ? [] : [a.azimuth]));
   const uniqueAngles = [...new Set(rawAngles)].sort((a, b) => a - b);
+  const countAt = (angle: number) => rawAngles.filter(a => a === angle).length;
   const clusters = clusterAzimuths(uniqueAngles);
 
-  const cx = 124;
-  const cy = 124;
-  const R = 72;
-  const Rlabel = 91;
+  const size = 260;
+  const cx = size / 2;
+  const cy = size / 2;
+  const R = 82;
+  const Rlabel = 108;
+  const polar = (angleDeg: number, r: number) => {
+    const rad = (angleDeg * Math.PI) / 180;
+    return { x: cx + r * Math.sin(rad), y: cy - r * Math.cos(rad) };
+  };
 
   return (
     <div className="pem-directions">
       <svg
-        viewBox="0 0 248 248"
+        viewBox={`0 0 ${size} ${size}`}
         role="img"
         aria-label={
           uniqueAngles.length
@@ -96,95 +102,68 @@ function DirectionDiagram({antennas}:{antennas:PemAntenna[]}){
             : 'Brak azymutów anten w publicznym zestawieniu'
         }
       >
-        {/* Background dials */}
-        <circle cx={cx} cy={cy} r={R} fill="var(--surface-alt)" stroke="var(--line)" />
-        <circle cx={cx} cy={cy} r={42} fill="none" stroke="var(--line)" strokeDasharray="3 3" />
-        <circle cx={cx} cy={cy} r={18} fill="none" stroke="var(--line)" opacity={0.6} />
+        {/* Dial: disc, two inner rings for scale */}
+        <circle cx={cx} cy={cy} r={R} className="pem-dial-disc" />
+        <circle cx={cx} cy={cy} r={R * 0.66} className="pem-dial-ring" />
+        <circle cx={cx} cy={cy} r={R * 0.33} className="pem-dial-ring" />
 
-        {/* 12-hour tick marks at 30° */}
-        {Array.from({ length: 12 }, (_, i) => {
-          const angle = (i * Math.PI) / 6;
-          const isCardinal = i % 3 === 0;
-          const r1 = isCardinal ? R - 6 : R - 4;
+        {/* Graduation: every 10°, longer every 30°, longest at the cardinal points */}
+        {Array.from({ length: 36 }, (_, i) => {
+          const deg = i * 10;
+          const len = deg % 90 === 0 ? 9 : deg % 30 === 0 ? 6 : 3;
+          const a = polar(deg, R - len);
+          const b = polar(deg, R);
+          return <line key={deg} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={deg % 30 === 0 ? 'pem-dial-tick is-major' : 'pem-dial-tick'} />;
+        })}
+
+        {/* Cardinal letters inside the ring */}
+        {(['N', 'E', 'S', 'W'] as const).map((letter, i) => {
+          // A ray along this direction would run through the letter; the ray says enough then.
+          if (uniqueAngles.some(a => Math.min(Math.abs(a - i * 90), 360 - Math.abs(a - i * 90)) < 12)) return null;
+          const p = polar(i * 90, R - 19);
           return (
-            <line
-              key={i}
-              x1={cx + r1 * Math.sin(angle)}
-              y1={cy - r1 * Math.cos(angle)}
-              x2={cx + R * Math.sin(angle)}
-              y2={cy - R * Math.cos(angle)}
-              stroke={isCardinal ? 'var(--muted)' : 'var(--faint)'}
-              strokeWidth={isCardinal ? '1.5' : '1'}
-            />
+            <text key={letter} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" className={letter === 'N' ? 'pem-dial-cardinal is-north' : 'pem-dial-cardinal'}>
+              {letter}
+            </text>
           );
         })}
 
-        {/* North marker inside the dial */}
-        <text
-          x={cx}
-          y={cy - R + 14}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="var(--muted)"
-          fontSize="10"
-          fontWeight="700"
-          letterSpacing="0.05em"
-        >
-          N
-        </text>
-
-        {/* Individual antenna rays and dots */}
+        {/* One ray per antenna direction: a soft glow under a solid line, a dot at the rim */}
         {uniqueAngles.map(angle => {
-          const r = (angle * Math.PI) / 180;
-          const x2 = cx + (R - 1) * Math.sin(r);
-          const y2 = cy - (R - 1) * Math.cos(r);
+          const end = polar(angle, R);
           return (
             <g key={angle}>
-              <line
-                x1={cx}
-                y1={cy}
-                x2={x2}
-                y2={y2}
-                stroke="var(--accent)"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-              <circle cx={x2} cy={y2} r="2.5" fill="var(--accent)" />
+              <line x1={cx} y1={cy} x2={end.x} y2={end.y} className="pem-dial-glow" />
+              <line x1={cx} y1={cy} x2={end.x} y2={end.y} className="pem-dial-ray" />
+              <circle cx={end.x} cy={end.y} r={4} className="pem-dial-tip" />
             </g>
           );
         })}
 
-        {/* Clean clustered / non-overlapping labels */}
+        {/* Labels outside the dial, one per group of close directions, with the antenna count */}
         {clusters.map(cluster => {
-          const rad = (cluster.meanAngle * Math.PI) / 180;
-          const lx = cx + Rlabel * Math.sin(rad);
-          const ly = cy - Rlabel * Math.cos(rad);
+          const p = polar(cluster.meanAngle, Rlabel);
+          const count = cluster.angles.reduce((sum, a) => sum + countAt(a), 0);
+          const text = cluster.label;
+          const width = text.length * 6.4 + (count > 1 ? 22 : 0) + 14;
           return (
-            <g key={cluster.label}>
-              <title>
-                {`Azymut: ${cluster.angles.join('°, ')}° (${cluster.angles.length} ${
-                  cluster.angles.length === 1 ? 'antena' : 'anteny'
-                })`}
-              </title>
-              <text
-                x={lx}
-                y={ly}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="var(--text)"
-                fontSize="9.5"
-                fontWeight="600"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                {cluster.label}
+            <g key={cluster.label} className="pem-dial-label">
+              <title>{`Azymut: ${cluster.angles.join('°, ')}° (${count} ${count === 1 ? 'antena' : count < 5 ? 'anteny' : 'anten'})`}</title>
+              <rect x={p.x - width / 2} y={p.y - 10} width={width} height={20} rx={10} />
+              <text x={p.x - (count > 1 ? 10 : 0)} y={p.y} textAnchor="middle" dominantBaseline="central">
+                {text}
               </text>
+              {count > 1 && (
+                <text x={p.x + width / 2 - 13} y={p.y} textAnchor="middle" dominantBaseline="central" className="pem-dial-count">
+                  ×{count}
+                </text>
+              )}
             </g>
           );
         })}
 
-        {/* Center hub */}
-        <circle cx={cx} cy={cy} r={4} fill="var(--surface-alt)" stroke="var(--line)" />
-        <circle cx={cx} cy={cy} r={2} fill="var(--text)" />
+        {/* Hub */}
+        <circle cx={cx} cy={cy} r={5} className="pem-dial-hub" />
       </svg>
       {!uniqueAngles.length && <p>Brak azymutów w zestawieniu</p>}
     </div>
