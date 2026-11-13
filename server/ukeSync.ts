@@ -6,6 +6,7 @@ import readXlsxFile from 'read-excel-file/node';
 import { operatorColor, operatorName as canonicalOperatorName } from '../shared/operators.ts';
 import { ensureRegistrySnapshot, recordRegistrySnapshot } from './stats.ts';
 import { carryOverAzimuths, normalizeAzimuths } from './kmlAzimuths.ts';
+import { UKE_REGISTER_URL, loadRegisterStations, selectRegisterFiles, type RegisterFile, type RegisterStation } from './ukeRegister.ts';
 
 const BIP_UKE_URL = 'https://bip.uke.gov.pl/pozwolenia-radiowe/wykaz-pozwolen-radiowych-tresci/stacje-gsm-umts-lte-5gnr-oraz-cdma,12,0.html';
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -183,7 +184,7 @@ type StationEntry = {
     name: string;
     color: string;
     stationIds: string[];
-    bands: { tech: string; band: string; status: string; permit: string }[];
+    bands: { tech: string; band: string; status: string; permit: string; entryDate?: string }[];
     azimuths?: number[];
   }[];
 };
@@ -204,6 +205,64 @@ export async function readUkeSheet(filePath: string): Promise<unknown[][]> {
 
 export async function parseUkeXlsx(filePath: string, defaultTech: string, defaultBand: string, stations: Map<string, StationEntry>) {
   return parseUkeRows(await readUkeSheet(filePath), defaultTech, defaultBand, stations);
+}
+
+type StationOperator = StationEntry['operators'][number];
+
+/**
+ * The operator entry of a station in the map being built, creating both when needed. A station is
+ * one site of one operator: coordinates (to 6 decimals), operator and station ID. The permit lists
+ * and the device register use the same key, so a station found in both becomes one record.
+ */
+function stationOperator(stations: Map<string, StationEntry>, site: { lat: number; lng: number; operator: string; stationId: string; address: string; teryt: string }): StationOperator {
+  const { lat, lng, operator, stationId, address, teryt } = site;
+  const key = `${lat.toFixed(6)},${lng.toFixed(6)}|${operator}|${stationId}`;
+  let station = stations.get(key);
+  if (!station) {
+    station = {
+      id: 'UKE_' + createHash('sha256').update(key).digest('hex').slice(0, 18),
+      lat,
+      lng,
+      address,
+      province: inferProvinceFromTerytOrCoords(teryt, lat, lng),
+      stationId,
+      teryt,
+      operators: [],
+    };
+    stations.set(key, station);
+  }
+  if (address && (!station.address || station.address.length < address.length)) station.address = address;
+  if (stationId && !station.stationId) station.stationId = stationId;
+  if (teryt && !station.teryt) {
+    station.teryt = teryt;
+    station.province = inferProvinceFromTerytOrCoords(teryt, lat, lng);
+  }
+
+  let op = station.operators.find(o => o.name === operator);
+  if (!op) {
+    op = { name: operator, color: operatorColor(operator), stationIds: [], bands: [] };
+    station.operators.push(op);
+  }
+  if (stationId && !op.stationIds.includes(stationId)) op.stationIds.push(stationId);
+  return op;
+}
+
+/** Adds the stations of the device register (REJ entries) to the map built from the permit lists. */
+export function addRegisterStations(stations: Map<string, StationEntry>, registerStations: RegisterStation[]): number {
+  let bands = 0;
+  for (const site of registerStations) {
+    const op = stationOperator(stations, site);
+    for (const b of site.bands) {
+      if (b.azimuths?.length) {
+        const azimuths = normalizeAzimuths([...(op.azimuths || []), ...b.azimuths]);
+        if (azimuths.length) op.azimuths = azimuths;
+      }
+      if (op.bands.some(x => x.tech === b.tech && x.band === b.band && x.permit === b.permit)) continue;
+      op.bands.push({ tech: b.tech, band: b.band, status: 'Rejestr', permit: b.permit, ...(b.entryDate ? { entryDate: b.entryDate } : {}) });
+      bands++;
+    }
+  }
+  return bands;
 }
 
 /** Adds the stations of one registry sheet. Returns how many rows were used. */
@@ -245,62 +304,17 @@ export function parseUkeRows(rows: unknown[][], defaultTech: string, defaultBand
 
     const operator = mapOperatorName(row[opCol]);
     const stationId = String(row[idCol] || '').trim();
-    const coordKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
-    const key = `${coordKey}|${operator}|${stationId}`;
     const city = String(row[cityCol] || '').trim();
     const loc = String(row[locCol] || '').trim();
     const address = [city, loc].filter(Boolean).join(', ');
     const teryt = String(row[terytCol] || '').trim();
-    const province = inferProvinceFromTerytOrCoords(teryt, lat, lng);
     const decNo = String(row[decCol] || '').trim();
     const decType = String(row[typeCol] || '').trim();
     const expVal = row[expCol];
     const expDate = expVal instanceof Date ? expVal.toISOString().slice(0, 10) : String(expVal || '').slice(0, 10);
     const permit = decNo ? `${decNo}${decType ? ` [${decType}]` : ''}${expDate ? ` - expires ${expDate}` : ''}` : '';
 
-    let station = stations.get(key);
-    if (!station) {
-      const id = 'UKE_' + createHash('sha256').update(key).digest('hex').slice(0, 18);
-      station = {
-        id,
-        lat,
-        lng,
-        address,
-        province,
-        stationId,
-        teryt,
-        operators: [],
-      };
-      stations.set(key, station);
-    }
-
-    if (address && (!station.address || station.address.length < address.length)) {
-      station.address = address;
-    }
-    if (province && !station.province) {
-      station.province = province;
-    }
-    if (stationId && !station.stationId) {
-      station.stationId = stationId;
-    }
-    if (teryt && !station.teryt) {
-      station.teryt = teryt;
-    }
-
-    let op = station.operators.find(o => o.name === operator);
-    if (!op) {
-      op = {
-        name: operator,
-        color: operatorColor(operator),
-        stationIds: [],
-        bands: [],
-      };
-      station.operators.push(op);
-    }
-
-    if (stationId && !op.stationIds.includes(stationId)) {
-      op.stationIds.push(stationId);
-    }
+    const op = stationOperator(stations, { lat, lng, operator, stationId, address, teryt });
 
     if (azimuthCol >= 0 && row[azimuthCol] !== null && row[azimuthCol] !== undefined) {
       const azimuths = normalizeAzimuths([...(op.azimuths || []), ...String(row[azimuthCol]).split(/[;,/|\s]+/)]);
@@ -334,7 +348,10 @@ export interface UkeSyncOptions {
   /** Injected in tests. */
   fetcher?: typeof fetch;
   readSheet?: (filePath: string) => Promise<unknown[][]>;
+  readRegister?: (filePath: string, file: RegisterFile) => Promise<RegisterStation[]>;
   tempDir?: string;
+  /** Where the parsed device-register workbooks are kept, so an unchanged one is not downloaded again. */
+  registerCacheDir?: string;
   retryDelayMs?: number;
   /**
    * Largest share of registry stations one sync may delete. A larger drop is far more likely a truncated
@@ -369,8 +386,19 @@ export function findRemovedStations(db: DatabaseSync, keptIds: Set<string>, unre
  * Bumped when a sync has to rewrite stations already saved: a database synced by an older version
  * re-reads the registry once even though the files on BIP UKE have not changed.
  * 2: stations split into partial rows are rebuilt and old KML copies of registry stations are merged.
+ * 3: stations of the device register (REJ entries) are added.
  */
-const SYNC_FORMAT = '2';
+const SYNC_FORMAT = '3';
+
+/** The device-register workbooks listed on BIP UKE. */
+export async function fetchRegisterFiles(fetcher: typeof fetch = fetch): Promise<RegisterFile[]> {
+  const res = await fetcher(UKE_REGISTER_URL, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', Accept: 'text/html,application/xhtml+xml' },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Strona rejestru urządzeń BIP UKE zwróciła kod błędu HTTP ${res.status}`);
+  return selectRegisterFiles(await res.text());
+}
 
 /** Same station: within this distance, the KML copy and the registry entry are one site. */
 const TWIN_MAX_KM = 0.3;
@@ -447,11 +475,22 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
   try {
     setMeta('ukeSyncAttemptAt', new Date().toISOString());
 
-    const { files, skipped, date, fingerprint } = await fetchBipUkeLinks(fetcher);
+    const { files, skipped, date, fingerprint: permitFingerprint } = await fetchBipUkeLinks(fetcher);
     if (!files.length || !date) {
       throw new Error('Na stronie BIP UKE nie znaleziono plików wykazu stacji – możliwa zmiana układu strony.');
     }
     if (skipped.length) console.warn(`[UKE Sync] Pominięto pliki bez rozpoznanej technologii i częstotliwości: ${skipped.join(', ')}`);
+
+    // The device register is published on its own page, one workbook per operator, each on its own date.
+    const registerFiles = await fetchRegisterFiles(fetcher);
+    let previousRegister: unknown[] = [];
+    try { previousRegister = JSON.parse(getMeta('ukeRegisterFiles') || '[]'); } catch { previousRegister = []; }
+    if (!registerFiles.length && previousRegister.length) {
+      throw new Error('Na stronie rejestru urządzeń BIP UKE nie znaleziono plików – możliwa zmiana układu strony. Baza pozostaje bez zmian.');
+    }
+    const fingerprint = registerFiles.length
+      ? createHash('sha256').update(`${permitFingerprint}\n${registerFiles.map(f => f.url).sort().join('\n')}`).digest('hex').slice(0, 24)
+      : permitFingerprint;
 
     const lastDate = getMeta('ukeWykazDate');
     const lastFingerprint = getMeta('ukeWykazFiles');
@@ -491,6 +530,18 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
 
     if (stations.size === 0) {
       throw new Error('Po sparsowaniu plików liczba stacji wynosi 0. Anulowano aktualizację bazy.');
+    }
+
+    if (registerFiles.length) {
+      const registerStations = await loadRegisterStations(registerFiles, {
+        fetcher,
+        cacheDir: resolve(options.registerCacheDir || 'data/uke_register_cache'),
+        helpers: { parseCoord: parseDmsCoord, mapOperator: mapOperatorName },
+        readRegister: options.readRegister,
+        retryDelayMs,
+      });
+      const added = addRegisterStations(stations, registerStations);
+      console.log(`[UKE Sync] Rejestr urządzeń: ${registerStations.length} stacji, ${added} wpisów pasm (${registerFiles.map(f => `${f.operator} ${f.date}`).join(', ')}).`);
     }
 
     // A station UKE no longer lists is gone, so it is removed from the map.
@@ -582,6 +633,7 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
       if (removedIds.length) console.log(`[UKE Sync] Usunięto ${removedIds.length} stacji, których nie ma już w wykazie UKE.`);
       if (twinCount) console.log(`[UKE Sync] Scalono ${twinCount} zdublowanych kopii stacji z importu KML.`);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncFormat', ?)").run(SYNC_FORMAT);
+      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeRegisterFiles', ?)").run(JSON.stringify(registerFiles.map(f => ({ operator: f.operator, date: f.date }))));
 
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazDate', ?)").run(date);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazFiles', ?)").run(fingerprint);
