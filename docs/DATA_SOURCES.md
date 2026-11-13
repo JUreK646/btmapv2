@@ -23,38 +23,40 @@ All public sector information ingested by BTMap is processed for non-commercial 
 * **Datasets Ingested:**
   - Public register of radio frequency spectrum permits for cellular base stations (GSM, UMTS, LTE, 5G NR).
   - Public register of fixed microwave radio relays (*linie radiowe / radiolinie*).
-* **Update Frequency:** Monthly official publication cycles.
-* **Processing Pipeline:** Handled via [`scripts/sync_uke.ts`](../scripts/sync_uke.ts) and [`scripts/sync_radiolines.ts`](../scripts/sync_radiolines.ts).
+  - Antenna azimuths from the UKE permit KML file, where the permit lists them.
+* **Update Frequency:** UKE publishes new registry versions irregularly. The server checks the base station registry every 2 hours and the radio link registry every 12 hours, and imports only when the published files have changed.
+* **Processing Pipeline:** [`server/ukeSync.ts`](../server/ukeSync.ts) (CLI: [`scripts/sync_uke.ts`](../scripts/sync_uke.ts)), [`server/radiolineSync.ts`](../server/radiolineSync.ts) (CLI: [`scripts/sync_radiolines.ts`](../scripts/sync_radiolines.ts)) and [`scripts/import_kml_azimuths.ts`](../scripts/import_kml_azimuths.ts).
 
 ### B. System Informacyjny o Instalacjach Wytwarzających PEM (SI2PEM)
-* **Description:** Operated by the National Institute of Telecommunications (Instytut Łączności – Państwowy Instytut Badawczy) and the Ministry of Digital Affairs.
+* **Description:** Operated by the National Institute of Telecommunications (Instytut Łączności – Państwowy Instytut Badawczy).
 * **Datasets Ingested:**
-  - Accredited laboratory field measurements of electromagnetic radiation (PEM) around cellular transmitters.
-  - Antenna schedules: heights above ground (m n.p.t.), electrical/mechanical tilts, EIRP power levels.
-  - Upcoming scheduled environmental EMF inspection notices.
-* **Processing Pipeline:** Handled via [`scripts/sync_si2pem.ts`](../scripts/sync_si2pem.ts).
+  - Accredited laboratory measurement reports of electromagnetic fields (PEM) around transmitters, fetched per station when it is opened and cached for 48 hours.
+  - Antenna tables read from report PDFs where the layout can be parsed: antenna models, heights above ground (m n.p.t.), azimuths, tilts, EIRP and bands.
+  - The schedule of planned measurements, refreshed every 48 hours.
+* **Processing Pipeline:** [`server/si2pemSync.ts`](../server/si2pemSync.ts), [`server/pemReports.ts`](../server/pemReports.ts), [`server/pemPdf.ts`](../server/pemPdf.ts) (CLI for the schedule: [`scripts/sync_si2pem.ts`](../scripts/sync_si2pem.ts)).
 
 ### C. Główny Urząd Geodezji i Kartografii (GUGiK)
 * **Description:** National spatial data infrastructure for Poland.
-* **Datasets Ingested:**
-  - Administrative boundary geometry (PRG).
-  - Open spatial basemaps and high-resolution orthophotomaps.
+* **Datasets Used:** Elevation data for the terrain profile and area audit, queried on demand and not stored: the digital terrain model (NMT, LiDAR 1 m) and the digital surface model (NMPT) for buildings and trees. Points are converted from WGS-84 to PUWG 1992 (EPSG:2180) for these queries. When GUGiK does not answer, Copernicus DEM (90 m) via Open-Meteo is used instead.
 
 ---
 
 ## 3. Data Integrity & Validation Pipeline
 
-Before public deployment, raw government datasets undergo automated sanitization:
+Imported registries go through these checks:
 
-1. **Geographic Sanity Verification:**
-   - Coordinates are validated against bounding boxes for Poland (`Latitude: 49.0° to 54.9° N`, `Longitude: 14.1° to 24.2° E`).
-   - Projection transformations from EPSG:2180 (PUWG 1992) to WGS-84 (EPSG:4326) where applicable.
+1. **All-or-nothing imports:**
+   - A UKE registry sync is applied only when every technology file was downloaded and read. A failed file, or a sheet with an unknown column layout, leaves the database unchanged.
+   - A radio link registry with an unknown layout or without any links leaves the stored links unchanged.
 
-2. **Frequency & Band Normalization:**
-   - Raw carrier frequencies in MHz are mapped to standard 3GPP operating bands (e.g., 791–821 MHz $\rightarrow$ LTE B20; 3400–3800 MHz $\rightarrow$ 5G NR n78).
+2. **Geographic sanity checks:**
+   - Coordinates outside Poland's extent (roughly 49–55° N, 14–25° E) are skipped.
 
-3. **Deduplication & Cross-Referencing:**
-   - Physical installations shared by multiple operators (mast-sharing / RAN sharing between Orange, T-Mobile, Play, and Plus) are consolidated to provide an accurate physical site representation.
+3. **No filled-in values:**
+   - Values the source does not provide (azimuths, link capacity, frequency, polarisation, dates) are stored as missing rather than replaced with typical values.
+
+4. **Co-located operators:**
+   - Operators sharing one mast (including the NetWorkS! sharing between Orange and T-Mobile) are kept as separate station records, slightly offset on the map so each one can be selected.
 
 ---
 
