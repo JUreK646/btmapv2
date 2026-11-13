@@ -20,6 +20,7 @@ import {
   Calendar,
   Zap,
   X,
+  Info,
 } from 'lucide-react';
 import type { Health } from '../types';
 import { api, formatNumber } from '../lib/api';
@@ -630,516 +631,228 @@ export function StatsView({
     const reports = stats?.monthlyReports || [];
     const safeIdx = Math.min(Math.max(0, growthPeriodIdx), Math.max(0, reports.length - 1));
     const activeReport = reports[safeIdx];
+    const hasComparison = Boolean(activeReport?.comparedTo);
+    const PRIMARY_OPS = ['Plus', 'T-Mobile', 'Orange', 'Play'];
+    const bandUnit = growthBandMode === 'cells' ? (isPl ? 'komórek' : 'cells') : (isPl ? 'stacji' : 'sites');
 
-    const BTS_OPERATOR_ORDER: Record<string, number> = {
-      'Plus': 1,
-      'T-Mobile': 2,
-      'Orange': 3,
-      'Play': 4,
-      'PKP PLK': 5,
-      'PGE Systemy': 6,
+    type BarRow = { key: string; label: string; total: number; newCount: number; color: string; detail?: string };
+
+    // The four network operators always appear in the same order so cards can be compared at a glance;
+    // everyone else is summed into one "Others" row instead of a column per tiny licensee.
+    const toRows = (list: StatsGrowthOperatorBar[]): BarRow[] => {
+      const rows: BarRow[] = PRIMARY_OPS.map((name) => {
+        const found = list.find((o) => o.operator === name);
+        return { key: name, label: name, total: found?.total ?? 0, newCount: found?.newCount ?? 0, color: getOperatorTheme(name).primary };
+      });
+      const others = list.filter((o) => !PRIMARY_OPS.includes(o.operator) && o.total > 0).sort((a, b) => b.total - a.total);
+      if (others.length) {
+        rows.push({
+          key: '__others',
+          label: isPl ? 'Pozostali' : 'Others',
+          total: others.reduce((sum, o) => sum + o.total, 0),
+          newCount: others.reduce((sum, o) => sum + o.newCount, 0),
+          color: 'var(--gr-others)',
+          detail: others.map((o) => `${o.operator}: ${formatNumber(o.total)}`).join('\n'),
+        });
+      }
+      return rows;
     };
 
-    const sortOps = (list: StatsGrowthOperatorBar[]) => {
-      return [...list].sort(
-        (a, b) => (BTS_OPERATOR_ORDER[a.operator] || 99) - (BTS_OPERATOR_ORDER[b.operator] || 99)
-      );
-    };
-
-    const getTechBadgeInfo = (tech: string) => {
-      const t = (tech || '').toUpperCase();
-      if (t === '5G' || t === 'NR') {
-        return { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399', border: 'rgba(52, 211, 153, 0.3)' };
-      }
-      if (t === 'LTE') {
-        return { bg: 'rgba(14, 165, 233, 0.15)', text: '#38bdf8', border: 'rgba(56, 189, 248, 0.3)' };
-      }
-      if (t === 'UMTS') {
-        return { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', border: 'rgba(251, 191, 36, 0.3)' };
-      }
-      return { bg: 'rgba(148, 163, 184, 0.15)', text: '#cbd5e1', border: 'rgba(148, 163, 184, 0.3)' };
-    };
-
-    const renderMetricBox = (
-      m: StatsGrowthMetricCard,
-      icon: React.ReactNode,
-      unitLabel: string,
-      filterOps?: string[]
-    ) => {
-      const list = filterOps ? m.operators.filter((o) => filterOps.includes(o.operator)) : m.operators;
-      const sorted = sortOps(list);
-      const maxVal = Math.max(...sorted.map((o) => o.total), 1);
-
+    const renderBars = (rows: BarRow[], unit: string) => {
+      const max = Math.max(...rows.map((r) => r.total), 1);
       return (
-        <article className="growth-metric-card" key={m.key}>
-          <div className="growth-metric-header">
-            <div className="growth-metric-title-group">
-              <div className="growth-metric-icon">{icon}</div>
-              <div>
-                <h3>{m.label}</h3>
-                <span className="growth-metric-sub">{formatNumber(m.total)} {unitLabel}</span>
-              </div>
-            </div>
-            {m.newTotal > 0 ? (
-              <span className="growth-metric-new-badge" title={isPl ? 'Nowy przyrost w wybranym okresie' : 'New additions in period'}>
-                <Sparkles size={12} />
-                +{formatNumber(m.newTotal)}
+        <ul className={`gr-bars ${hasComparison ? 'has-new' : ''}`}>
+          {rows.map((r) => (
+            <li
+              key={r.key}
+              className={`gr-bar-row ${r.total === 0 ? 'is-empty' : ''}`}
+              title={`${r.label}: ${formatNumber(r.total)} ${unit}${r.newCount > 0 ? ` (+${formatNumber(r.newCount)})` : ''}${r.detail ? `\n\n${r.detail}` : ''}`}
+            >
+              <span className="gr-bar-name">
+                <i style={{ background: r.color }} aria-hidden="true" />
+                {r.label}
               </span>
-            ) : (
-              <span className="growth-metric-new-badge is-zero" title={isPl ? 'Brak nowego przyrostu' : 'No new additions'}>
-                <Sparkles size={12} />
-                +0
+              <span className="gr-bar-track" aria-hidden="true">
+                <span className="gr-bar-fill" style={{ width: `${(r.total / max) * 100}%`, background: r.color }} />
               </span>
-            )}
-          </div>
-
-          <div className="growth-bars-stage">
-            <div className="growth-stage-gridlines" aria-hidden="true">
-              <span className="growth-gridline" />
-              <span className="growth-gridline" />
-              <span className="growth-gridline" />
-            </div>
-
-            {sorted.map((op) => {
-              const theme = getOperatorTheme(op.operator);
-              const barH = op.total > 0 ? Math.max(24, Math.round((op.total / maxVal) * 135)) : 4;
-              const hatchRatio = op.total > 0 ? op.newCount / op.total : 0;
-              const hatchH = op.newCount > 0
-                ? Math.max(12, Math.min(Math.round(barH * Math.max(hatchRatio * 3.5, 0.2)), Math.round(barH * 0.48)))
-                : 0;
-
-              return (
-                <div
-                  key={op.operator}
-                  className={`growth-bar-col ${op.newCount > 0 ? 'has-new' : ''}`}
-                  title={`${op.operator}: ${formatNumber(op.total)} ${unitLabel} (${op.newCount > 0 ? `+${formatNumber(op.newCount)}, +${op.newPercent}%` : (isPl ? 'brak zmian' : 'no change')})`}
-                >
-                  <div className="growth-bar-header-stats">
-                    <span className="growth-bar-val-top">
-                      {op.total > 0 ? formatNumber(op.total) : '—'}
-                    </span>
-                    {op.newCount > 0 ? (
-                      <span className="growth-bar-new-chip" title={isPl ? 'Nowy przyrost' : 'New additions'}>
-                        +{formatNumber(op.newCount)}
-                      </span>
-                    ) : (
-                      <span className="growth-bar-new-chip is-empty">+0</span>
-                    )}
-                  </div>
-
-                  <div className="growth-bar-track">
-                    <div
-                      className="growth-bar-pillar"
-                      style={{
-                        height: `${barH}px`,
-                        background: op.total > 0 ? theme.gradient : 'var(--surface-hover)',
-                        borderColor: op.total > 0 ? theme.border : 'var(--line)',
-                        boxShadow: op.total > 0 ? `0 4px 16px ${theme.glow}` : 'none',
-                      }}
-                    >
-                      {hatchH > 0 && (
-                        <div
-                          className="growth-bar-hatched"
-                          style={{
-                            height: `${hatchH}px`,
-                            borderColor: theme.border,
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="growth-bar-label-group">
-                    <div className="growth-op-badge">
-                      <span className="growth-op-dot" style={{ background: theme.primary, boxShadow: `0 0 6px ${theme.primary}` }} />
-                      <span className="growth-op-name" title={op.operator}>{op.operator}</span>
-                    </div>
-                    {op.newCount > 0 ? (
-                      <span className="growth-op-pct-badge">+{op.newPercent}%</span>
-                    ) : (
-                      <span className="growth-op-pct-badge is-zero">0.00%</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
+              <span className="gr-bar-value">{r.total > 0 ? formatNumber(r.total) : '—'}</span>
+              {hasComparison && <span className="gr-bar-new">{r.newCount > 0 ? `+${formatNumber(r.newCount)}` : ''}</span>}
+            </li>
+          ))}
+        </ul>
       );
     };
+
+    const metricCard = (m: StatsGrowthMetricCard, icon: React.ReactNode, unit: string) => (
+      <article className="gr-card" key={m.key}>
+        <header className="gr-card-head">
+          <span className="gr-card-icon" aria-hidden="true">{icon}</span>
+          <h3>{m.label}</h3>
+          {hasComparison && (
+            <span className={`gr-chip ${m.newTotal > 0 ? 'is-up' : ''}`}>
+              {m.newTotal > 0 ? `+${formatNumber(m.newTotal)}` : isPl ? 'bez zmian' : 'no change'}
+            </span>
+          )}
+        </header>
+        <div className="gr-card-total">
+          <strong>{formatNumber(m.total)}</strong>
+          <span>{unit}</span>
+        </div>
+        {renderBars(toRows(m.operators), unit)}
+      </article>
+    );
+
+    const segmented = <T extends string>(value: T, options: Array<{ value: T; label: string; icon: React.ReactNode }>, onChange: (next: T) => void, label: string) => (
+      <div className="gr-segmented" role="group" aria-label={label}>
+        {options.map((o) => (
+          <button key={o.value} type="button" className={value === o.value ? 'is-active' : ''} aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
+            {o.icon}
+            <span>{o.label}</span>
+          </button>
+        ))}
+      </div>
+    );
 
     return (
-      <section className="stats-growth-fullview">
-        {/* Modern Top Header with btmap.v2 Branding */}
-        <header className="growth-header">
-          <div className="growth-header-left">
-            <div className="growth-title-box">
-              <div className="growth-title-row">
-                <div className="growth-title-icon-badge">
-                  <TrendingUp size={20} />
-                </div>
-                <h1>
-                  {isPl
-                    ? `Raport wykazów${activeReport?.title ? `: ${activeReport.title}` : ''}`
-                    : `Registry Report${activeReport?.title ? `: ${activeReport.title}` : ''}`}
-                </h1>
-                {activeReport?.dateRange && (
-                  <span className="growth-period-badge">
-                    <Calendar size={13} />
-                    {activeReport.dateRange}
-                  </span>
-                )}
-              </div>
-              <span className="growth-subtitle">
-                {growthSource === 'UKE'
-                  ? (isPl ? 'Oficjalny Rejestr Urządzeń i Pozwoleń Radiowych BIP UKE' : 'Official BIP UKE Device & Radio Permit Registry')
-                  : (isPl ? 'Zweryfikowana baza stacji BTMap zsynchronizowana z Rejestrem Urządzeń BIP UKE' : 'Verified BTMap Station Database synced with BIP UKE')}
-                {stats?.dataQuality?.ukeWykazDate ? (isPl ? ` (stan na ${stats.dataQuality.ukeWykazDate})` : ` (as of ${stats.dataQuality.ukeWykazDate})`) : ''}
-                {activeReport && !activeReport.comparedTo && (isPl
-                  ? ' · Przyrosty są liczone jako różnica między kolejnymi wykazami – pojawią się po następnej synchronizacji.'
-                  : ' · Growth is the difference between consecutive registries – it will appear after the next sync.')}
-              </span>
-            </div>
+      <section className="gr-view">
+        <header className="gr-header">
+          <div className="gr-heading">
+            <h1>{isPl ? 'Przyrost w wykazach' : 'Registry growth'}</h1>
+            <p className="gr-meta">
+              <span>{growthSource === 'UKE' ? (isPl ? 'Rejestr UKE' : 'UKE registry') : (isPl ? 'Baza BTMap' : 'BTMap database')}</span>
+              {activeReport && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{activeReport.title}</span>
+                </>
+              )}
+              {hasComparison && activeReport && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{activeReport.dateRange}</span>
+                </>
+              )}
+            </p>
           </div>
-
-          <div className="growth-header-right">
-            <div className="growth-legend">
-              <div className="growth-legend-item">
-                <span className="growth-legend-dot all" />
-                <span>{isPl ? 'Baza całkowita' : 'Total Base'}</span>
-              </div>
-              <div className="growth-legend-item">
-                <span className="growth-legend-dot new" />
-                <span>{isPl ? 'Nowy przyrost (+)' : 'New Additions (+)'}</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="growth-exit-btn"
-              onClick={() => setSection('uke')}
-              title={isPl ? 'Wróć do statystyk ogólnych' : 'Return to general stats'}
-            >
+          <div className="gr-actions">
+            {segmented(
+              growthSource,
+              [
+                { value: 'UKE' as const, label: isPl ? 'Rejestr UKE' : 'UKE registry', icon: <Database size={13} /> },
+                { value: 'BTMAP' as const, label: isPl ? 'Baza BTMap' : 'BTMap', icon: <Radio size={13} /> },
+              ],
+              (next) => {
+                if (next !== growthSource) {
+                  setGrowthPeriodIdx(0);
+                  setGrowthSource(next);
+                }
+              },
+              isPl ? 'Źródło danych' : 'Data source'
+            )}
+            <button type="button" className="gr-icon-btn" onClick={() => setSection('uke')} aria-label={isPl ? 'Zamknij' : 'Close'} title={isPl ? 'Wróć do statystyk' : 'Back to statistics'}>
               <X size={16} />
-              <span>{isPl ? 'Zamknij' : 'Close'}</span>
             </button>
           </div>
         </header>
 
-        {/* Controls Bar & Interactive Period Selector */}
-        <div className="growth-controls-bar">
-          <div className="growth-period-navigator">
-            <button
-              type="button"
-              className="growth-nav-btn"
-              disabled={safeIdx <= 0}
-              onClick={() => setGrowthPeriodIdx((prev) => Math.max(0, prev - 1))}
-              title={isPl ? 'Poprzedni wykaz' : 'Previous batch'}
-            >
-              <ChevronLeft size={16} />
-            </button>
+        {activeReport && !hasComparison && (
+          <div className="gr-notice" role="note">
+            <Info size={16} aria-hidden="true" />
+            <span>
+              {isPl
+                ? 'To pierwszy zapisany wykaz, więc nie ma jeszcze z czym porównać. Przyrost pojawi się po następnej synchronizacji wykazu UKE – poniżej stan bieżący.'
+                : 'This is the first saved registry, so there is nothing to compare with yet. Growth appears after the next UKE sync – the current state is shown below.'}
+            </span>
+          </div>
+        )}
 
-            <div
-              ref={periodScrollRef}
-              className="growth-period-track"
-              onWheel={handlePeriodWheel}
-            >
+        {reports.length > 1 && (
+          <nav className="gr-periods" aria-label={isPl ? 'Wykazy' : 'Registries'}>
+            <button type="button" className="gr-icon-btn is-small" disabled={safeIdx <= 0} onClick={() => setGrowthPeriodIdx((prev) => Math.max(0, prev - 1))} aria-label={isPl ? 'Nowszy wykaz' : 'Newer registry'}>
+              <ChevronLeft size={15} />
+            </button>
+            <div ref={periodScrollRef} className="gr-period-track" onWheel={handlePeriodWheel}>
               {reports.map((rep, idx) => (
-                <button
-                  key={rep.id}
-                  type="button"
-                  className={`growth-period-pill ${idx === safeIdx ? 'is-active' : ''}`}
-                  onClick={() => setGrowthPeriodIdx(idx)}
-                >
-                  <span className="pill-dot" />
-                  <span className="pill-text">{rep.title}</span>
+                <button key={rep.id} type="button" className={`gr-period ${idx === safeIdx ? 'is-active' : ''}`} aria-current={idx === safeIdx ? 'true' : undefined} onClick={() => setGrowthPeriodIdx(idx)}>
+                  {rep.title}
                 </button>
               ))}
             </div>
-
-            <button
-              type="button"
-              className="growth-nav-btn"
-              disabled={safeIdx >= reports.length - 1}
-              onClick={() => setGrowthPeriodIdx((prev) => Math.min(reports.length - 1, prev + 1))}
-              title={isPl ? 'Następny wykaz' : 'Next batch'}
-            >
-              <ChevronRight size={16} />
+            <button type="button" className="gr-icon-btn is-small" disabled={safeIdx >= reports.length - 1} onClick={() => setGrowthPeriodIdx((prev) => Math.min(reports.length - 1, prev + 1))} aria-label={isPl ? 'Starszy wykaz' : 'Older registry'}>
+              <ChevronRight size={15} />
             </button>
-          </div>
-
-          <div className="growth-toolbar-filters">
-            <div className="growth-segmented-group" role="group" aria-label={isPl ? 'Źródło danych' : 'Data source'}>
-              <button
-                type="button"
-                className={`growth-segmented-btn ${growthSource === 'UKE' ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (growthSource !== 'UKE') {
-                    setGrowthPeriodIdx(0);
-                    setGrowthSource('UKE');
-                  }
-                }}
-              >
-                <Database size={13} />
-                <span>{isPl ? 'Rejestr UKE' : 'UKE Registry'}</span>
-              </button>
-              <button
-                type="button"
-                className={`growth-segmented-btn ${growthSource === 'BTMAP' ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (growthSource !== 'BTMAP') {
-                    setGrowthPeriodIdx(0);
-                    setGrowthSource('BTMAP');
-                  }
-                }}
-              >
-                <Radio size={13} />
-                <span>{isPl ? 'Baza BTMap' : 'BTMap DB'}</span>
-              </button>
-            </div>
-
-            <div className="growth-segmented-group" role="group" aria-label={isPl ? 'Widok pasm' : 'Band view mode'}>
-              <button
-                type="button"
-                className={`growth-segmented-btn ${growthBandMode === 'cells' ? 'is-active' : ''}`}
-                onClick={() => setGrowthBandMode('cells')}
-              >
-                <Layers size={13} />
-                <span>{isPl ? 'Komórki' : 'Cells'}</span>
-              </button>
-              <button
-                type="button"
-                className={`growth-segmented-btn ${growthBandMode === 'stations' ? 'is-active' : ''}`}
-                onClick={() => setGrowthBandMode('stations')}
-              >
-                <RadioTower size={13} />
-                <span>{isPl ? 'Stacje' : 'Sites'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+          </nav>
+        )}
 
         {loading && !stats ? (
-          <div className="growth-loading-box">
-            <RefreshCw className="spin" size={32} />
-            <span>{isPl ? 'Ładowanie wskaźników przyrostu...' : 'Loading growth indicators...'}</span>
+          <div className="gr-loading">
+            <RefreshCw className="spin" size={20} />
+            <span>{isPl ? 'Wczytywanie…' : 'Loading…'}</span>
           </div>
         ) : activeReport ? (
           <>
-            {/* Section 1: 6 Key Metrics Cards */}
-            <div className="growth-section-head">
-              <div className="growth-section-title-wrap">
-                <TrendingUp size={18} className="growth-section-icon" />
-                <h2>{isPl ? 'Kluczowe wskaźniki sieci i przyrost operatorów' : 'Key Network Metrics & Operator Growth'}</h2>
+            <section className="gr-section">
+              <div className="gr-section-head">
+                <h2>{isPl ? 'Podsumowanie' : 'Summary'}</h2>
               </div>
-              <p className="growth-section-desc">
-                {isPl
-                  ? 'Zestawienie stacji, komórek, wdrożeń 5G C-Band (3.6 GHz), agregacji 4CA LTE, dosyłu radioliniowego oraz pozwoleń radiowych.'
-                  : 'Overview of base stations, cells, 5G C-Band (3.6 GHz) deployments, 4CA LTE aggregation, microwave backhaul and radio permits.'}
-              </p>
-            </div>
-
-            <div className="growth-top-grid">
-              {renderMetricBox(activeReport.metrics.stations, <RadioTower size={18} />, isPl ? 'stacji' : 'sites')}
-              {renderMetricBox(activeReport.metrics.cells, <Layers size={18} />, isPl ? 'komórek' : 'cells')}
-              {renderMetricBox(activeReport.metrics.cBand, <Zap size={18} />, isPl ? 'stacji n78' : 'n78 sites')}
-              {renderMetricBox(activeReport.metrics.fourBandLte, <Activity size={18} />, isPl ? 'stacji 4CA' : '4CA sites')}
-              {renderMetricBox(activeReport.metrics.radiolines, <Signal size={18} />, isPl ? 'linii' : 'links')}
-              {renderMetricBox(activeReport.metrics.permits, <Database size={18} />, isPl ? 'pozwoleń' : 'permits')}
-            </div>
-
-            <div className="growth-divider" />
-
-            {/* Section 2: 15 Bands Cards Grid */}
-            <div className="growth-section-head">
-              <div className="growth-section-title-wrap">
-                <BarChart3 size={18} className="growth-section-icon" />
-                <h2>
-                  {growthBandMode === 'cells'
-                    ? isPl ? 'Liczba komórek / sektorów wg pasma' : 'Cells / Sectors by Band'
-                    : isPl ? 'Liczba stacji bazowych wg pasma' : 'Base Stations by Band'}
-                </h2>
+              <div className="gr-metric-grid">
+                {metricCard(activeReport.metrics.stations, <RadioTower size={16} />, isPl ? 'stacji' : 'sites')}
+                {metricCard(activeReport.metrics.cells, <Layers size={16} />, isPl ? 'komórek' : 'cells')}
+                {metricCard(activeReport.metrics.cBand, <Zap size={16} />, isPl ? 'stacji n78' : 'n78 sites')}
+                {metricCard(activeReport.metrics.fourBandLte, <Activity size={16} />, isPl ? 'stacji 4CA' : '4CA sites')}
+                {metricCard(activeReport.metrics.radiolines, <Signal size={16} />, isPl ? 'linii' : 'links')}
+                {metricCard(activeReport.metrics.permits, <Database size={16} />, isPl ? 'pozwoleń' : 'permits')}
               </div>
-              <p className="growth-section-desc">
-                {growthBandMode === 'cells'
-                  ? (isPl
-                      ? 'Liczba uruchomionych komórek i sektorów w każdym z 15 pasm częstotliwości z podziałem na operatorów.'
-                      : 'Active cells and sectors deployed across 15 frequency bands per operator.')
-                  : (isPl
-                      ? 'Liczba unikalnych stacji bazowych nadających w każdym z 15 pasm częstotliwości z podziałem na operatorów.'
-                      : 'Unique base station sites broadcasting in each of 15 frequency bands per operator.')}
-              </p>
-            </div>
+            </section>
 
-            <div className="growth-bands-grid">
-              {activeReport.bands.map((b) => {
-                const opList = growthBandMode === 'cells' ? b.operatorCells : b.operatorStations;
-                const totalCount = growthBandMode === 'cells' ? b.totalCells : b.totalStations;
-                const newCount = growthBandMode === 'cells' ? b.newCells : b.newStations;
-                const techInfo = getTechBadgeInfo(b.tech);
-
-                // Always display Primary 4 in fixed scan order: Plus, T-Mobile, Orange, Play.
-                // Include Inne / PKP / PGE only if they have data (> 0).
-                const primaryOps = ['Plus', 'T-Mobile', 'Orange', 'Play'];
-                const colsToDisplay = [
-                  ...primaryOps.map((name) => {
-                    const found = opList.find((o) => o.operator === name);
-                    return found || { operator: name, total: 0, newCount: 0, newPercent: 0 };
-                  }),
-                  ...opList.filter((o) => !primaryOps.includes(o.operator) && o.total > 0),
-                ];
-
-                const maxVal = Math.max(...colsToDisplay.map((o) => o.total), 1);
-
-                return (
-                  <article
-                    key={b.key}
-                    className={`growth-band-card ${totalCount === 0 ? 'is-empty' : ''}`}
-                  >
-                    <header className="growth-band-header">
-                      <div className="growth-band-title-wrap">
-                        <span
-                          className="growth-tech-badge"
-                          style={{ background: techInfo.bg, color: techInfo.text, borderColor: techInfo.border }}
-                        >
-                          {b.tech === '5G' ? 'NR' : b.tech}
-                        </span>
-                        <span className="growth-band-freq">
-                          {b.band}
-                          <small>MHz</small>
-                        </span>
-                        {b.duplex && <span className="growth-band-duplex">{b.duplex}</span>}
-                      </div>
-                      {newCount > 0 ? (
-                        <span className="growth-band-new-pill" title={isPl ? 'Nowy przyrost w wykazie' : 'New additions'}>
-                          +{formatNumber(newCount)}
-                        </span>
+            <section className="gr-section">
+              <div className="gr-section-head">
+                <div>
+                  <h2>{isPl ? 'Pasma' : 'Bands'}</h2>
+                  <p>{growthBandMode === 'cells' ? (isPl ? 'Liczba komórek w każdym paśmie' : 'Cells per band') : (isPl ? 'Liczba stacji nadających w każdym paśmie' : 'Sites transmitting in each band')}</p>
+                </div>
+                {segmented(
+                  growthBandMode,
+                  [
+                    { value: 'cells' as const, label: isPl ? 'Komórki' : 'Cells', icon: <Layers size={13} /> },
+                    { value: 'stations' as const, label: isPl ? 'Stacje' : 'Sites', icon: <RadioTower size={13} /> },
+                  ],
+                  setGrowthBandMode,
+                  isPl ? 'Widok pasm' : 'Band view'
+                )}
+              </div>
+              <div className="gr-band-grid">
+                {activeReport.bands.map((b) => {
+                  const list = growthBandMode === 'cells' ? b.operatorCells : b.operatorStations;
+                  const total = growthBandMode === 'cells' ? b.totalCells : b.totalStations;
+                  const fresh = growthBandMode === 'cells' ? b.newCells : b.newStations;
+                  const tech = b.tech === '5G' ? 'NR' : b.tech;
+                  return (
+                    <article key={b.key} className={`gr-card gr-band ${total === 0 ? 'is-empty' : ''}`}>
+                      <header className="gr-card-head">
+                        <span className="gr-tech" data-tech={tech}>{tech}</span>
+                        <h3>
+                          {b.band} <small>MHz</small>
+                        </h3>
+                        {b.duplex === 'TDD' && <span className="gr-duplex">TDD</span>}
+                        {hasComparison && fresh > 0 && <span className="gr-chip is-up">+{formatNumber(fresh)}</span>}
+                      </header>
+                      {total === 0 ? (
+                        <p className="gr-empty">{isPl ? 'Brak w wykazie' : 'Not in the registry'}</p>
                       ) : (
-                        <span className="growth-band-new-pill is-zero" title={isPl ? 'Brak nowego przyrostu' : 'No new additions'}>
-                          +0
-                        </span>
-                      )}
-                    </header>
-
-                    <div className="growth-band-total-row">
-                      <strong>{formatNumber(totalCount)}</strong>
-                      <span>
-                        {growthBandMode === 'cells'
-                          ? isPl ? 'komórek' : 'cells'
-                          : isPl ? 'stacji' : 'sites'}
-                      </span>
-                    </div>
-
-                    {totalCount === 0 ? (
-                      <div className="growth-band-empty-stage">
-                        <span className="growth-band-empty-icon" aria-hidden="true">∅</span>
-                        <span>{isPl ? 'Brak stacji w tym paśmie' : 'No deployments in this band'}</span>
-                      </div>
-                    ) : (
-                      <div className="growth-band-chart-area">
-                        <div className="growth-band-stage">
-                          <div className="growth-band-stage-guides" aria-hidden="true">
-                            <div className="growth-band-guide-line" />
-                            <div className="growth-band-guide-line" />
-                            <div className="growth-band-guide-line" />
+                        <>
+                          <div className="gr-card-total">
+                            <strong>{formatNumber(total)}</strong>
+                            <span>{bandUnit}</span>
                           </div>
-
-                          {colsToDisplay.map((op) => {
-                            const theme = getOperatorTheme(op.operator);
-                            const hasValue = op.total > 0;
-                            // Proportional pillar height, minimum 6% if > 0
-                            const heightPct = hasValue
-                              ? Math.max(6, Math.round((op.total / maxVal) * 100))
-                              : 0;
-                            const newPct =
-                              op.newCount > 0 && op.total > 0
-                                ? Math.min(100, Math.max(12, Math.round((op.newCount / op.total) * 100)))
-                                : 0;
-
-                            const tooltipText = `${b.key} · ${op.operator}: ${formatNumber(op.total)} ${
-                              growthBandMode === 'cells' ? (isPl ? 'komórek' : 'cells') : isPl ? 'stacji' : 'sites'
-                            }${
-                              op.newCount > 0 ? ` (+${formatNumber(op.newCount)}, +${op.newPercent}%)` : ''
-                            }`;
-
-                            return (
-                              <div
-                                key={op.operator}
-                                className={`growth-band-col ${!hasValue ? 'is-zero' : ''}`}
-                                title={tooltipText}
-                              >
-                                <div className={`growth-band-col-val ${!hasValue ? 'is-zero' : ''}`}>
-                                  {hasValue ? (
-                                    <>
-                                      <span>{formatNumber(op.total)}</span>
-                                      {op.newCount > 0 && (
-                                        <span className="growth-band-col-new">
-                                          +{formatNumber(op.newCount)}
-                                        </span>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <span className="growth-band-dash">—</span>
-                                  )}
-                                </div>
-
-                                <div className="growth-band-bar-track">
-                                  {hasValue && (
-                                    <div
-                                      className="growth-band-bar-fill"
-                                      style={{
-                                        height: `${heightPct}%`,
-                                        background: theme.gradient,
-                                        boxShadow: `0 2px 8px ${theme.glow}`,
-                                      }}
-                                    >
-                                      {newPct > 0 && (
-                                        <div
-                                          className="growth-band-bar-hatch"
-                                          style={{ height: `${newPct}%` }}
-                                        />
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="growth-band-labels-row">
-                          {colsToDisplay.map((op) => {
-                            const theme = getOperatorTheme(op.operator);
-                            const shortName =
-                              op.operator === 'T-Mobile'
-                                ? 'T-Mobile'
-                                : op.operator === 'PKP PLK'
-                                ? 'PKP'
-                                : op.operator === 'PGE Systemy'
-                                ? 'PGE'
-                                : op.operator;
-
-                            return (
-                              <div
-                                key={op.operator}
-                                className="growth-band-col-label"
-                                title={op.operator}
-                              >
-                                <span
-                                  className="growth-band-col-dot"
-                                  style={{ background: theme.primary }}
-                                />
-                                <span className="growth-band-col-name">{shortName}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
+                          {renderBars(toRows(list), bandUnit)}
+                        </>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
           </>
         ) : null}
       </section>
