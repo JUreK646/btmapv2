@@ -221,7 +221,7 @@ function Stations({
         <Fragment key={t.id}>
           <CircleMarker
             center={[t.lat, t.lng]}
-            radius={(selected === t.id ? 11 : (t.operators.length > 1 ? 7 : 6)) * sizeMultiplier}
+            radius={(selected === t.id ? 12 : (t.operators.length > 1 ? 8.5 : 7.5)) * sizeMultiplier}
             renderer={renderer}
             pathOptions={{
               stroke: Boolean(selected === t.id || highContrast),
@@ -257,7 +257,7 @@ function Stations({
           {t.operators.length > 1 && (
             <CircleMarker
               center={[t.lat, t.lng]}
-              radius={2.5 * sizeMultiplier}
+              radius={3 * sizeMultiplier}
               renderer={renderer}
               pathOptions={{ weight: 0, fillColor: '#fff', fillOpacity: 1 }}
               interactive={false}
@@ -1294,31 +1294,7 @@ function RadiolinesLayer({
 
   return (
     <>
-      {/* Sleek glowing halo underlayer for modern fiber/beam aesthetic */}
-      {cappedRadiolines.map(line => {
-        const isSelected = Boolean(selectedRl?.lines.some(l => l.id === line.id));
-        const brand = getRadiolineBrand(line);
-        const color = line.isNew === 1 ? '#10b981' : brand.color;
-        return (
-          <Polyline
-            key={`halo-${line.id}`}
-            positions={[
-              [line.latA, line.lngA],
-              [line.latB, line.lngB],
-            ]}
-            renderer={renderer}
-            pathOptions={{
-              color,
-              weight: isSelected ? 9.0 : 6.0,
-              opacity: isSelected ? 0.35 : 0.22,
-              lineCap: 'round',
-              lineJoin: 'round',
-            }}
-            interactive={false}
-          />
-        );
-      })}
-
+      {/* Links are drawn under the station dots (see bringToBack): on the shared canvas the top layer takes the click. */}
       {/* Modern rounded core lines */}
       {cappedRadiolines.map(line => {
         const isSelected = Boolean(selectedRl?.lines.some(l => l.id === line.id));
@@ -1341,6 +1317,7 @@ function RadiolinesLayer({
               lineJoin: 'round',
             }}
             eventHandlers={{
+              add: e => (e.target as L.Path).bringToBack(),
               click: e => {
                 L.DomEvent.stopPropagation(e);
                 const clickedPos: [number, number] = e.latlng
@@ -1349,6 +1326,32 @@ function RadiolinesLayer({
                 setSelectedRl({ line, lines: linksOnSamePath(line, cappedRadiolines), pos: clickedPos });
               },
             }}
+          />
+        );
+      })}
+
+      {/* Sleek glowing halo underlayer for modern fiber/beam aesthetic */}
+      {cappedRadiolines.map(line => {
+        const isSelected = Boolean(selectedRl?.lines.some(l => l.id === line.id));
+        const brand = getRadiolineBrand(line);
+        const color = line.isNew === 1 ? '#10b981' : brand.color;
+        return (
+          <Polyline
+            key={`halo-${line.id}`}
+            positions={[
+              [line.latA, line.lngA],
+              [line.latB, line.lngB],
+            ]}
+            renderer={renderer}
+            pathOptions={{
+              color,
+              weight: isSelected ? 9.0 : 6.0,
+              opacity: isSelected ? 0.35 : 0.22,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
+            interactive={false}
+            eventHandlers={{ add: e => (e.target as L.Path).bringToBack() }}
           />
         );
       })}
@@ -1533,6 +1536,9 @@ export default function MapView({
         renderer={canvasRenderer}
         settings={settings}
       />
+      {/* Radiolines under the stations: on a shared canvas the last drawn layer takes the click, and a
+          link ending at a mast would otherwise cover its station dot. */}
+      <RadiolinesLayer radiolines={radiolines.slice(0, 1000)} renderer={canvasRenderer} />
       <Stations
         items={visible}
         selected={selected?.id}
@@ -1546,9 +1552,6 @@ export default function MapView({
         settings={settings}
       />
       <PemPlanMarkers items={pemPlans} />
-
-      {/* Radiolines */}
-      <RadiolinesLayer radiolines={radiolines.slice(0, 1000)} renderer={canvasRenderer} />
 
       {/* User GPS location */}
       {position && (
