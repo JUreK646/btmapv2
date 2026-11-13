@@ -365,6 +365,58 @@ export function findRemovedStations(db: DatabaseSync, keptIds: Set<string>, unre
   }).map(row => row.id);
 }
 
+/**
+ * Bumped when a sync has to rewrite stations already saved: a database synced by an older version
+ * re-reads the registry once even though the files on BIP UKE have not changed.
+ * 2: stations split into partial rows are rebuilt and old KML copies of registry stations are merged.
+ */
+const SYNC_FORMAT = '2';
+
+/** Same station: within this distance, the KML copy and the registry entry are one site. */
+const TWIN_MAX_KM = 0.3;
+
+/**
+ * Rows from the old KML import that duplicate a station of the registry just read: same operator and
+ * station ID, a few metres apart (the KML rounded the coordinates, so the ids differ). The registry is
+ * the current source, so these copies are merged into the registry station. KML stations the registry
+ * does not list are left as they are.
+ */
+export function findKmlTwins(db: DatabaseSync, stations: Iterable<{ id: string; lat: number; lng: number; stationId: string; operators: { name: string }[] }>): Map<string, Array<{ id: string; operators: string }>> {
+  const norm = (op: string, sid: string) => `${op}|${sid.trim().toUpperCase()}`;
+  const index = new Map<string, Array<{ id: string; lat: number; lng: number; operators: string }>>();
+  const rows = db.prepare("SELECT id, stationId, lat, lng, operators FROM towers WHERE addedBy = 'Import KML'").all() as Array<{ id: string; stationId: string | null; lat: number; lng: number; operators: string }>;
+  for (const row of rows) {
+    if (!row.stationId) continue;
+    let names: string[] = [];
+    try { names = (JSON.parse(row.operators) as Array<{ name?: string }>).map(o => String(o?.name || '')); } catch { continue; }
+    for (const name of new Set(names)) {
+      const key = norm(name, row.stationId);
+      const list = index.get(key) || [];
+      list.push(row);
+      index.set(key, list);
+    }
+  }
+  const twins = new Map<string, Array<{ id: string; operators: string }>>();
+  const list = [...stations];
+  // A KML row whose id is itself a registry station is updated in place, never merged away.
+  const claimed = new Set<string>(list.map(st => st.id));
+  for (const st of list) {
+    if (!st.stationId) continue;
+    for (const op of st.operators) {
+      for (const row of index.get(norm(op.name, st.stationId)) || []) {
+        if (claimed.has(row.id)) continue;
+        const km = Math.hypot((row.lat - st.lat) * 111.32, (row.lng - st.lng) * 111.32 * Math.cos(st.lat * Math.PI / 180));
+        if (km > TWIN_MAX_KM) continue;
+        claimed.add(row.id);
+        const merged = twins.get(st.id) || [];
+        merged.push({ id: row.id, operators: row.operators });
+        twins.set(st.id, merged);
+      }
+    }
+  }
+  return twins;
+}
+
 const DOWNLOAD_ATTEMPTS = 3;
 
 async function downloadFile(url: string, targetPath: string, fetcher: typeof fetch, retryDelayMs: number) {
@@ -404,7 +456,8 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
     const lastDate = getMeta('ukeWykazDate');
     const lastFingerprint = getMeta('ukeWykazFiles');
     // Any changed file means there is something new. Databases synced before fingerprints existed fall back to the date.
-    const unchanged = lastFingerprint ? lastFingerprint === fingerprint : Boolean(lastDate) && date <= lastDate;
+    const sameFiles = lastFingerprint ? lastFingerprint === fingerprint : Boolean(lastDate) && date <= lastDate;
+    const unchanged = sameFiles && getMeta('ukeSyncFormat') === SYNC_FORMAT;
     if (!options.force && unchanged) {
       if (!lastFingerprint) setMeta('ukeWykazFiles', fingerprint);
       setMeta('ukeSyncCheckedAt', new Date().toISOString());
@@ -471,6 +524,9 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
       }
     }
 
+    const twins = findKmlTwins(db, stations.values());
+    const twinCount = [...twins.values()].reduce((sum, list) => sum + list.length, 0);
+
     // Keep the pre-sync state as a baseline if this database has no snapshot yet.
     try { ensureRegistrySnapshot(db); } catch (snapshotErr) { console.warn('[UKE Sync] Nie zapisano migawki bazowej:', (snapshotErr as Error).message); }
 
@@ -487,10 +543,22 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
       `);
 
       const storedOperators = db.prepare('SELECT operators FROM towers WHERE id = ?');
+      const moveRefs = ['comments', 'photos', 'tower_history'].map(table => db.prepare(`UPDATE ${table} SET towerId = ? WHERE towerId = ?`));
+      const removeTwin = db.prepare('DELETE FROM towers WHERE id = ?');
+      const removeTwinPemCounts = db.prepare('DELETE FROM pem_report_operator_counts WHERE towerId = ?');
+      const removeTwinPemCount = db.prepare('DELETE FROM pem_report_counts WHERE towerId = ?');
       for (const st of stations.values()) {
         // The sync overwrites operators; azimuths this registry does not carry stay with the station.
         const stored = storedOperators.get(st.id) as { operators?: string } | undefined;
         if (stored?.operators) carryOverAzimuths(st.operators, stored.operators);
+        // An old KML copy of this station is merged in: its azimuths and anything users attached move here.
+        for (const twin of twins.get(st.id) || []) {
+          carryOverAzimuths(st.operators, twin.operators);
+          for (const move of moveRefs) move.run(st.id, twin.id);
+          removeTwinPemCounts.run(twin.id);
+          removeTwinPemCount.run(twin.id);
+          removeTwin.run(twin.id);
+        }
         insertOrUpdate.run(
           st.id,
           st.stationId,
@@ -512,6 +580,8 @@ export async function syncUkeWykaz(db: DatabaseSync, options: UkeSyncOptions = {
         removePemCount.run(id);
       }
       if (removedIds.length) console.log(`[UKE Sync] Usunięto ${removedIds.length} stacji, których nie ma już w wykazie UKE.`);
+      if (twinCount) console.log(`[UKE Sync] Scalono ${twinCount} zdublowanych kopii stacji z importu KML.`);
+      db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeSyncFormat', ?)").run(SYNC_FORMAT);
 
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazDate', ?)").run(date);
       db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('ukeWykazFiles', ?)").run(fingerprint);

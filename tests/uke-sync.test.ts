@@ -219,6 +219,45 @@ test('stations no longer in the registry are removed; community and imported rec
   } finally { db.close(); rmSync(tempDir, {recursive: true, force: true}); }
 });
 
+test('old KML copies of registry stations are merged into them; KML stations the registry lacks stay', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'btmap-uke-'));
+  const db = openDatabase(':memory:');
+  try {
+    const {state, options} = fakeUke(tempDir);
+    state.files = [LTE, NR];
+    state.sheets.set(LTE, [HEADER, row('Orange Polska S.A.', 'MNET/1/1/4/26', 20.977777777777778, 52.22972222222222, '13801')]);
+    state.sheets.set(NR, [HEADER, row('Orange Polska S.A.', 'MNET/1/1/4/26', 20.977777777777778, 52.22972222222222, '13801')]);
+    const kml = db.prepare("INSERT INTO towers(id,stationId,address,province,lat,lng,operators,source,addedBy,status) VALUES(?,?,'X','Mazowieckie',?,?,?,'UKE','Import KML','APPROVED')");
+    const ops = (name: string, azimuths?: number[]) => JSON.stringify([{name, stationIds: [], azimuths, bands: [{tech: 'GSM', band: '900', permit: 'old'}]}]);
+    // The same site, coordinates rounded by the KML, so its id differs from the registry's.
+    kml.run('UKE_kml_twin', '13801', 52.229722, 20.977778, ops('Orange', [10, 130, 250]));
+    // Same station ID but another operator, and the same operator far away: different sites.
+    kml.run('UKE_kml_other_op', '13801', 52.229722, 20.977778, ops('Play'));
+    kml.run('UKE_kml_far', '13801', 50.06, 19.94, ops('Orange'));
+    // Not in the registry at all (e.g. a Plus site): kept.
+    kml.run('UKE_kml_plus', 'PLS0001', 51.0, 17.0, ops('Plus'));
+    db.prepare("INSERT INTO comments(id,towerId,userNick,text,createdAt) VALUES('c1','UKE_kml_twin','Anna','Fajny maszt','2026-11-01')").run();
+    db.prepare("INSERT INTO pem_report_counts(towerId,count,partial,checkedAt) VALUES('UKE_kml_twin',3,0,'2026-11-01')").run();
+
+    const result = await syncUkeWykaz(db, options);
+    assert.equal(result.updated, true);
+    const ids = db.prepare('SELECT id FROM towers ORDER BY id').all().map(r => String(r.id));
+    const registryId = ids.find(id => !id.startsWith('UKE_kml'))!;
+    assert.deepEqual(ids.filter(id => id.startsWith('UKE_kml')), ['UKE_kml_far', 'UKE_kml_other_op', 'UKE_kml_plus']);
+    assert.equal(ids.length, 4);
+    const merged = JSON.parse(String(db.prepare('SELECT operators FROM towers WHERE id=?').get(registryId)!.operators));
+    assert.deepEqual(merged[0].azimuths, [10, 130, 250], 'azimuths of the KML copy are kept');
+    assert.deepEqual(merged[0].bands.map((b: {tech: string; band: string}) => `${b.tech} ${b.band}`).sort(), ['5G 3600', 'LTE 1800'], 'bands come from the registry');
+    assert.equal(String(db.prepare("SELECT towerId FROM comments WHERE id='c1'").get()!.towerId), registryId, 'comments follow the station');
+    assert.equal(db.prepare("SELECT 1 FROM pem_report_counts WHERE towerId='UKE_kml_twin'").get(), undefined);
+
+    // A database synced by an older version re-reads the unchanged registry once, then not again.
+    db.prepare("DELETE FROM metadata WHERE key='ukeSyncFormat'").run();
+    assert.equal((await syncUkeWykaz(db, options)).updated, true);
+    assert.equal((await syncUkeWykaz(db, options)).updated, false);
+  } finally { db.close(); rmSync(tempDir, {recursive: true, force: true}); }
+});
+
 test('a page without registry files is reported as an error instead of passing silently', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'btmap-uke-'));
   const db = openDatabase(':memory:');
