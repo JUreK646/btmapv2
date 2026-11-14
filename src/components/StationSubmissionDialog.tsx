@@ -28,16 +28,7 @@ import {
   Signal,
   Compass,
   RefreshCw,
-  UserRound,
   HelpCircle,
-  Network,
-  TrainFront,
-  Zap,
-  Landmark,
-  Church,
-  Factory,
-  Droplets,
-  House,
 } from 'lucide-react';
 import type { Tower, TowerResult } from '../types';
 import { post, api } from '../lib/api';
@@ -80,12 +71,11 @@ const MAST_TYPES = [
 /** Structure owners, grouped as they are shown in the owner list. */
 const OWNER_GROUPS: { label: string; options: string[] }[] = [
   { label: '', options: ['Nieznany'] },
-  { label: 'Operatorzy sieci', options: ['Orange', 'T-Mobile', 'Play', 'Plus', 'NetWorkS!'] },
+  { label: 'Operatorzy sieci', options: ['Orange', 'T-Mobile', 'Play', 'Plus'] },
   { label: 'Firmy wieżowe', options: ['Cellnex / Towerlink', 'On Tower Poland', 'Emitel'] },
   { label: 'Telekomunikacja i kolej', options: ['Exatel', 'Netia', 'PKP / PKP PLK'] },
   { label: 'Energetyka', options: ['PGE', 'Tauron', 'Enea', 'Energa'] },
-  // Owners only: what the structure is (church tower, chimney, water tower…) belongs in "Konstrukcja".
-  { label: 'Inni właściciele', options: ['Spółdzielnia / wspólnota', 'Samorząd / gmina', 'Właściciel prywatny', 'Własny'] },
+  // Companies only: what the structure is (building, church tower, chimney…) belongs in "Konstrukcja".
 ];
 const OWNERS = OWNER_GROUPS.flatMap(g => g.options);
 const BACKHAUL_OPTIONS = ['Nieznany', 'Radiolinia', 'Światłowód'];
@@ -461,7 +451,7 @@ function textOf(node: React.ReactNode): string {
 }
 
 /** How each structure owner is shown: the brand's logo where the app has one, otherwise a plain icon. */
-type OwnerIcon = 'tower' | 'network' | 'train' | 'power' | 'building' | 'town' | 'church' | 'factory' | 'water' | 'home' | 'own' | 'unknown';
+type OwnerIcon = 'tower' | 'unknown';
 const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: OwnerIcon }> = {
   Orange: { logo: '/logos/orange.svg', logoClass: 'is-square' },
   'T-Mobile': { logo: '/logos/tmobile.svg', logoClass: 'is-square' },
@@ -473,31 +463,16 @@ const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: O
   PGE: { logo: '/logos/pge.png', logoClass: 'is-white' },
   Tauron: { logo: '/logos/tauron.png', logoClass: 'is-white' },
   Enea: { logo: '/logos/enea.png', logoClass: 'is-white' },
-  'NetWorkS!': { icon: 'network' },
-  // Towerlink and On Tower Poland are Cellnex group companies.
   'Cellnex / Towerlink': { logo: '/logos/cellnex.svg', logoClass: 'is-white-wide' },
-  'On Tower Poland': { logo: '/logos/cellnex.svg', logoClass: 'is-white-wide' },
-  'PKP / PKP PLK': { icon: 'train' },
-  Energa: { icon: 'power' },
-  'Spółdzielnia / wspólnota': { icon: 'building' },
-  'Samorząd / gmina': { icon: 'town' },
-  'Właściciel prywatny': { icon: 'home' },
-  'Własny': { icon: 'own' },
+  // On Tower Poland has its own logo, which the app does not have yet.
+  'On Tower Poland': { icon: 'tower' },
+  'PKP / PKP PLK': { logo: '/logos/pkp-plk.png', logoClass: 'is-white-wide' },
+  Energa: { logo: '/logos/energa.png', logoClass: 'is-white-wide' },
   Nieznany: { icon: 'unknown' },
 };
 
 const OWNER_ICONS: Record<OwnerIcon, React.ReactNode> = {
   tower: <RadioTower size={14} />,
-  network: <Network size={14} />,
-  train: <TrainFront size={14} />,
-  power: <Zap size={14} />,
-  building: <Building2 size={14} />,
-  town: <Landmark size={14} />,
-  church: <Church size={14} />,
-  factory: <Factory size={14} />,
-  water: <Droplets size={14} />,
-  home: <House size={14} />,
-  own: <UserRound size={14} />,
   unknown: <HelpCircle size={14} />,
 };
 
