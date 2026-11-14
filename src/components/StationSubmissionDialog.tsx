@@ -464,8 +464,8 @@ const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: O
   Tauron: { logo: '/logos/tauron.png', logoClass: 'is-white' },
   Enea: { logo: '/logos/enea.png', logoClass: 'is-white' },
   'Cellnex / Towerlink': { logo: '/logos/cellnex.svg', logoClass: 'is-white-wide' },
-  // On Tower Poland has its own logo, which the app does not have yet.
-  'On Tower Poland': { icon: 'tower' },
+  // On Tower Poland belongs to the Cellnex group and is shown with the Cellnex logo.
+  'On Tower Poland': { logo: '/logos/cellnex.svg', logoClass: 'is-white-wide' },
   'PKP / PKP PLK': { logo: '/logos/pkp-plk.png', logoClass: 'is-white-wide' },
   Energa: { logo: '/logos/energa.png', logoClass: 'is-white-wide' },
   Nieznany: { icon: 'unknown' },
