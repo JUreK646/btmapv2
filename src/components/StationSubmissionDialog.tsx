@@ -29,6 +29,14 @@ import {
   RefreshCw,
   UserRound,
   HelpCircle,
+  Network,
+  TrainFront,
+  Zap,
+  Landmark,
+  Church,
+  Factory,
+  Droplets,
+  House,
 } from 'lucide-react';
 import type { Tower, TowerResult } from '../types';
 import { post, api } from '../lib/api';
@@ -66,7 +74,19 @@ const MAST_TYPES = [
   'Inny',
 ];
 
-const OWNERS = ['Nieznany', 'Cellnex / Towerlink', 'Emitel', 'Orange', 'Play', 'Plus', 'T-Mobile', 'Własny'];
+/** Structure owners, grouped as they are shown in the owner list. */
+const OWNER_GROUPS: { label: string; options: string[] }[] = [
+  { label: '', options: ['Nieznany'] },
+  { label: 'Operatorzy sieci', options: ['Orange', 'T-Mobile', 'Play', 'Plus', 'NetWorkS!'] },
+  { label: 'Firmy wieżowe', options: ['Cellnex / Towerlink', 'On Tower Poland', 'Emitel'] },
+  { label: 'Telekomunikacja i kolej', options: ['Exatel', 'Netia', 'PKP / PKP PLK'] },
+  { label: 'Energetyka', options: ['PGE', 'Tauron', 'Enea', 'Energa'] },
+  {
+    label: 'Inne obiekty',
+    options: ['Spółdzielnia / wspólnota', 'Samorząd / gmina', 'Obiekt sakralny', 'Zakład przemysłowy / komin', 'Wodociągi / wieża ciśnień', 'Właściciel prywatny', 'Własny'],
+  },
+];
+const OWNERS = OWNER_GROUPS.flatMap(g => g.options);
 const BACKHAUL_OPTIONS = ['Nieznany', 'Radiolinia', 'Światłowód'];
 const CELL_TYPES = ['macro', 'micro', 'indoor'] as const;
 const MAX_AZIMUTHS = 15;
@@ -308,15 +328,46 @@ function SelectBox({
 }
 
 /** How each structure owner is shown: the brand's logo where the app has one, otherwise a plain icon. */
-const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: 'tower' | 'own' | 'unknown' }> = {
+type OwnerIcon = 'tower' | 'network' | 'train' | 'power' | 'building' | 'town' | 'church' | 'factory' | 'water' | 'home' | 'own' | 'unknown';
+const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: OwnerIcon }> = {
   Orange: { logo: '/logos/orange.svg', logoClass: 'is-square' },
   'T-Mobile': { logo: '/logos/tmobile.svg', logoClass: 'is-square' },
   Play: { logo: '/logos/play.svg', logoClass: 'is-play' },
   Plus: { logo: '/logos/plus.svg', logoClass: 'is-plus' },
   Emitel: { logo: '/logos/emitel.svg', logoClass: 'is-emitel' },
+  Exatel: { logo: '/logos/exatel.png', logoClass: 'is-white' },
+  Netia: { logo: '/logos/netia.png', logoClass: 'is-white' },
+  PGE: { logo: '/logos/pge.png', logoClass: 'is-white' },
+  Tauron: { logo: '/logos/tauron.png', logoClass: 'is-white' },
+  Enea: { logo: '/logos/enea.png', logoClass: 'is-white' },
+  'NetWorkS!': { icon: 'network' },
   'Cellnex / Towerlink': { icon: 'tower' },
+  'On Tower Poland': { icon: 'tower' },
+  'PKP / PKP PLK': { icon: 'train' },
+  Energa: { icon: 'power' },
+  'Spółdzielnia / wspólnota': { icon: 'building' },
+  'Samorząd / gmina': { icon: 'town' },
+  'Obiekt sakralny': { icon: 'church' },
+  'Zakład przemysłowy / komin': { icon: 'factory' },
+  'Wodociągi / wieża ciśnień': { icon: 'water' },
+  'Właściciel prywatny': { icon: 'home' },
   'Własny': { icon: 'own' },
   Nieznany: { icon: 'unknown' },
+};
+
+const OWNER_ICONS: Record<OwnerIcon, React.ReactNode> = {
+  tower: <RadioTower size={14} />,
+  network: <Network size={14} />,
+  train: <TrainFront size={14} />,
+  power: <Zap size={14} />,
+  building: <Building2 size={14} />,
+  town: <Landmark size={14} />,
+  church: <Church size={14} />,
+  factory: <Factory size={14} />,
+  water: <Droplets size={14} />,
+  home: <House size={14} />,
+  own: <UserRound size={14} />,
+  unknown: <HelpCircle size={14} />,
 };
 
 function OwnerMark({ owner }: { owner: string }) {
@@ -328,11 +379,7 @@ function OwnerMark({ owner }: { owner: string }) {
       </span>
     );
   }
-  return (
-    <span className="ss-owner-mark is-icon">
-      {brand.icon === 'tower' ? <RadioTower size={14} /> : brand.icon === 'own' ? <UserRound size={14} /> : <HelpCircle size={14} />}
-    </span>
-  );
+  return <span className="ss-owner-mark is-icon">{OWNER_ICONS[brand.icon || 'unknown']}</span>;
 }
 
 /** A select whose options carry the owner's logo; a native select cannot show images in its list. */
@@ -393,22 +440,30 @@ function OwnerSelect({ value, options, onChange }: { value: string; options: str
       </button>
       {open && (
         <ul className="ss-owner-list" role="listbox" aria-label="Właściciel konstrukcji">
-          {options.map((o, i) => (
-            <li
-              key={o}
-              role="option"
-              aria-selected={o === value}
-              className={`${o === value ? 'is-selected' : ''} ${i === active ? 'is-active' : ''}`}
-              onMouseEnter={() => setActive(i)}
-              onMouseDown={e => {
-                e.preventDefault();
-                choose(o);
-              }}
-            >
-              <OwnerMark owner={o} />
-              <span>{o}</span>
-              {o === value && <Check size={14} className="ss-owner-check" />}
-            </li>
+          {OWNER_GROUPS.map(group => (
+            <React.Fragment key={group.label || 'none'}>
+              {group.label && <li className="ss-owner-group" role="presentation">{group.label}</li>}
+              {group.options.map(o => {
+                const i = options.indexOf(o);
+                return (
+                  <li
+                    key={o}
+                    role="option"
+                    aria-selected={o === value}
+                    className={`${o === value ? 'is-selected' : ''} ${i === active ? 'is-active' : ''}`}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      choose(o);
+                    }}
+                  >
+                    <OwnerMark owner={o} />
+                    <span>{o}</span>
+                    {o === value && <Check size={14} className="ss-owner-check" />}
+                  </li>
+                );
+              })}
+            </React.Fragment>
           ))}
         </ul>
       )}
