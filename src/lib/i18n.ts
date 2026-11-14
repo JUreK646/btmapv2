@@ -163,7 +163,7 @@ export const i18n = {
     searchPlaceNotFound: 'Nie znaleziono miejsca. Spróbuj pełnej nazwy miasta lub współrzędnych.',
     searchServiceUnavailable: 'Wyszukiwanie miejsc jest chwilowo niedostępne.',
     searchCellIdHeader: 'Wykryto identyfikator sieci komórkowej',
-    sectorHighlightTitle: 'Wykryty sektor antenowy',
+    sectorHighlightTitle: 'Podświetlony sektor',
     clearSectorHighlight: 'Zamknij podświetlenie sektora',
 
     // Filters
@@ -596,7 +596,7 @@ export const i18n = {
     searchPlaceNotFound: 'Location not found. Try a full city name or coordinates.',
     searchServiceUnavailable: 'Place search is temporarily unavailable.',
     searchCellIdHeader: 'Cellular Network Identifier Detected',
-    sectorHighlightTitle: 'Detected Antenna Sector',
+    sectorHighlightTitle: 'Highlighted sector',
     clearSectorHighlight: 'Close sector highlight',
 
     // Filters

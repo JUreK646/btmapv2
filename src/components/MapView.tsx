@@ -385,10 +385,33 @@ function AzimuthBeams({
   // Scaled cone radius in meters:
   const lengthMul = settings?.azimuthLength === 'short' ? 0.75 : settings?.azimuthLength === 'long' ? 1.45 : 1.0;
   const radiusM = (zoom >= 17 ? 110 : zoom >= 16 ? 130 : zoom >= 15 ? 150 : 180) * lengthMul;
-  const beamwidthDeg = 44;
+  // Drawing width of a sector. Registries give directions, not beam widths, so this is only how a direction is shown.
+  const beamwidthDeg = 30;
 
-  const fillOpacity = settings?.azimuthOpacity ? settings.azimuthOpacity * 0.55 : 0.22;
-  const strokeOpacity = settings?.azimuthOpacity ? Math.min(1.0, settings.azimuthOpacity * 1.5) : 0.65;
+  const fillOpacity = settings?.azimuthOpacity ? settings.azimuthOpacity * 0.5 : 0.24;
+  const strokeOpacity = settings?.azimuthOpacity ? Math.min(1.0, settings.azimuthOpacity * 1.4) : 0.8;
+
+  /** Directions closer than this share one label, so neighbouring sectors do not stack their numbers. */
+  const LABEL_MERGE_DEG = 25;
+  const labelGroups = (azs: number[]) => {
+    const sorted = [...new Set(azs)].sort((a, b) => a - b);
+    const groups: number[][] = [];
+    for (const az of sorted) {
+      const last = groups[groups.length - 1];
+      if (last && az - last[last.length - 1] < LABEL_MERGE_DEG) last.push(az);
+      else groups.push([az]);
+    }
+    // Wrap around north: 350° and 10° are neighbours.
+    if (groups.length > 1 && groups[0][0] + 360 - groups[groups.length - 1].slice(-1)[0] < LABEL_MERGE_DEG) {
+      groups[0] = [...groups.pop()!, ...groups[0]];
+    }
+    return groups;
+  };
+  const meanAngle = (angles: number[]) => {
+    const s = angles.reduce((acc, a) => acc + Math.sin((a * Math.PI) / 180), 0);
+    const c = angles.reduce((acc, a) => acc + Math.cos((a * Math.PI) / 180), 0);
+    return ((Math.atan2(s, c) * 180) / Math.PI + 360) % 360;
+  };
 
   return (
     <>
@@ -398,86 +421,51 @@ function AzimuthBeams({
         const azs = isHlTower && highlightedSector && !rawAzs.includes(highlightedSector.azimuth)
           ? [...rawAzs, highlightedSector.azimuth].sort((a, b) => a - b)
           : rawAzs;
-        const opColor = operatorColor(t.operators[0]?.name) || '#f59e0b';
+        const opColor = operatorColor(t.operators[0]?.name) || '#788992';
         const latRad = (t.lat * Math.PI) / 180;
+        const hlAz = isHlTower && highlightedSector ? highlightedSector.azimuth : null;
+        const offset = (az: number, distM: number): [number, number] => [
+          t.lat + (distM * Math.cos((az * Math.PI) / 180)) / 111320,
+          t.lng + (distM * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad)),
+        ];
 
         return (
           <Fragment key={`az-group-${t.id}`}>
-            {/* Sector Cones / Wedges */}
+            {/* Sectors in the operator's colour; the highlighted one is filled more and outlined in white */}
             {azs.map(az => {
-              const isTargetSector = Boolean(isHlTower && highlightedSector && highlightedSector.azimuth === az);
-              const poly = sectorPolygon(
-                t.lat,
-                t.lng,
-                az,
-                isTargetSector ? radiusM * 1.3 : radiusM,
-                isTargetSector ? 50 : beamwidthDeg
-              );
+              const isTarget = hlAz === az;
               return (
                 <Polygon
                   key={`poly-${t.id}-${az}`}
-                  positions={poly}
+                  positions={sectorPolygon(t.lat, t.lng, az, isTarget ? radiusM * 1.15 : radiusM, beamwidthDeg)}
                   renderer={renderer}
                   pathOptions={{
-                    color: isTargetSector ? '#00e5ff' : opColor,
-                    weight: isTargetSector ? 3.5 : 1.5,
-                    opacity: isTargetSector ? 1.0 : strokeOpacity,
-                    fillColor: isTargetSector ? '#00e5ff' : opColor,
-                    fillOpacity: isTargetSector ? 0.65 : fillOpacity,
+                    color: isTarget ? '#ffffff' : opColor,
+                    weight: isTarget ? 2 : 1.2,
+                    opacity: isTarget ? 0.95 : strokeOpacity,
+                    fillColor: opColor,
+                    fillOpacity: isTarget ? Math.min(0.75, fillOpacity * 2.4) : fillOpacity,
+                    lineJoin: 'round',
                   }}
                   interactive={false}
                 />
               );
             })}
 
-            {/* Subtle centerline ray inside each sector cone */}
-            {azs.map(az => {
-              const isTargetSector = Boolean(isHlTower && highlightedSector && highlightedSector.azimuth === az);
-              const rayLen = isTargetSector ? radiusM * 1.35 : radiusM;
-              const rayEnd: [number, number] = [
-                t.lat + (rayLen * Math.cos((az * Math.PI) / 180)) / 111320,
-                t.lng + (rayLen * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad)),
-              ];
-              return (
-                <Polyline
-                  key={`ray-${t.id}-${az}`}
-                  positions={[[t.lat, t.lng], rayEnd]}
-                  renderer={renderer}
-                  pathOptions={{
-                    color: isTargetSector ? '#ffffff' : opColor,
-                    weight: isTargetSector ? 2.8 : 1.2,
-                    opacity: isTargetSector ? 1.0 : strokeOpacity * 0.7,
-                  }}
-                  interactive={false}
-                />
-              );
-            })}
-
-            {/* Azimuth Degree Labels centered INSIDE each sector cone */}
-            {azs.map(az => {
-              const isTargetSector = Boolean(isHlTower && highlightedSector && highlightedSector.azimuth === az);
-              const labelDistM = (isTargetSector ? radiusM * 1.3 : radiusM) * 0.60;
-              const dLat = (labelDistM * Math.cos((az * Math.PI) / 180)) / 111320;
-              const dLng = (labelDistM * Math.sin((az * Math.PI) / 180)) / (111320 * Math.cos(latRad));
-              const labelPos: [number, number] = [t.lat + dLat, t.lng + dLng];
-
+            {/* Degree labels just past the arc, one per group of close directions */}
+            {labelGroups(azs).map(group => {
+              const containsTarget = hlAz !== null && group.includes(hlAz);
+              const text = containsTarget && highlightedSector
+                ? `${highlightedSector.sectorNum ? `S${highlightedSector.sectorNum} · ` : ''}${group.map(a => `${a}°`).join(' · ')}`
+                : group.map(a => `${a}°`).join(' · ');
+              const pos = offset(meanAngle(group), (containsTarget ? radiusM * 1.15 : radiusM) * 1.18);
               const icon = L.divIcon({
-                className: `az-beam-label ${isTargetSector ? 'is-target' : ''}`,
-                html: isTargetSector && highlightedSector
-                  ? `<span>🎯 ${highlightedSector.sectorNum ? `Sektor ${highlightedSector.sectorNum} · ` : ''}${az}°</span>`
-                  : `<span>${az}°</span>`,
-                iconSize: isTargetSector ? [120, 24] : [44, 18],
-                iconAnchor: isTargetSector ? [60, 12] : [22, 9],
+                className: `az-beam-label ${containsTarget ? 'is-target' : ''}`,
+                html: `<span>${text}</span>`,
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
               });
-
-              return (
-                <Marker
-                  key={`lbl-${t.id}-${az}`}
-                  position={labelPos}
-                  icon={icon}
-                  interactive={false}
-                />
-              );
+              return <Marker key={`lbl-${t.id}-${group.join('-')}`} position={pos} icon={icon} interactive={false} />;
             })}
           </Fragment>
         );
