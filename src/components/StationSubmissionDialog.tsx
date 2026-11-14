@@ -365,6 +365,8 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
 
   // Submit
   const [editorNote, setEditorNote] = useState('');
+  // Missing required values are pointed out only after the first submit attempt, not while the form is still empty.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [isDone, setIsDone] = useState(false);
@@ -856,6 +858,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
     [city, address, stationId, stationName, notes, mastDescription].filter(v => v.trim()).length;
 
   const handleSubmit = async () => {
+    setSubmitAttempted(true);
     if (totalErrors > 0) {
       setShowErrorList(true);
       return;
@@ -1024,7 +1027,12 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
   };
 
   const renderRow = (cell: CellInput, t: RatTech) => {
-    const err = cellValidation[cell.id!] || {};
+    // A wrong value is shown at once; an empty required field only after a submit attempt.
+    const err = Object.fromEntries(
+      Object.entries(cellValidation[cell.id!] || {}).filter(
+        ([field]) => submitAttempted || String((cell as unknown as Record<string, unknown>)[field] ?? '').trim() !== '',
+      ),
+    ) as Record<string, string>;
     const cols = columnsFor(t).length;
     const eci = t === 'LTE' ? calculateEci(cell.nodeId ?? '', cell.cellId ?? '', 'LTE') : null;
     const longCid = t === 'UMTS' && umtsRnc && cell.cellId ? Number(umtsRnc) * 65536 + Number(cell.cellId) : null;
@@ -1156,7 +1164,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
             <strong>{activeSourceTower?.stationId ? `Zgłoszenie stacji: ${activeSourceTower.stationId}` : 'Nowe zgłoszenie stacji'}</strong>
           </nav>
           <div className="ss-topbar-right">
-            {totalErrors > 0 ? (
+            {totalErrors > 0 && !submitAttempted ? null : totalErrors > 0 ? (
               <button
                 type="button"
                 className="ss-err-pill"
@@ -1214,24 +1222,13 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                     </button>
                   </div>
                 </div>
-                <div className="ss-card-body">
-                  <p className="ss-muted">
-                    {stationMode === 'new'
-                      ? 'Wskaż punkt na mapie satelitarnej i uzupełnij parametry radiowe odebrane w terenie.'
-                      : 'Zaproponuj korektę parametrów lub uzupełnienie komórek dla wybranej lokalizacji.'}
-                  </p>
-                </div>
               </section>
 
               {/* Wybór operatora sieci */}
               <section className="ss-card ss-card-operator" style={{ '--current-op-color': opColor } as React.CSSProperties}>
                 <div className="ss-card-head">
                   <span className="ss-card-title">
-                    <Signal size={15} style={{ color: opColor }} /> Operator stacji bazowej
-                  </span>
-                  <span className="ss-op-selected-tag" style={{ borderColor: opColor, color: opColor }}>
-                    <i className="ss-op-dot" style={{ background: opColor }} />
-                    {operator}
+                    <Signal size={15} /> Operator
                   </span>
                 </div>
                 <div className="ss-card-body">
@@ -1259,9 +1256,6 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                       );
                     })}
                   </div>
-                  <p className="ss-help">
-                    Wybór operatora filtruje dostępne pasma radiowe (np. wyłączność pasma 2600 TDD dla Plus) oraz reguły walidacji kanałów i numeracji stacji.
-                  </p>
                 </div>
               </section>
 
@@ -1349,7 +1343,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                     <label className="ss-field">
                       <span>Miejscowość</span>
                       <input
-                        className={`ss-input ${stationErrors.city ? 'is-invalid' : ''}`}
+                        className={`ss-input ${submitAttempted && stationErrors.city ? 'is-invalid' : ''}`}
                         value={city}
                         onChange={e => setCity(e.target.value)}
                         placeholder="np. Poznań"
@@ -1426,22 +1420,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                 <div className="ss-card-body">
                   <div className="ss-inline ss-gap-12">
                     <div className="ss-field">
-                      <span>Sieć macierzysta</span>
-                      <SelectBox
-                        value={operator}
-                        onChange={setOperator}
-                        className="ss-fit"
-                        icon={<i className="ss-op-dot" style={{ background: opColor }} />}
-                      >
-                        {OPERATORS.map(o => (
-                          <option key={o.name} value={o.name}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </SelectBox>
-                    </div>
-                    <div className="ss-field">
-                      <span>Dosył (Backhaul)</span>
+                      <span>Łącze dosyłowe</span>
                       <SelectBox value={backhaul} onChange={setBackhaul} className="ss-w-140">
                         {BACKHAUL_OPTIONS.map(b => (
                           <option key={b} value={b}>
@@ -1456,7 +1435,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                     <label className="ss-field">
                       <span>ID stacji</span>
                       <input
-                        className={`ss-input ss-mono ${stationErrors.stationId ? 'is-invalid' : ''}`}
+                        className={`ss-input ss-mono ${submitAttempted && stationErrors.stationId ? 'is-invalid' : ''}`}
                         value={stationId}
                         onChange={e => setStationId(e.target.value.toUpperCase())}
                         placeholder="np. WAWA001"
@@ -1472,7 +1451,6 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                       />
                     </label>
                   </div>
-                  <p className="ss-help">Oznaczenie stacji z pozwolenia radiowego lub programu pomiarowego</p>
 
                   <label className="ss-field">
                     <span>Informacje ogólne o stacji</span>

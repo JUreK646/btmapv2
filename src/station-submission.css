@@ -1746,3 +1746,53 @@
   color: #ffffff;
   background: rgba(255, 255, 255, 0.1);
 }
+
+
+/* ============================================================
+   Calmer layout: a wider left column, plain cards without glow,
+   operators as one row of simple buttons, a muted send button.
+   ============================================================ */
+.ss-body { grid-template-columns: 520px minmax(0, 1fr); }
+@media (max-width: 1280px) { .ss-body { grid-template-columns: 440px minmax(0, 1fr); } }
+@media (max-width: 1120px) { .ss-body { grid-template-columns: 380px minmax(0, 1fr); } }
+
+.ss-left-scroll { padding: 14px; gap: 12px; }
+.ss-card { border-radius: 12px; background: #0f1115; border-color: #1c2029; }
+.ss-card-operator { background: #0f1115; border-color: #1c2029; }
+.ss-card-head { padding: 11px 14px; }
+.ss-card-body { padding: 14px; gap: 12px; }
+.ss-card-title { font-size: 13.5px; font-weight: 700; }
+
+/* Operators: one row, a dot and the name; the chosen one gets the operator's outline */
+.ss-operator-selector { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ss-operator-btn {
+  flex-direction: row;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: #13161c;
+  border-color: #1f232c;
+  color: #c3c8d2;
+}
+.ss-operator-btn:hover { transform: none; background: #181b22; border-color: #2a2f3a; color: #f1f3f7; }
+.ss-operator-btn.is-selected {
+  background: color-mix(in srgb, var(--op-accent) 12%, #13161c);
+  border-color: var(--op-accent);
+  color: #ffffff;
+  box-shadow: none;
+}
+.ss-operator-btn.is-selected .ss-op-indicator { transform: none; box-shadow: none; }
+.ss-operator-btn .ss-op-check { display: none; }
+.ss-operator-btn:focus-visible { outline: 2px solid #56b4e9; outline-offset: 2px; }
+@media (max-width: 480px) { .ss-operator-selector { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Send: muted fill, brighter on hover */
+.ss-submit {
+  height: 38px;
+  border-radius: 9px;
+  background: #1f4b66;
+  color: #e6f3fb;
+}
+.ss-submit:hover:not(:disabled) { filter: none; background: #26597a; }
+.ss-submit:focus-visible { outline: 2px solid #56b4e9; outline-offset: 2px; }
