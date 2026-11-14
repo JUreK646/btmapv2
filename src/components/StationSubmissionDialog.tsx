@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -68,7 +69,9 @@ const MAST_TYPES = [
   'Dach budynku',
   'Komin',
   'Wieża kościoła',
+  'Wieża ciśnień',
   'Silos / elewator',
+  'Obiekt przemysłowy',
   'Słup oświetleniowy / energetyczny',
   'Wewnątrz budynku',
   'Inny',
@@ -81,10 +84,8 @@ const OWNER_GROUPS: { label: string; options: string[] }[] = [
   { label: 'Firmy wieżowe', options: ['Cellnex / Towerlink', 'On Tower Poland', 'Emitel'] },
   { label: 'Telekomunikacja i kolej', options: ['Exatel', 'Netia', 'PKP / PKP PLK'] },
   { label: 'Energetyka', options: ['PGE', 'Tauron', 'Enea', 'Energa'] },
-  {
-    label: 'Inne obiekty',
-    options: ['Spółdzielnia / wspólnota', 'Samorząd / gmina', 'Obiekt sakralny', 'Zakład przemysłowy / komin', 'Wodociągi / wieża ciśnień', 'Właściciel prywatny', 'Własny'],
-  },
+  // Owners only: what the structure is (church tower, chimney, water tower…) belongs in "Konstrukcja".
+  { label: 'Inni właściciele', options: ['Spółdzielnia / wspólnota', 'Samorząd / gmina', 'Właściciel prywatny', 'Własny'] },
 ];
 const OWNERS = OWNER_GROUPS.flatMap(g => g.options);
 const BACKHAUL_OPTIONS = ['Nieznany', 'Radiolinia', 'Światłowód'];
@@ -315,16 +316,148 @@ function SelectBox({
   invalid?: boolean;
   chevron?: 'updown' | 'down';
 }) {
+  // Options are still written as <option> children; they are read here and shown in a styled list.
+  const options = React.Children.toArray(children)
+    .filter((c): c is React.ReactElement<{ value?: string; disabled?: boolean; children?: React.ReactNode }> => React.isValidElement(c) && c.type === 'option')
+    .map(c => ({ value: String(c.props.value ?? ''), label: textOf(c.props.children), disabled: Boolean(c.props.disabled) }))
+    // A disabled empty option is only a prompt ("Wybierz pasmo"); the field shows it, the list does not.
+    .filter(o => !(o.disabled && o.value === ''));
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = window.innerHeight - r.bottom - 12;
+    const above = r.top - 12;
+    const openUp = below < 220 && above > below;
+    setPos({
+      left: Math.min(r.left, window.innerWidth - Math.max(r.width, 180) - 8),
+      width: Math.max(r.width, 180),
+      ...(openUp ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }),
+      maxHeight: Math.min(320, openUp ? above : below),
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!btnRef.current?.contains(t) && !listRef.current?.contains(t)) setOpen(false);
+    };
+    // The list is placed against the viewport, so it closes when anything around it scrolls or resizes.
+    const onMove = (e: Event) => {
+      if (listRef.current && e.target instanceof Node && listRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  }, [open, active]);
+
+  const openList = () => {
+    place();
+    setActive(Math.max(0, options.findIndex(o => o.value === value)));
+    setOpen(true);
+  };
+  const choose = (o: { value: string; disabled: boolean }) => {
+    if (o.disabled) return;
+    onChange(o.value);
+    setOpen(false);
+    btnRef.current?.focus();
+  };
+  const step = (dir: 1 | -1) => {
+    setActive(i => {
+      let n = i;
+      for (let k = 0; k < options.length; k++) {
+        n = (n + dir + options.length) % options.length;
+        if (!options[n].disabled) return n;
+      }
+      return i;
+    });
+  };
+  const portalHost = (btnRef.current?.closest('.ss-backdrop') as HTMLElement | null) || document.body;
+
   return (
-    <div className={`ss-select ${invalid ? 'is-invalid' : ''} ${className}`}>
-      {icon && <span className="ss-select-icon">{icon}</span>}
-      <span className="ss-select-value">{display ?? value}</span>
-      {chevron === 'updown' ? <ChevronsUpDown size={13} className="ss-select-chev" /> : <ChevronDown size={14} className="ss-select-chev" />}
-      <select value={value} onChange={e => onChange(e.target.value)}>
-        {children}
-      </select>
-    </div>
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={`ss-select ${invalid ? 'is-invalid' : ''} ${open ? 'is-open' : ''} ${className}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : openList())}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!open) openList();
+            else step(e.key === 'ArrowDown' ? 1 : -1);
+          } else if ((e.key === 'Enter' || e.key === ' ') && open) {
+            e.preventDefault();
+            if (options[active]) choose(options[active]);
+          } else if (e.key === 'Escape' && open) {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+          } else if (e.key === 'Tab') {
+            setOpen(false);
+          }
+        }}
+      >
+        {icon && <span className="ss-select-icon">{icon}</span>}
+        <span className="ss-select-value">{display ?? (options.find(o => o.value === value)?.label || value)}</span>
+        {chevron === 'updown' ? <ChevronsUpDown size={13} className="ss-select-chev" /> : <ChevronDown size={14} className="ss-select-chev" />}
+      </button>
+      {open && pos && createPortal(
+        <ul
+          ref={listRef}
+          className="ss-dropdown"
+          role="listbox"
+          style={{ left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.width, maxHeight: pos.maxHeight }}
+        >
+          {options.map((o, i) => (
+            <li
+              key={`${o.value}-${i}`}
+              role="option"
+              aria-selected={o.value === value}
+              aria-disabled={o.disabled || undefined}
+              className={`${o.value === value ? 'is-selected' : ''} ${i === active ? 'is-active' : ''} ${o.disabled ? 'is-disabled' : ''}`}
+              onMouseEnter={() => !o.disabled && setActive(i)}
+              onMouseDown={e => {
+                e.preventDefault();
+                choose(o);
+              }}
+            >
+              <span>{o.label}</span>
+              {o.value === value && <Check size={14} />}
+            </li>
+          ))}
+        </ul>,
+        portalHost,
+      )}
+    </>
   );
+}
+
+/** Plain text of an option's children (strings, numbers and nested arrays). */
+function textOf(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) return textOf(node.props.children);
+  return '';
 }
 
 /** How each structure owner is shown: the brand's logo where the app has one, otherwise a plain icon. */
@@ -341,15 +474,13 @@ const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: O
   Tauron: { logo: '/logos/tauron.png', logoClass: 'is-white' },
   Enea: { logo: '/logos/enea.png', logoClass: 'is-white' },
   'NetWorkS!': { icon: 'network' },
-  'Cellnex / Towerlink': { icon: 'tower' },
-  'On Tower Poland': { icon: 'tower' },
+  // Towerlink and On Tower Poland are Cellnex group companies.
+  'Cellnex / Towerlink': { logo: '/logos/cellnex.svg', logoClass: 'is-white-wide' },
+  'On Tower Poland': { logo: '/logos/cellnex.svg', logoClass: 'is-white-wide' },
   'PKP / PKP PLK': { icon: 'train' },
   Energa: { icon: 'power' },
   'Spółdzielnia / wspólnota': { icon: 'building' },
   'Samorząd / gmina': { icon: 'town' },
-  'Obiekt sakralny': { icon: 'church' },
-  'Zakład przemysłowy / komin': { icon: 'factory' },
-  'Wodociągi / wieża ciśnień': { icon: 'water' },
   'Właściciel prywatny': { icon: 'home' },
   'Własny': { icon: 'own' },
   Nieznany: { icon: 'unknown' },
