@@ -1796,3 +1796,209 @@
 }
 .ss-submit:hover:not(:disabled) { filter: none; background: #26597a; }
 .ss-submit:focus-visible { outline: 2px solid #56b4e9; outline-offset: 2px; }
+
+
+/* ============================================================
+   Modern skin for the submission form.
+   Every colour comes from the app theme tokens, so the form follows
+   the light and dark themes like the rest of the app. Rounded:
+   cards 14px, fields and buttons 10px, chips 8px. No glow, no gradients.
+   ============================================================ */
+.ss-backdrop {
+  /* The form's older rules assume a dark surface throughout, so it always uses the app's dark palette. */
+  color-scheme: dark;
+  --bg: #08090b;
+  --surface: #121315;
+  --surface-alt: #1b1c1f;
+  --surface-hover: #27282c;
+  --text: #f4f4f5;
+  --muted: #acadb4;
+  --faint: #8a8c95;
+  --line: #2a2b30;
+  --accent: #f1f1f3;
+  --accent-hover: #d4d4d8;
+  --accent-soft: #26272b;
+  --accent-text: #f4f4f5;
+  --on-accent: #101113;
+  --danger: #ffb2b2;
+  --danger-bg: #362123;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-family: Manrope, system-ui, sans-serif;
+}
+.ss-backdrop .ss-page { background: var(--bg); }
+
+/* Top bar */
+.ss-backdrop .ss-topbar { height: 56px; min-height: 56px; padding: 0 12px 0 20px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ss-backdrop .ss-crumbs { color: var(--muted); font-size: 13px; gap: 8px; }
+.ss-backdrop .ss-crumbs strong { color: var(--text); font-weight: 800; font-size: 14px; }
+.ss-backdrop .ss-err-pill,
+.ss-backdrop .ss-ok-pill { height: 32px; padding: 0 12px; border-radius: 999px; font-weight: 700; }
+.ss-backdrop .ss-err-pill { background: var(--danger-bg); border-color: transparent; color: var(--danger); }
+.ss-backdrop .ss-err-pill:hover { background: var(--danger-bg); border-color: var(--danger); }
+.ss-backdrop .ss-ok-pill { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); }
+.ss-backdrop .ss-err-list { border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text); }
+.ss-backdrop .ss-err-list > div { color: var(--text); }
+.ss-backdrop .ss-err-list svg { color: var(--danger); }
+.ss-backdrop .ss-icon-btn { width: 34px; height: 34px; border-radius: 10px; color: var(--muted); }
+.ss-backdrop .ss-icon-btn:hover { background: var(--surface-hover); color: var(--text); }
+.ss-backdrop .ss-submit-error { background: var(--danger-bg); border-bottom-color: var(--line); color: var(--danger); }
+
+/* Columns */
+.ss-backdrop .ss-left { background: var(--bg); border-right: 1px solid var(--line); }
+.ss-backdrop .ss-left-scroll { padding: 16px; gap: 14px; }
+.ss-backdrop .ss-right { background: var(--bg); }
+.ss-backdrop .ss-left-scroll::-webkit-scrollbar-thumb,
+.ss-backdrop .ss-right-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+
+/* Cards */
+.ss-backdrop .ss-card,
+.ss-backdrop .ss-card-operator { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: none; overflow: visible; flex-shrink: 0; }
+/* Cards keep overflow visible so their dropdown menus are not clipped; the head carries the top corners. */
+.ss-backdrop .ss-card-head { padding: 12px 16px; border-bottom: 1px solid var(--line); border-radius: 13px 13px 0 0; }
+.ss-backdrop .ss-card-head.ss-clickable:hover { background: var(--surface-alt); }
+.ss-backdrop .ss-card-title { color: var(--text); font-size: 14px; font-weight: 800; gap: 9px; }
+.ss-backdrop .ss-card-title svg { color: var(--muted); }
+.ss-backdrop .ss-card-body { padding: 16px; gap: 14px; }
+.ss-backdrop .ss-muted,
+.ss-backdrop .ss-help,
+.ss-backdrop .ss-counter,
+.ss-backdrop .ss-hint-inline { color: var(--muted); }
+.ss-backdrop .ss-divider { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
+
+/* Segmented control */
+.ss-backdrop .ss-seg { background: var(--surface-alt); border: 0; border-radius: 10px; padding: 3px; gap: 2px; }
+.ss-backdrop .ss-seg button { height: 28px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-weight: 700; }
+.ss-backdrop .ss-seg button:hover { color: var(--text); }
+.ss-backdrop .ss-seg button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
+
+/* Operators */
+.ss-backdrop .ss-operator-btn { min-height: 40px; border-radius: 10px; background: var(--surface-alt); border: 1px solid transparent; color: var(--text); font-weight: 700; }
+.ss-backdrop .ss-operator-btn:hover { background: var(--surface-hover); border-color: transparent; color: var(--text); }
+.ss-backdrop .ss-operator-btn.is-selected { background: color-mix(in srgb, var(--op-accent) 14%, var(--surface)); border-color: var(--op-accent); color: var(--text); }
+
+/* Map */
+.ss-backdrop .ss-map { margin: 12px 12px 0; height: 240px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--surface-alt); }
+
+/* Fields */
+.ss-backdrop .ss-field { gap: 6px; }
+.ss-backdrop .ss-field > span,
+.ss-backdrop .ss-field-row { color: var(--muted); font-size: 12px; font-weight: 600; }
+.ss-backdrop .ss-field-row em { color: var(--faint); }
+.ss-backdrop .ss-input,
+.ss-backdrop .ss-select,
+.ss-backdrop .ss-az-input {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 13px;
+}
+.ss-backdrop .ss-textarea { height: auto; min-height: 64px; padding: 10px 12px; }
+.ss-backdrop .ss-input { padding: 0 12px; }
+.ss-backdrop .ss-input::placeholder,
+.ss-backdrop .ss-placeholder { color: var(--faint); }
+.ss-backdrop .ss-input:hover,
+.ss-backdrop .ss-select:hover { border-color: color-mix(in srgb, var(--text) 18%, var(--line)); background: var(--surface-alt); }
+.ss-backdrop .ss-input:focus,
+.ss-backdrop .ss-select:focus-within,
+.ss-backdrop .ss-az-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); background: var(--surface); }
+.ss-backdrop .ss-input.is-invalid,
+.ss-backdrop .ss-select.is-invalid,
+.ss-backdrop .ss-az-input.is-invalid { border-color: var(--danger); background: var(--danger-bg); }
+.ss-backdrop .ss-select { padding: 0 30px 0 12px; }
+.ss-backdrop .ss-select-chev,
+.ss-backdrop .ss-select-icon { color: var(--muted); }
+.ss-backdrop .ss-mono { font-size: 12.5px; }
+.ss-backdrop .ss-field-error { color: var(--danger); }
+
+/* Buttons */
+.ss-backdrop .ss-btn { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-weight: 700; }
+.ss-backdrop .ss-btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--line); }
+.ss-backdrop .ss-btn-sm { height: 32px; padding: 0 12px; font-size: 12.5px; }
+.ss-backdrop .ss-btn-add { background: var(--surface-alt); border: 1px dashed var(--line); }
+.ss-backdrop .ss-btn-subtle { border-radius: 8px; color: var(--muted); }
+.ss-backdrop .ss-btn:focus-visible,
+.ss-backdrop .ss-seg button:focus-visible,
+.ss-backdrop .ss-operator-btn:focus-visible,
+.ss-backdrop .ss-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ss-backdrop .ss-check { accent-color: var(--accent); width: 16px; height: 16px; }
+.ss-backdrop .ss-check-label { color: var(--muted); font-weight: 600; }
+
+/* Menus */
+.ss-backdrop .ss-menu { border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 6px; }
+.ss-backdrop .ss-menu button { border-radius: 8px; color: var(--text); }
+.ss-backdrop .ss-menu button:hover:not(:disabled) { background: var(--surface-hover); }
+
+/* Notes, empty states, chips */
+.ss-backdrop .ss-note-box { border-radius: 10px; background: var(--surface-alt); border: 0; color: var(--muted); }
+.ss-backdrop .ss-note-box strong { color: var(--text); }
+.ss-backdrop .ss-empty-dashed,
+.ss-backdrop .ss-photos-empty { border-radius: 12px; border-color: var(--line); color: var(--muted); }
+.ss-backdrop .ss-freq-chip { height: 26px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--muted); }
+.ss-backdrop .ss-freq-chip:hover { color: var(--text); }
+.ss-backdrop .ss-freq-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
+.ss-backdrop .ss-az-tag { border-radius: 8px; background: var(--surface-alt); color: var(--muted); }
+.ss-backdrop .ss-az-input { padding: 0 12px; }
+.ss-backdrop .ss-az-input input { color: var(--text); }
+.ss-backdrop .ss-az-input span { color: var(--muted); }
+.ss-backdrop .ss-photos { border-radius: 12px; border: 1px solid var(--line); background: var(--surface-alt); }
+.ss-backdrop .ss-uke-selected-banner { margin: 12px 12px 0; border-radius: 12px; background: var(--accent-soft); border: 0; color: var(--text); }
+
+/* Technology pills (RAT) */
+.ss-backdrop .ss-rat-pill { border-radius: 999px; }
+
+/* Left footer and send */
+.ss-backdrop .ss-left-foot { padding: 14px 16px 16px; background: var(--surface); border-top: 1px solid var(--line); gap: 10px; }
+.ss-backdrop .ss-foot-row strong { color: var(--text); }
+.ss-backdrop .ss-submit { height: 42px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 13.5px; }
+.ss-backdrop .ss-submit:hover:not(:disabled) { background: var(--accent-hover); }
+
+/* Right side: header and technology blocks with their cell tables */
+.ss-backdrop .ss-right-scroll { padding: 16px 20px 24px; }
+.ss-backdrop .ss-right-head { color: var(--muted); }
+.ss-backdrop .ss-rat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: visible; flex-shrink: 0; }
+.ss-backdrop .ss-rat-head { padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface); border-radius: 13px 13px 0 0; }
+.ss-backdrop .ss-table-wrap { border-radius: 0 0 13px 13px; }
+.ss-backdrop .ss-rat-title { color: var(--text); font-weight: 800; }
+.ss-backdrop .ss-gen-badge,
+.ss-backdrop .ss-gen { border-radius: 6px; background: var(--surface-alt); color: var(--muted); border: 0; }
+.ss-backdrop .ss-table-wrap { background: var(--surface); }
+.ss-backdrop .ss-table th { color: var(--muted); font-size: 11.5px; font-weight: 700; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ss-backdrop .ss-table td { border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.ss-backdrop .ss-row:hover td { background: color-mix(in srgb, var(--surface-alt) 60%, transparent); }
+.ss-backdrop .ss-tbl-input,
+.ss-backdrop .ss-table .ss-select {
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  color: var(--text);
+}
+.ss-backdrop .ss-tbl-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); outline: none; }
+.ss-backdrop .ss-tbl-input.is-invalid { border-color: var(--danger); background: var(--danger-bg); }
+.ss-backdrop .ss-computed { color: var(--muted); }
+.ss-backdrop .ss-row-errors td { color: var(--danger); background: transparent; }
+.ss-backdrop .ss-row-actions button { border-radius: 8px; color: var(--muted); }
+.ss-backdrop .ss-row-actions button:hover { background: var(--surface-hover); color: var(--text); }
+.ss-backdrop .ss-row-actions button.danger:hover { background: var(--danger-bg); color: var(--danger); }
+.ss-backdrop .ss-hdr-field input { height: 32px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--text); }
+
+.ss-backdrop .ss-seg button { white-space: nowrap; }
+@media (max-width: 480px) {
+  .ss-backdrop .ss-card-head { flex-wrap: wrap; }
+  .ss-backdrop .ss-left-scroll { padding: 12px; }
+}
+
+/* Import buttons (UKE, SI2PEM): neutral like the other buttons */
+.ss-backdrop .ss-btn-import,
+.ss-backdrop .ss-btn-import-uke,
+.ss-backdrop .ss-btn-import-si2pem { height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--text); font-weight: 700; }
+.ss-backdrop .ss-btn-import:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--line); color: var(--text); }
+.ss-backdrop .ss-btn-import small { color: var(--muted); }
+
+/* Success screen */
+.ss-backdrop .ss-success { border-radius: 18px; background: var(--surface); border: 1px solid var(--line); color: var(--text); }
