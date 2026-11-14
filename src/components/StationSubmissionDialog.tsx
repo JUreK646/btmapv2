@@ -27,6 +27,8 @@ import {
   Signal,
   Compass,
   RefreshCw,
+  UserRound,
+  HelpCircle,
 } from 'lucide-react';
 import type { Tower, TowerResult } from '../types';
 import { post, api } from '../lib/api';
@@ -301,6 +303,115 @@ function SelectBox({
       <select value={value} onChange={e => onChange(e.target.value)}>
         {children}
       </select>
+    </div>
+  );
+}
+
+/** How each structure owner is shown: the brand's logo where the app has one, otherwise a plain icon. */
+const OWNER_BRANDS: Record<string, { logo?: string; logoClass?: string; icon?: 'tower' | 'own' | 'unknown' }> = {
+  Orange: { logo: '/logos/orange.svg', logoClass: 'is-square' },
+  'T-Mobile': { logo: '/logos/tmobile.svg', logoClass: 'is-square' },
+  Play: { logo: '/logos/play.svg', logoClass: 'is-play' },
+  Plus: { logo: '/logos/plus.svg', logoClass: 'is-plus' },
+  Emitel: { logo: '/logos/emitel.svg', logoClass: 'is-emitel' },
+  'Cellnex / Towerlink': { icon: 'tower' },
+  'Własny': { icon: 'own' },
+  Nieznany: { icon: 'unknown' },
+};
+
+function OwnerMark({ owner }: { owner: string }) {
+  const brand = OWNER_BRANDS[owner] || { icon: 'unknown' as const };
+  if (brand.logo) {
+    return (
+      <span className={`ss-owner-mark ${brand.logoClass || ''}`}>
+        <img src={brand.logo} alt="" />
+      </span>
+    );
+  }
+  return (
+    <span className="ss-owner-mark is-icon">
+      {brand.icon === 'tower' ? <RadioTower size={14} /> : brand.icon === 'own' ? <UserRound size={14} /> : <HelpCircle size={14} />}
+    </span>
+  );
+}
+
+/** A select whose options carry the owner's logo; a native select cannot show images in its list. */
+function OwnerSelect({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(() => Math.max(0, options.indexOf(value)));
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const choose = (v: string) => {
+    onChange(v);
+    setOpen(false);
+  };
+
+  return (
+    <div
+      className="ss-owner-select"
+      ref={wrapRef}
+      onKeyDown={e => {
+        if (e.key === 'Escape' && open) {
+          e.stopPropagation();
+          setOpen(false);
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (!open) {
+            setOpen(true);
+            setActive(Math.max(0, options.indexOf(value)));
+          } else {
+            setActive(i => (i + (e.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length);
+          }
+        } else if ((e.key === 'Enter' || e.key === ' ') && open) {
+          e.preventDefault();
+          choose(options[active]);
+        }
+      }}
+    >
+      <button
+        type="button"
+        className="ss-select ss-owner-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => {
+          setActive(Math.max(0, options.indexOf(value)));
+          setOpen(o => !o);
+        }}
+      >
+        <OwnerMark owner={value} />
+        <span className={`ss-select-value ${value === 'Nieznany' ? 'ss-placeholder' : ''}`}>{value}</span>
+        <ChevronDown size={14} className="ss-select-chev" />
+      </button>
+      {open && (
+        <ul className="ss-owner-list" role="listbox" aria-label="Właściciel konstrukcji">
+          {options.map((o, i) => (
+            <li
+              key={o}
+              role="option"
+              aria-selected={o === value}
+              className={`${o === value ? 'is-selected' : ''} ${i === active ? 'is-active' : ''}`}
+              onMouseEnter={() => setActive(i)}
+              onMouseDown={e => {
+                e.preventDefault();
+                choose(o);
+              }}
+            >
+              <OwnerMark owner={o} />
+              <span>{o}</span>
+              {o === value && <Check size={14} className="ss-owner-check" />}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1379,19 +1490,7 @@ export default function StationSubmissionDialog({ sourceTower, onClose, onSucces
                     </div>
                     <div className="ss-field">
                       <span>Właściciel konstrukcji</span>
-                      <SelectBox
-                        value={owner}
-                        onChange={setOwner}
-                        chevron="down"
-                        icon={<Building size={14} />}
-                        display={<span className={owner === 'Nieznany' ? 'ss-placeholder' : ''}>{owner}</span>}
-                      >
-                        {OWNERS.map(o => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </SelectBox>
+                      <OwnerSelect value={owner} options={OWNERS} onChange={setOwner} />
                     </div>
                   </div>
 
